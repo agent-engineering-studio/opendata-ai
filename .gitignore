@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.azure.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code workspace (local settings)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Azure CLI credentials leaked from scripts
+azure-creds.json
+*.pem
+
+# Build artefacts
+*.log
+*.tmp

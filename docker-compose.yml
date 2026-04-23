@@ -1,0 +1,86 @@
+name: ckan-mcp
+
+x-ollama-base: &ollama-base
+  image: ollama/ollama:latest
+  container_name: ckan-ollama
+  ports:
+    - "${OLLAMA_PORT:-11434}:11434"
+  volumes:
+    - ollama_data:/root/.ollama
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "ollama", "list"]
+    interval: 15s
+    timeout: 5s
+    retries: 10
+    start_period: 20s
+
+services:
+  # ───── Ollama — GPU profile ─────
+  ollama-gpu:
+    <<: *ollama-base
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ───── Ollama — CPU profile ─────
+  ollama-cpu:
+    <<: *ollama-base
+    profiles: ["cpu"]
+
+  # ───── CKAN MCP server (Streamable HTTP) ─────
+  ckan-mcp:
+    build:
+      context: ./ckan-mcp-server
+      dockerfile: Dockerfile
+    image: ckan-mcp-server:local
+    container_name: ckan-mcp
+    ports:
+      - "${MCP_PORT:-8080}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      CKAN_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── Agent (Microsoft Agent Framework) ─────
+  ckan-agent:
+    build:
+      context: ./ckan-mcp-agent
+      dockerfile: Dockerfile
+    image: ckan-mcp-agent:local
+    container_name: ckan-agent
+    ports:
+      - "${AGENT_PORT:-8002}:8002"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ckan-ollama:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:14b}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4o-mini}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      API_HOST: 0.0.0.0
+      API_PORT: "8002"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      ckan-mcp:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+    name: ckan-ollama-data
