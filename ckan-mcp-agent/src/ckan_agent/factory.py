@@ -2,54 +2,66 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import AsyncExitStack
 from typing import Any
 
-from agent_framework import ChatAgent, MCPStreamableHTTPTool
+from agent_framework import Agent, MCPStreamableHTTPTool
 
 from .config import Settings
+
+log = logging.getLogger("ckan-agent.factory")
 
 
 def build_chat_client(settings: Settings) -> Any:
     """Return a Microsoft Agent Framework chat client for the configured provider."""
     provider = settings.llm_provider
+    log.info("Building chat client for provider=%s", provider)
 
     if provider == "ollama":
-        from agent_framework.openai import OpenAIChatClient
+        from agent_framework_ollama import OllamaChatClient
 
-        return OpenAIChatClient(
-            base_url=f"{settings.ollama_base_url.rstrip('/')}/v1",
-            api_key="ollama",
-            model_id=settings.ollama_llm_model,
+        log.info("Ollama: host=%s model=%s", settings.ollama_base_url, settings.ollama_llm_model)
+        return OllamaChatClient(
+            host=settings.ollama_base_url,
+            model=settings.ollama_llm_model,
         )
 
-    if provider == "openai":
-        if not settings.openai_api_key:
-            raise RuntimeError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
-        from agent_framework.openai import OpenAIChatClient
+    if provider == "azure_foundry":
+        if not settings.azure_ai_project_endpoint:
+            raise RuntimeError(
+                "AZURE_AI_PROJECT_ENDPOINT is required when LLM_PROVIDER=azure_foundry"
+            )
+        if not settings.azure_ai_model_deployment_name:
+            raise RuntimeError(
+                "AZURE_AI_MODEL_DEPLOYMENT_NAME is required when LLM_PROVIDER=azure_foundry"
+            )
+        from agent_framework_foundry import FoundryChatClient
+        from azure.identity.aio import DefaultAzureCredential
 
-        return OpenAIChatClient(
-            api_key=settings.openai_api_key,
-            model_id=settings.openai_model,
+        log.info(
+            "Foundry: endpoint=%s model=%s",
+            settings.azure_ai_project_endpoint,
+            settings.azure_ai_model_deployment_name,
+        )
+        return FoundryChatClient(
+            project_endpoint=settings.azure_ai_project_endpoint,
+            model=settings.azure_ai_model_deployment_name,
+            credential=DefaultAzureCredential(),
         )
 
-    if provider == "azure_openai":
-        if not settings.azure_openai_endpoint:
-            raise RuntimeError("AZURE_OPENAI_ENDPOINT is required when LLM_PROVIDER=azure_openai")
-        from agent_framework.azure import AzureOpenAIChatClient
+    if provider == "claude":
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is required when LLM_PROVIDER=claude"
+            )
+        from agent_framework_anthropic import AnthropicClient
 
-        kwargs: dict[str, Any] = {
-            "endpoint": settings.azure_openai_endpoint,
-            "deployment_name": settings.azure_openai_deployment,
-            "api_version": settings.azure_openai_api_version,
-        }
-        if settings.azure_openai_api_key:
-            kwargs["api_key"] = settings.azure_openai_api_key
-        else:
-            from azure.identity.aio import DefaultAzureCredential
-
-            kwargs["credential"] = DefaultAzureCredential()
-        return AzureOpenAIChatClient(**kwargs)
+        log.info("Claude: model=%s", settings.claude_model)
+        return AnthropicClient(
+            api_key=settings.anthropic_api_key,
+            model=settings.claude_model,
+        )
 
     raise RuntimeError(f"Unsupported LLM_PROVIDER={provider!r}")
 
@@ -65,9 +77,10 @@ class AgentSession:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._stack = AsyncExitStack()
-        self._agent: ChatAgent | None = None
+        self._agent: Agent | None = None
 
     async def __aenter__(self) -> "AgentSession":
+        log.info("Connecting to MCP server at %s", self._settings.mcp_server_url)
         mcp_tool = MCPStreamableHTTPTool(
             name=self._settings.mcp_server_name,
             url=self._settings.mcp_server_url,
@@ -76,13 +89,14 @@ class AgentSession:
         await self._stack.enter_async_context(mcp_tool)
 
         chat_client = build_chat_client(self._settings)
-        agent = ChatAgent(
-            chat_client=chat_client,
-            name=self._settings.agent_name,
+        agent = Agent(
+            chat_client,
             instructions=self._settings.agent_instructions,
+            name=self._settings.agent_name,
             tools=[mcp_tool],
         )
         await self._stack.enter_async_context(agent)
+        log.info("Agent '%s' ready", self._settings.agent_name)
         self._agent = agent
         return self
 

@@ -23,7 +23,7 @@ async def _interactive(settings: Settings) -> int:
             Panel.fit(
                 f"[bold]CKAN Agent[/] ready\n"
                 f"Provider: [cyan]{settings.llm_provider}[/]  "
-                f"Model: [cyan]{settings.ollama_llm_model if settings.llm_provider == 'ollama' else settings.azure_openai_deployment}[/]\n"
+                f"Model: [cyan]{settings.ollama_llm_model if settings.llm_provider == 'ollama' else settings.claude_model if settings.llm_provider == 'claude' else settings.azure_ai_model_deployment_name}[/]\n"
                 f"MCP: [cyan]{settings.mcp_server_url}[/]\n"
                 f"Default portal: [cyan]{settings.ckan_default_base_url}[/]\n"
                 "Type your question, or /quit to exit.",
@@ -61,7 +61,7 @@ def cli() -> None:
         description="Microsoft Agent Framework CLI on top of the CKAN MCP server",
     )
     parser.add_argument("query", nargs="?", help="Run a single question and exit (non-interactive).")
-    parser.add_argument("--provider", choices=["ollama", "openai", "azure_openai"], default=None)
+    parser.add_argument("--provider", choices=["ollama", "azure_foundry", "claude"], default=None)
     parser.add_argument("--mcp-url", default=None)
     args = parser.parse_args()
 

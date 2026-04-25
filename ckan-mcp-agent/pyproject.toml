@@ -22,6 +22,10 @@ dependencies = [
 [project.optional-dependencies]
 azure = [
     "azure-identity>=1.17.0",
+    "agent-framework-foundry>=1.0.0b1",
+]
+claude = [
+    "agent-framework-anthropic>=1.0.0b1",
 ]
 dev = [
     "pytest>=8.2.0",

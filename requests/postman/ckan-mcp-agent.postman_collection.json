@@ -1,0 +1,302 @@
+{
+  "info": {
+    "name": "CKAN MCP Agent",
+    "description": "Test queries for the ckan-mcp-agent REST API (POST /chat).\n\nSet the `base_url` variable to match your scenario:\n- Local (Ollama / Claude): http://localhost:8002\n- Azure Container Apps:    https://<agent-fqdn>\n\nCKAN portal:\n- Default portal: https://www.dati.gov.it/opendata\n- CKAN API docs:  https://docs.ckan.org/en/2.8/api/index.html\n- Ollama: qwen3:8b recommended (tool calling support, fits 8GB VRAM)\n\nReference dataset:\n- Popolazione residente per quartiere e per classe di età (Comune di Firenze)\n- ID: 2908fe96-58c4-40fe-8b29-9d4d78715ba7",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8002",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health",
+        "description": "Verifica che il server sia attivo."
+      }
+    },
+    {
+      "name": "Discovery",
+      "item": [
+        {
+          "name": "Cerca dataset sull'ambiente",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Cerca 5 dataset che riguardano l'ambiente e l'inquinamento.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Ricerca dataset CKAN sull'ambiente."
+          }
+        },
+        {
+          "name": "Cerca dataset sui trasporti",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Cerca dataset relativi ai trasporti pubblici.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Cerca dataset sulla sanità",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Elenca dataset disponibili sul tema della sanità.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Cerca dataset sulla popolazione",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Cerca dataset sulla popolazione residente per quartiere e per classe di età.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Ricerca il dataset 'Popolazione residente per quartiere e per classe di età' del Comune di Firenze."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Package detail",
+      "item": [
+        {
+          "name": "Dettaglio dataset Popolazione residente",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Mostrami i dettagli completi (risorse, tag, organizzazione) del dataset con id '2908fe96-58c4-40fe-8b29-9d4d78715ba7'.\"\n}",
+              "options": { "raw": { "language": "json" } },
+              "description": "Dettaglio del dataset 'Popolazione residente per quartiere e per classe di età al 31/12/2025' (Comune di Firenze)."
+            }
+          }
+        },
+        {
+          "name": "Risorse del dataset Popolazione residente",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Quali risorse sono disponibili nel dataset '2908fe96-58c4-40fe-8b29-9d4d78715ba7'? Elenca formato e URL di ciascuna.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "Lista organizzazioni",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Elenca le prime 10 organizzazioni presenti sul portale dati.gov.it.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Dettaglio organizzazione",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Mostrami i dettagli dell'organizzazione ISTAT sul portale e quanti dataset possiede.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Groups / Categories",
+      "item": [
+        {
+          "name": "Lista gruppi tematici",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Quali gruppi tematici (categorie) sono disponibili sul portale?\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Dettaglio gruppo",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Mostrami i dataset nel gruppo 'economia' (o il gruppo tematico più simile).\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "Cerca tag popolazione",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Cerca i tag che contengono la parola 'popolazione'.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "DataStore queries",
+      "item": [
+        {
+          "name": "Query su risorsa DataStore",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Cerca un dataset con dati tabulari (DataStore) sulla popolazione e mostrami le prime 5 righe.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "DataStore con filtro",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Se esiste un dataset DataStore sui comuni italiani, filtra per la regione Lombardia e mostrami i primi risultati.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Multi-step (discovery → detail → data)",
+      "item": [
+        {
+          "name": "Flusso completo autonomo",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Voglio capire quali dati aperti ci sono sulla qualità dell'aria in Italia. Cerca i dataset, scegline uno interessante, mostrami le risorse e se possibile scarica qualche riga di dati.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Il modello cerca il dataset autonomamente, ne legge i dettagli e recupera dati."
+          }
+        },
+        {
+          "name": "Esplorazione portale esterno (UK)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_url\": \"https://data.gov.uk\",\n  \"query\": \"Search for datasets about air quality in the UK and show me the first 3 results with their resources.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Multi-portale (IT vs UK)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Confronta il numero di dataset disponibili sul portale italiano dati.gov.it con quelli del portale UK data.gov.uk.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Site diagnostics",
+      "item": [
+        {
+          "name": "Status del portale",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Verifica che il portale dati.gov.it sia raggiungibile e mostrami versione e estensioni installate.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Site read check",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Controlla se il portale dati.gov.it consente l'accesso pubblico in lettura.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

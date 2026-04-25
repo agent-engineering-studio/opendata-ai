@@ -1,6 +1,6 @@
 # ckan-mcp-server
 
-MCP server exposing [CKAN Action API](https://docs.ckan.org/en/latest/api/) tools for **any** CKAN open data portal.
+MCP server exposing [CKAN Action API](https://docs.ckan.org/en/2.8/api/index.html) tools for **any** CKAN open data portal.
 
 Built with the official [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) (`FastMCP`). Supports both **stdio** (for local MCP hosts) and **Streamable HTTP** (for container deployment).
 

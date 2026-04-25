@@ -1,8 +1,9 @@
 """Runtime configuration for the CKAN agent.
 
-Supports two LLM providers:
+Supports three LLM providers:
   - ollama         (OpenAI-compatible endpoint exposed by the Ollama server)
-  - azure_openai   (Azure OpenAI Service deployment)
+  - azure_foundry  (Azure AI Foundry Agent Service, Entra-ID authenticated)
+  - claude         (Anthropic Claude API)
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Provider = Literal["ollama", "azure_openai", "openai"]
+Provider = Literal["ollama", "azure_foundry", "claude"]
 
 
 class Settings(BaseSettings):
@@ -35,17 +36,15 @@ class Settings(BaseSettings):
 
     # Ollama (OpenAI-compatible)
     ollama_base_url: str = Field(default="http://localhost:11434")
-    ollama_llm_model: str = Field(default="qwen2.5:14b")
+    ollama_llm_model: str = Field(default="qwen3:8b")
 
-    # Azure OpenAI
-    azure_openai_endpoint: str | None = Field(default=None)
-    azure_openai_api_key: str | None = Field(default=None)
-    azure_openai_deployment: str = Field(default="gpt-4o-mini")
-    azure_openai_api_version: str = Field(default="2024-10-21")
+    # Azure AI Foundry
+    azure_ai_project_endpoint: str | None = Field(default=None)
+    azure_ai_model_deployment_name: str | None = Field(default=None)
 
-    # Vanilla OpenAI (fallback)
-    openai_api_key: str | None = Field(default=None)
-    openai_model: str = Field(default="gpt-4o-mini")
+    # Anthropic Claude API
+    anthropic_api_key: str | None = Field(default=None)
+    claude_model: str = Field(default="claude-sonnet-4-5")
 
     # Agent behaviour
     agent_name: str = Field(default="CkanAgent")
@@ -53,7 +52,9 @@ class Settings(BaseSettings):
         default=(
             "You are an assistant specialised in querying CKAN open data portals. "
             "Use the provided CKAN MCP tools to answer the user's questions. "
-            "When the user does not specify a portal, assume the default one. "
+            "IMPORTANT: When the user does not specify a portal, you MUST omit the base_url "
+            "parameter from tool calls so the server uses its default portal "
+            "(https://www.dati.gov.it/opendata). Never guess or substitute a different portal. "
             "Always cite the portal base URL, dataset names and resource IDs in your answers. "
             "Prefer concrete, verifiable facts over speculation."
         )

@@ -1,6 +1,6 @@
 # mcp-ckan
 
-Read **any** CKAN open data portal through a local **MCP server**, consumed by a **Microsoft Agent Framework** agent backed by **Ollama** (local) or **Azure OpenAI** (cloud).
+Read **any** CKAN open data portal through a local **MCP server**, consumed by a **Microsoft Agent Framework** agent backed by **Ollama** (local), **Azure AI Foundry** (cloud), or **Anthropic Claude**.
 
 The repository ships a complete, reproducible stack — a Python MCP server that wraps the CKAN Action API, a chat agent that uses it as a tool, Docker Compose for local development (with optional GPU Ollama), Bicep + scripts for deployment on Azure Container Apps, and GitHub Actions for CI and OIDC-based CD.
 
@@ -33,7 +33,7 @@ CKAN is the dominant platform for national and regional open data portals (dati.
 The repository demonstrates an end-to-end **agent-over-MCP** pattern:
 
 - **MCP server** (`ckan-mcp-server/`) — a small Python service built on the official [FastMCP](https://github.com/modelcontextprotocol/python-sdk) runtime. It exposes 11 CKAN actions as tools over **stdio** (for local MCP hosts like Claude Desktop) or **Streamable HTTP** (for container deployment).
-- **Agent** (`ckan-mcp-agent/`) — a [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/) `ChatAgent` that plugs the MCP server in as an `MCPStreamableHTTPTool`, reasons with an LLM (Ollama, OpenAI, or Azure OpenAI), and speaks both a CLI and a small FastAPI surface.
+- **Agent** (`ckan-mcp-agent/`) — a [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/) `Agent` that plugs the MCP server in as an `MCPStreamableHTTPTool`, reasons with an LLM (Ollama, Azure AI Foundry, or Claude), and speaks both a CLI and a small FastAPI surface.
 - **Ops** — Docker Compose (CPU/GPU profiles), Bicep templates for Azure Container Apps + ACR + UAMI, Bash and PowerShell deploy scripts, and GitHub Actions for CI (lint + test + docker build) and CD (OIDC federation, ACR tasks, ARM deployment).
 
 ---
@@ -44,17 +44,17 @@ The repository demonstrates an end-to-end **agent-over-MCP** pattern:
  ┌─────────────────┐        ┌───────────────────────────┐        ┌──────────────────┐
  │  User / Client  │ chat → │  ckan-mcp-agent (FastAPI) │ tools→ │  ckan-mcp-server │
  │ (curl, REPL,    │        │  Microsoft Agent Framework│  MCP   │   (FastMCP)      │
- │  Claude Desktop)│ ←reply │  ChatAgent + MCP tool     │ ←──    │  stdio / http    │
+ │  Claude Desktop)│ ←reply │  Agent + MCP tool         │ ←──    │  stdio / http    │
  └─────────────────┘        └─────────────┬─────────────┘        └────────┬─────────┘
                                           │ LLM                           │ HTTPS
                                           ▼                               ▼
                           ┌────────────────────────────┐        ┌──────────────────┐
-                          │  Ollama / OpenAI / Azure   │        │  CKAN Action API │
-                          │      OpenAI deployment     │        │ /api/3/action/*  │
+                          │ Ollama / Azure AI Foundry  │        │  CKAN Action API │
+                          │        / Claude            │        │ /api/3/action/*  │
                           └────────────────────────────┘        └──────────────────┘
 ```
 
-**Cloud topology** (Azure Container Apps): one external Container App for the MCP server, one for the agent — both pulling from ACR via a User-Assigned Managed Identity with `AcrPull`, with Log Analytics behind the Container Apps Environment. In the cloud the default `LLM_PROVIDER` is `azure_openai`; Ollama is kept for local dev.
+**Cloud topology** (Azure Container Apps): one external Container App for the MCP server, one for the agent — both pulling from ACR via a User-Assigned Managed Identity with `AcrPull`, with Log Analytics behind the Container Apps Environment. In the cloud the default `LLM_PROVIDER` is `azure_foundry`; Ollama is kept for local dev.
 
 ---
 
@@ -79,7 +79,7 @@ The repository demonstrates an end-to-end **agent-over-MCP** pattern:
 | `.github/workflows/docker-publish.yml` | Publish multi-arch images to **GitHub Container Registry** (GHCR) on push / tags.   |
 | `.github/workflows/deploy-azure.yml` | CD: Azure OIDC login, ACR Tasks build, Bicep deploy, restart + healthcheck.         |
 | `.env.example`             | Template for the local stack.                                                                 |
-| `.env.azure.example`       | Template for Azure deploy inputs (subscription, RG, ACR, Azure OpenAI).                       |
+| `.env.azure.example`       | Template for Azure deploy inputs (subscription, RG, ACR, Azure AI Foundry).                   |
 
 ---
 
@@ -95,7 +95,7 @@ cp .env.example .env
 make up
 
 # 3. Pull the LLM into Ollama (first run only; large download)
-make pull-models                           # defaults to qwen2.5:14b
+make pull-models                           # defaults to qwen3:8b
 
 # 4. Open an interactive agent session
 make agent
@@ -114,7 +114,7 @@ Quick `curl` test of the agent:
 ```bash
 curl -X POST http://localhost:8002/chat \
   -H 'Content-Type: application/json' \
-  -d '{"query":"List 3 datasets about air quality","base_url":"https://www.dati.gov.it/opendata"}'
+  -d '{"query":"Mostrami i dettagli del dataset 2908fe96-58c4-40fe-8b29-9d4d78715ba7"}'
 ```
 
 Probe the MCP server directly (no agent):
@@ -199,12 +199,12 @@ Error handling: when CKAN returns `success=false`, transport fails, or the respo
 ### CLI — `ckan-agent`
 
 ```bash
-# Editable install (use [azure] extra for Azure OpenAI auth helpers)
+# Editable install (use [azure] extra for Azure AI Foundry auth helpers)
 cd ckan-mcp-agent && pip install --pre -e ".[dev,azure]"
 
 ckan-agent                                      # interactive REPL (rich panel)
 ckan-agent "List the 5 most recent datasets on https://data.gov.uk"
-ckan-agent --provider azure_openai "…"          # override provider for this invocation
+ckan-agent --provider azure_foundry "…"         # override provider for this invocation
 ckan-agent --mcp-url http://localhost:8080/mcp "…"
 ```
 
@@ -231,24 +231,22 @@ All configuration is environment-driven; `.env` is auto-loaded by `pydantic-sett
 
 ### Agent (`ckan-mcp-agent`)
 
-| Variable                    | Default                              | Description                                                                 |
-|-----------------------------|--------------------------------------|-----------------------------------------------------------------------------|
-| `LLM_PROVIDER`              | `ollama`                             | One of `ollama`, `openai`, `azure_openai`.                                  |
-| `MCP_SERVER_URL`            | `http://localhost:8080/mcp`          | Streamable HTTP endpoint of the MCP server.                                 |
-| `MCP_SERVER_NAME`           | `ckan`                               | Logical name used inside the agent.                                         |
-| `CKAN_DEFAULT_BASE_URL`     | `https://www.dati.gov.it/opendata`   | Default portal hint surfaced to the LLM.                                    |
-| `OLLAMA_BASE_URL`           | `http://localhost:11434`             | In Compose, resolves to `http://ckan-ollama:11434`.                         |
-| `OLLAMA_LLM_MODEL`          | `qwen2.5:14b`                        | Any model pulled into Ollama.                                               |
-| `OPENAI_API_KEY`            | —                                    | Required when `LLM_PROVIDER=openai`.                                        |
-| `OPENAI_MODEL`              | `gpt-4o-mini`                        | Model id for vanilla OpenAI.                                                |
-| `AZURE_OPENAI_ENDPOINT`     | —                                    | Required when `LLM_PROVIDER=azure_openai`.                                  |
-| `AZURE_OPENAI_API_KEY`      | —                                    | Optional — if unset, `DefaultAzureCredential` is used.                      |
-| `AZURE_OPENAI_DEPLOYMENT`   | `gpt-4o-mini`                        | Azure OpenAI deployment name.                                               |
-| `AZURE_OPENAI_API_VERSION`  | `2024-10-21`                         |                                                                             |
-| `AGENT_NAME`                | `CkanAgent`                          | Name passed to `ChatAgent`.                                                 |
-| `AGENT_INSTRUCTIONS`        | *(see `config.py`)*                  | System prompt — override to change agent behaviour.                         |
-| `API_HOST` / `API_PORT`     | `0.0.0.0` / `8002`                   | FastAPI bind.                                                               |
-| `LOG_LEVEL`                 | `INFO`                               | Standard Python logging level.                                              |
+| Variable                           | Default                              | Description                                                                 |
+|------------------------------------|--------------------------------------|-----------------------------------------------------------------------------|
+| `LLM_PROVIDER`                     | `ollama`                             | One of `ollama`, `azure_foundry`, `claude`.                                 |
+| `MCP_SERVER_URL`                   | `http://localhost:8080/mcp`          | Streamable HTTP endpoint of the MCP server.                                 |
+| `MCP_SERVER_NAME`                  | `ckan`                               | Logical name used inside the agent.                                         |
+| `CKAN_DEFAULT_BASE_URL`            | `https://www.dati.gov.it/opendata`   | Default portal hint surfaced to the LLM.                                    |
+| `OLLAMA_BASE_URL`                  | `http://localhost:11434`             | In Compose, resolves to `http://ckan-ollama:11434`.                         |
+| `OLLAMA_LLM_MODEL`                 | `qwen3:8b`                           | Any model pulled into Ollama.                                               |
+| `AZURE_AI_PROJECT_ENDPOINT`        | —                                    | Required when `LLM_PROVIDER=azure_foundry`.                                 |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME`   | —                                    | Model deployment name for Azure AI Foundry.                                 |
+| `ANTHROPIC_API_KEY`                | —                                    | Required when `LLM_PROVIDER=claude`.                                        |
+| `CLAUDE_MODEL`                     | `claude-sonnet-4-5`                  | Anthropic model id.                                                         |
+| `AGENT_NAME`                       | `CkanAgent`                          | Name passed to `Agent`.                                                     |
+| `AGENT_INSTRUCTIONS`               | *(see `config.py`)*                  | System prompt — override to change agent behaviour.                         |
+| `API_HOST` / `API_PORT`            | `0.0.0.0` / `8002`                   | FastAPI bind.                                                               |
+| `LOG_LEVEL`                        | `INFO`                               | Standard Python logging level.                                              |
 
 ### MCP server (`ckan-mcp-server`)
 
@@ -268,7 +266,7 @@ All configuration is environment-driven; `.env` is auto-loaded by `pydantic-sett
 
 Default target: **Azure Container Apps** (scale-to-zero, HTTPS ingress) + **ACR** + **Log Analytics** + **User-Assigned Managed Identity** with `AcrPull`. Two Container Apps — one for the MCP server, one for the agent — both externally reachable; the agent calls the MCP server via its container app FQDN.
 
-> In the cloud Ollama is impractical at this scale; the agent is wired to **Azure OpenAI** by default (`LLM_PROVIDER=azure_openai`). Keep Ollama for local dev.
+> In the cloud Ollama is impractical at this scale; the agent is wired to **Azure AI Foundry** by default (`LLM_PROVIDER=azure_foundry`). Keep Ollama for local dev.
 
 ### 1. One-off setup — GitHub OIDC federation
 
@@ -284,12 +282,11 @@ From a machine with `az` CLI and Owner / User-Access-Admin on the subscription:
 
 Add the printed `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` as **GitHub repo secrets**. Then add these application **secrets** as needed:
 
-- `AZURE_OPENAI_API_KEY`
-- `OPENAI_API_KEY` (only if `LLM_PROVIDER=openai`)
+- `ANTHROPIC_API_KEY` (only if `LLM_PROVIDER=claude`)
 
 And these **repo variables**:
 
-- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`
 - `ACR_NAME`, `AZURE_LOCATION`, `AZURE_ENV_NAME`
 - `CKAN_DEFAULT_BASE_URL`
 
@@ -304,7 +301,7 @@ location         : westeurope
 env_name         : dev
 acr_name         : ckanmcpdev
 image_tag        : latest           # or a specific SHA
-llm_provider     : azure_openai
+llm_provider     : azure_foundry
 ckan_default_url : https://www.dati.gov.it/opendata
 ```
 
@@ -325,8 +322,8 @@ set -a ; source .env.azure ; set +a
   --location westeurope \
   --env-name dev \
   --acr-name "$ACR_NAME" \
-  --azure-openai-endpoint "$AZURE_OPENAI_ENDPOINT" \
-  --azure-openai-api-key "$AZURE_OPENAI_API_KEY"
+  --azure-openai-endpoint "$AZURE_AI_PROJECT_ENDPOINT" \
+  --azure-openai-api-key "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
 ```
 
 PowerShell:
@@ -338,8 +335,8 @@ PowerShell:
   -Location        'westeurope' `
   -EnvName         'dev' `
   -AcrName         'ckanmcpdev' `
-  -AzureOpenAIEndpoint 'https://<your-aoai>.openai.azure.com/' `
-  -AzureOpenAIApiKey   $env:AZURE_OPENAI_API_KEY
+  -AzureOpenAIEndpoint 'https://<your-endpoint>.services.ai.azure.com/' `
+  -AzureOpenAIApiKey   $env:AZURE_AI_MODEL_DEPLOYMENT_NAME
 ```
 
 Both scripts:
@@ -454,7 +451,7 @@ To consume the published image from Docker Compose, override `image:` and drop `
 | `CkanError: Unexpected CKAN response shape`                          | Portal returned HTML (often a login wall or WAF). Try a different endpoint or authentication.               |
 | `CkanError: CKAN action 'package_search' failed`                     | Invalid Solr query or filter. Check `fq`/`q` syntax against the CKAN docs.                                  |
 | Agent replies with "I don't have tools"                              | `MCP_SERVER_URL` wrong or MCP server not reachable. Hit `tools/list` manually (see Quick start).            |
-| `RuntimeError: AZURE_OPENAI_ENDPOINT is required when LLM_PROVIDER=azure_openai` | Set `AZURE_OPENAI_ENDPOINT`, or change `LLM_PROVIDER`.                                           |
+| `RuntimeError: AZURE_AI_PROJECT_ENDPOINT is required when LLM_PROVIDER=azure_foundry` | Set `AZURE_AI_PROJECT_ENDPOINT`, or change `LLM_PROVIDER`.                                        |
 | Ollama healthcheck flapping on first boot                            | Model is still being pulled. Run `make pull-models` and wait — `start_period` is 20s.                       |
 | Azure deploy fails with `Image not found` on first run               | ACR is fresh and `imageTag=latest` doesn't exist yet. Re-run; the workflow pushes `:<sha>` and `:latest`.   |
 | `Healthcheck agent failed` in the GitHub Action                      | Cold start of the agent Container App took > 60s. Re-run the workflow or check agent logs in Log Analytics. |
@@ -483,6 +480,7 @@ curl -s -X POST http://localhost:8080/mcp \
 - [CKAN Action API reference](https://docs.ckan.org/en/latest/api/)
 - [Azure Container Apps](https://learn.microsoft.com/azure/container-apps/)
 - [Azure OpenAI Service](https://learn.microsoft.com/azure/ai-services/openai/)
+- [Azure AI Foundry](https://learn.microsoft.com/azure/ai-foundry/)
 - [GitHub OIDC federation with Azure](https://learn.microsoft.com/azure/developer/github/connect-from-azure)
 
 ---

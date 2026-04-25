@@ -1,0 +1,180 @@
+# ─────────────────────────────────────────────────────────────────
+#  ckan-mcp-agent — test queries for POST /chat
+#
+#  Requires the VS Code "REST Client" extension (humao.rest-client).
+#  Set @base to the agent URL for your scenario:
+#    local (Ollama / Claude): http://localhost:8002
+#    Azure Container Apps:    https://<agent-fqdn>
+#
+#  CKAN portal:
+#    • Default portal: https://www.dati.gov.it/opendata
+#    • CKAN API docs:  https://docs.ckan.org/en/2.8/api/index.html
+#    • Ollama: qwen3:8b recommended (tool calling support, fits 8GB VRAM)
+# ─────────────────────────────────────────────────────────────────
+
+@base = http://localhost:8002
+@contentType = application/json
+
+### Health check
+GET {{base}}/health
+
+# ── Discovery ─────────────────────────────────────────────────────
+
+### Cerca dataset sull'ambiente
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca 5 dataset che riguardano l'ambiente e l'inquinamento."
+}
+
+### Cerca dataset sui trasporti
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset relativi ai trasporti pubblici."
+}
+
+### Cerca dataset sulla sanità
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Elenca dataset disponibili sul tema della sanità."
+}
+
+### Cerca dataset sulla popolazione
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulla popolazione residente per quartiere e per classe di età."
+}
+
+# ── Package detail ────────────────────────────────────────────────
+
+### Dettaglio dataset Popolazione residente (Comune di Firenze)
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Mostrami i dettagli completi (risorse, tag, organizzazione) del dataset con id '2908fe96-58c4-40fe-8b29-9d4d78715ba7'."
+}
+
+### Risorse del dataset Popolazione residente
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Quali risorse sono disponibili nel dataset '2908fe96-58c4-40fe-8b29-9d4d78715ba7'? Elenca formato e URL di ciascuna."
+}
+
+# ── Organizations ─────────────────────────────────────────────────
+
+### Lista organizzazioni
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Elenca le prime 10 organizzazioni presenti sul portale dati.gov.it."
+}
+
+### Dettaglio organizzazione
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Mostrami i dettagli dell'organizzazione ISTAT sul portale e quanti dataset possiede."
+}
+
+# ── Groups / Categories ──────────────────────────────────────────
+
+### Lista gruppi tematici
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Quali gruppi tematici (categorie) sono disponibili sul portale?"
+}
+
+### Dettaglio gruppo
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Mostrami i dataset nel gruppo 'economia' (o il gruppo tematico più simile)."
+}
+
+# ── Tags ──────────────────────────────────────────────────────────
+
+### Cerca tag
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca i tag che contengono la parola 'popolazione'."
+}
+
+# ── DataStore queries ─────────────────────────────────────────────
+
+### Query su una risorsa DataStore
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca un dataset con dati tabulari (DataStore) sulla popolazione e mostrami le prime 5 righe."
+}
+
+### DataStore con filtro
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Se esiste un dataset DataStore sui comuni italiani, filtra per la regione Lombardia e mostrami i primi risultati."
+}
+
+# ── Multi-step (discovery → detail → data) ────────────────────────
+
+### Flusso completo autonomo
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Voglio capire quali dati aperti ci sono sulla qualità dell'aria in Italia. Cerca i dataset, scegline uno interessante, mostrami le risorse e se possibile scarica qualche riga di dati."
+}
+
+### Esplorazione portale esterno
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "base_url": "https://data.gov.uk",
+  "query": "Search for datasets about air quality in the UK and show me the first 3 results with their resources."
+}
+
+### Multi-portale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Confronta il numero di dataset disponibili sul portale italiano dati.gov.it con quelli del portale UK data.gov.uk."
+}
+
+# ── Site diagnostics ──────────────────────────────────────────────
+
+### Status del portale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Verifica che il portale dati.gov.it sia raggiungibile e mostrami versione e estensioni installate."
+}
+
+### Site read check
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Controlla se il portale dati.gov.it consente l'accesso pubblico in lettura."
+}
