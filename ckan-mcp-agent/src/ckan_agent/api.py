@@ -41,14 +41,19 @@ class ChatResponse(BaseModel):
 
 
 def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
-    match = _RESOURCES_RE.search(raw)
-    if not match:
+    matches = list(_RESOURCES_RE.finditer(raw))
+    if not matches:
         return raw, []
-    json_block = match.group(1)
+    if len(matches) > 1:
+        log.warning("parse_agent_reply: %d resource blocks found; only first used", len(matches))
+    json_block = matches[0].group(1)
     try:
         items = json.loads(json_block)
+        if not isinstance(items, list):
+            raise ValueError(f"Expected JSON array, got {type(items).__name__}")
         resources = [Resource(**item) for item in items]
     except Exception:
+        log.warning("parse_agent_reply: could not parse resource block", exc_info=True)
         return raw, []
     text = _RESOURCES_RE.sub("", raw).strip()
     return text, resources

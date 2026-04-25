@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from ckan_agent.api import Resource, parse_agent_reply
 
 
@@ -98,3 +96,29 @@ def test_resource_model_fields():
 def test_resource_content_defaults_to_none():
     r = Resource(name="f.pdf", url="https://x.com/f.pdf", format="PDF")
     assert r.content is None
+
+
+def test_block_in_middle_of_response_preserves_surrounding_text():
+    raw = (
+        "Before text.\n"
+        "<!--RESOURCES_JSON-->\n"
+        "[]\n"
+        "<!--/RESOURCES_JSON-->\n"
+        "After text."
+    )
+    text, resources = parse_agent_reply(raw)
+    assert "Before text." in text
+    assert "After text." in text
+    assert resources == []
+
+
+def test_json_object_instead_of_array_falls_back():
+    raw = (
+        "Testo.\n"
+        "<!--RESOURCES_JSON-->\n"
+        '{"name":"f.csv","url":"https://x.com","format":"CSV","content":null}\n'
+        "<!--/RESOURCES_JSON-->"
+    )
+    text, resources = parse_agent_reply(raw)
+    assert text == raw
+    assert resources == []
