@@ -221,6 +221,63 @@ ckan-agent-api                                  # binds 0.0.0.0:8002 by default
 | GET    | `/health` | —                                                                            |
 | POST   | `/chat`   | `{"query": "…", "base_url": "https://…"}` — `base_url` is optional.           |
 
+#### `POST /chat` response format
+
+The response is structured JSON with a pure narrative `text` field and a `resources` array — one entry per dataset resource found:
+
+```json
+{
+  "text": "Ho trovato il dataset 'Stazioni di ricarica auto elettriche' pubblicato dal Comune di Milano (CC BY 4.0).",
+  "resources": [
+    {
+      "name": "stazioni_ricarica.csv",
+      "url": "https://dati.comune.milano.it/.../stazioni_ricarica.csv",
+      "format": "CSV",
+      "content": "id,lat,lon,tipo_presa\n1,45.46,9.19,CCS\n..."
+    },
+    {
+      "name": "Mappa stazioni",
+      "url": "https://dati.comune.milano.it/.../stazioni.shp",
+      "format": "SHP",
+      "content": null
+    }
+  ]
+}
+```
+
+- **`text`** — narrative only; never contains resource URLs or file content.
+- **`resources`** — every resource found, any format. `content` is populated for CSV, JSON, GeoJSON, and TXT; `null` for all other formats (PDF, SHP, XLSX, WMS, KML, ZIP, …).
+- If the LLM does not emit a parseable resource block, `resources` is `[]` and `text` contains the full raw reply (graceful fallback).
+
+#### Test queries
+
+The `requests/` folder ships ready-to-use query sets:
+
+| File | Tool | Coverage |
+| ---- | ---- | -------- |
+| `requests/agent-chat.http` | VS Code REST Client | 84 queries across 13 thematic categories |
+| `requests/postman/ckan-mcp-agent.postman_collection.json` | Postman | Same 84 queries as a Postman collection |
+| `requests/postman/test-agent-chat.sh` | bash + curl | All 84 queries — automated pass/fail with summary |
+| `requests/postman/test-agent-chat.ps1` | PowerShell | All 84 queries — same, coloured output |
+
+Run the bash suite:
+
+```bash
+# against local stack (default)
+bash requests/postman/test-agent-chat.sh
+
+# against Azure Container Apps
+bash requests/postman/test-agent-chat.sh https://<agent-fqdn>
+```
+
+Run the PowerShell suite:
+
+```powershell
+./requests/postman/test-agent-chat.ps1
+# or
+./requests/postman/test-agent-chat.ps1 -BaseUrl https://<agent-fqdn>
+```
+
 The agent is instructed to always cite portal URLs, dataset names and resource IDs, and to prefer concrete facts over speculation (see `agent_instructions` in `src/ckan_agent/config.py`).
 
 ---
