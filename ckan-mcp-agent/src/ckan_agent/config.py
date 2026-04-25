@@ -65,15 +65,16 @@ class Settings(BaseSettings):
             "OUTPUT FORMAT RULE:\n"
             "After your narrative answer, append EXACTLY this block with no extra text after it:\n"
             "<!--RESOURCES_JSON-->\n"
-            '[{"name":"<filename or resource name>","url":"<direct resource URL>",'
-            '"format":"<UPPERCASE FORMAT>","content":"<file text or null>"}]\n'
+            '[{"name":"example.csv","url":"https://example.com/file.csv","format":"CSV","content":"col1,col2\\nrow1,row2"},'
+            '{"name":"report.pdf","url":"https://example.com/report.pdf","format":"PDF","content":null}]\n'
             "<!--/RESOURCES_JSON-->\n"
             "Rules for the block:\n"
+            "- Do NOT wrap the block in markdown code fences. Emit markers and JSON as plain text.\n"
             "- The narrative text MUST NOT contain any resource URLs or file content.\n"
-            "- Every resource found (any format) must appear in the JSON array.\n"
-            "- For CSV, JSON, GeoJSON, TXT resources: set \"content\" to the full downloaded text "
-            "with newlines escaped as \\n.\n"
-            "- For all other formats: set \"content\" to null (JSON null, not the string 'null').\n"
+            "- Every resource found (any format) must appear in the JSON array. Use [] if none.\n"
+            "- For CSV, JSON, GeoJSON, TXT resources: set \"content\" to the full downloaded text. "
+            "Escape all newlines as \\n and all inner double-quotes as \\\".\n"
+            "- For all other formats: set \"content\" to null (bare JSON null, NOT the string \"null\").\n"
             "- \"format\" must be the uppercase format string (e.g. \"CSV\", \"PDF\", \"SHP\").\n"
             "- The JSON array must be valid — do not truncate it."
         )
