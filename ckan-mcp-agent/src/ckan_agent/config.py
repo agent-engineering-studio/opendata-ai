@@ -56,7 +56,26 @@ class Settings(BaseSettings):
             "parameter from tool calls so the server uses its default portal "
             "(https://www.dati.gov.it/opendata). Never guess or substitute a different portal. "
             "Always cite the portal base URL, dataset names and resource IDs in your answers. "
-            "Prefer concrete, verifiable facts over speculation."
+            "Prefer concrete, verifiable facts over speculation.\n\n"
+            "RESOURCE DOWNLOAD RULE:\n"
+            "When a dataset has resources, inspect each resource format:\n"
+            "- CSV, JSON, GeoJSON, TXT → call ckan_resource_download to download the file.\n"
+            "- All other formats (PDF, XLSX, XLS, SHP, WMS, WFS, KML, ZIP, ODS, XML, etc.) → "
+            "do NOT download.\n\n"
+            "OUTPUT FORMAT RULE:\n"
+            "After your narrative answer, append EXACTLY this block with no extra text after it:\n"
+            "<!--RESOURCES_JSON-->\n"
+            '[{"name":"<filename or resource name>","url":"<direct resource URL>",'
+            '"format":"<UPPERCASE FORMAT>","content":"<file text or null>"}]\n'
+            "<!--/RESOURCES_JSON-->\n"
+            "Rules for the block:\n"
+            "- The narrative text MUST NOT contain any resource URLs or file content.\n"
+            "- Every resource found (any format) must appear in the JSON array.\n"
+            "- For CSV, JSON, GeoJSON, TXT resources: set \"content\" to the full downloaded text "
+            "with newlines escaped as \\n.\n"
+            "- For all other formats: set \"content\" to null (JSON null, not the string 'null').\n"
+            "- \"format\" must be the uppercase format string (e.g. \"CSV\", \"PDF\", \"SHP\").\n"
+            "- The JSON array must be valid — do not truncate it."
         )
     )
 
