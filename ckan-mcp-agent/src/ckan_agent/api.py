@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -15,14 +17,41 @@ from .factory import AgentSession
 
 log = logging.getLogger("ckan-agent-api")
 
+_RESOURCES_RE = re.compile(
+    r"<!--RESOURCES_JSON-->\s*(.*?)\s*<!--/RESOURCES_JSON-->",
+    re.DOTALL,
+)
+
 
 class ChatRequest(BaseModel):
     query: str
-    base_url: str | None = None  # optional override hint (agent passes it via tool args)
+    base_url: str | None = None
+
+
+class Resource(BaseModel):
+    name: str
+    url: str
+    format: str
+    content: str | None = None
 
 
 class ChatResponse(BaseModel):
-    reply: str
+    text: str
+    resources: list[Resource]
+
+
+def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
+    match = _RESOURCES_RE.search(raw)
+    if not match:
+        return raw, []
+    json_block = match.group(1)
+    try:
+        items = json.loads(json_block)
+        resources = [Resource(**item) for item in items]
+    except Exception:
+        return raw, []
+    text = _RESOURCES_RE.sub("", raw).strip()
+    return text, resources
 
 
 _session: AgentSession | None = None
@@ -58,8 +87,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
     query = req.query
     if req.base_url:
         query = f"[Target portal: {req.base_url}] {query}"
-    reply = await _session.run(query)
-    return ChatResponse(reply=reply)
+    raw = await _session.run(query)
+    text, resources = parse_agent_reply(raw)
+    return ChatResponse(text=text, resources=resources)
 
 
 def run() -> None:
