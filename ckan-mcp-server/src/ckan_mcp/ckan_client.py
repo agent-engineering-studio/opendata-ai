@@ -16,6 +16,12 @@ DEFAULT_TIMEOUT = float(os.getenv("CKAN_HTTP_TIMEOUT", "30"))
 DEFAULT_BASE_URL = os.getenv("CKAN_DEFAULT_BASE_URL", "https://www.dati.gov.it/opendata")
 USER_AGENT = os.getenv("CKAN_USER_AGENT", "ckan-mcp-server/0.1 (+https://github.com/agent-engineering-studio)")
 
+# Formats whose content should be downloaded and returned inline
+DOWNLOADABLE_FORMATS: set[str] = {"CSV", "JSON", "GEOJSON", "TXT"}
+
+# Maximum bytes to download before truncating (default 512 KB)
+MAX_DOWNLOAD_BYTES = int(os.getenv("CKAN_MAX_DOWNLOAD_BYTES", str(512 * 1024)))
+
 
 class CkanError(RuntimeError):
     """Raised when the CKAN API returns success=false or a transport error occurs."""
@@ -85,3 +91,37 @@ class CkanClient:
             raise CkanError(f"CKAN action '{action}' failed: {err}")
 
         return payload.get("result")
+
+    async def download_resource(
+        self,
+        url: str,
+        max_bytes: int = MAX_DOWNLOAD_BYTES,
+    ) -> dict[str, Any]:
+        """Download a resource file and return its text content.
+
+        Returns a dict with keys:
+          - url: the original resource URL
+          - content: the text content (possibly truncated)
+          - truncated: True if the content was cut at *max_bytes*
+          - size_bytes: actual number of bytes downloaded
+          - content_type: the Content-Type header from the server
+        """
+        if self._client is None:
+            raise RuntimeError("CkanClient must be used as async context manager")
+
+        try:
+            resp = await self._client.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise CkanError(f"Failed to download resource {url}: {exc}") from exc
+
+        raw = resp.content
+        truncated = len(raw) > max_bytes
+        text = raw[:max_bytes].decode("utf-8", errors="replace")
+        return {
+            "url": str(resp.url),  # after redirects
+            "content": text,
+            "truncated": truncated,
+            "size_bytes": len(raw),
+            "content_type": resp.headers.get("content-type", ""),
+        }

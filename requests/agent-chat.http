@@ -178,3 +178,597 @@ Content-Type: {{contentType}}
 {
   "query": "Controlla se il portale dati.gov.it consente l'accesso pubblico in lettura."
 }
+
+# ══════════════════════════════════════════════════════════════════
+#  DOMANDE TEMATICHE — 13 categorie dati.gov.it (5+ per tema)
+#
+#  Regola risorse:
+#    • CSV, JSON, GeoJSON, TXT → scaricare, leggere e fornire URL
+#    • Tutti gli altri formati   → fornire solo URL
+# ══════════════════════════════════════════════════════════════════
+
+# ── 1. AGRICOLTURA ────────────────────────────────────────────────
+
+### AGR-1: Cerca dataset fattorie didattiche
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle fattorie didattiche in Italia. Se ci sono file CSV o JSON, scaricali e mostrami il contenuto con gli URL di tutti i file collegati. Per gli altri formati fornisci solo l'URL."
+}
+
+### AGR-2: Dataset agricoltura biologica
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sull'agricoltura biologica. Scarica e leggi eventuali file CSV, JSON o di testo e fornisci gli URL di tutte le risorse."
+}
+
+### AGR-3: Aziende agricole
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dati aperti sulle aziende agricole italiane. Per i file CSV e JSON mostrami il contenuto, per tutti gli altri formati (XML, XSD, ODS) dammi solo l'URL."
+}
+
+### AGR-4: Pesca e porti pugliesi
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Esistono dataset sulla pesca e i porti pugliesi? Cercali e se trovi file CSV scaricali e mostrami i dati. Per file XLSX fornisci solo l'URL."
+}
+
+### AGR-5: Ristoranti e masserie
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sui ristoranti o sulle masserie nel sud Italia. Scarica e leggi i file CSV trovati, fornendo URL per tutti i file collegati. Per i PDF solo URL."
+}
+
+# ── 2. ECONOMIA E FINANZE ────────────────────────────────────────
+
+### ECO-1: Edicole (dati geospaziali)
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle edicole in Italia. Se ci sono file GeoJSON scaricali e mostrami il contenuto. Per SHP e WMS fornisci solo l'URL."
+}
+
+### ECO-2: Attività estetiche
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Esistono dati aperti sulle attività estetiche? Cerca i dataset e per i file GeoJSON leggi il contenuto, per SHP e WMS dammi solo l'URL."
+}
+
+### ECO-3: Lavoro cessazioni e avviamenti
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle cessazioni e gli avviamenti di rapporti di lavoro. Scarica e leggi i file CSV trovati, mostrando gli URL di tutte le risorse collegate."
+}
+
+### ECO-4: Mercato del lavoro - iscrizioni
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sulle iscrizioni ai centri per l'impiego. Scarica eventuali CSV e mostrami le prime righe con tutti gli URL."
+}
+
+### ECO-5: Collocamento mirato disabili
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Ci sono dataset sul collocamento mirato per le categorie protette? Cercali e scarica i CSV trovati mostrando il contenuto e gli URL di tutti i file."
+}
+
+# ── 3. ISTRUZIONE, CULTURA E SPORT ──────────────────────────────
+
+### CUL-1: Anagrafe strutture scuole
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sull'anagrafe delle strutture edilizie scolastiche. Scarica e leggi i file CSV, per ZIP e PDF fornisci solo l'URL."
+}
+
+### CUL-2: Popolazione scolastica
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati sulla popolazione scolastica italiana. Se ci sono CSV scaricali e mostrami il contenuto. Per i PDF dammi solo l'URL."
+}
+
+### CUL-3: Pendolarismo scolastico
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sul pendolarismo scolastico. Scarica e leggi eventuali file CSV, per ZIP e RDF fornisci solo l'URL."
+}
+
+### CUL-4: Alunni e classi per scuola
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Esistono dataset con il numero di alunni e classi per scuola? Trovane uno e scarica il CSV per mostrarmene il contenuto con tutti gli URL."
+}
+
+### CUL-5: Ortofoto Cassero Fortezza Poggio Imperiale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset 'Ortofoto Cassero Fortezza di Poggio Imperiale' (id 1861198a-a961-41f5-86f3-aa8f351289b6). Mostrami i dettagli e gli URL delle risorse ZIP, TIF e WMS."
+}
+
+# ── 4. ENERGIA ───────────────────────────────────────────────────
+
+### ENE-1: Stazioni ricarica auto elettriche
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle stazioni di ricarica per auto elettriche. Scarica e leggi i file CSV trovati, fornendo gli URL di tutte le risorse."
+}
+
+### ENE-2: Punti luce pubblica illuminazione
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sui punti luce dell'illuminazione pubblica. Per i file CSV scarica e mostra il contenuto. Per gli altri formati solo URL."
+}
+
+### ENE-3: Comunità energetiche rinnovabili
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Ci sono dataset sulle Comunità Energetiche Rinnovabili (CER)? Cercali e scarica eventuali file CSV mostrando contenuto e URL."
+}
+
+### ENE-4: Produzione impianti fotovoltaici
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulla produzione degli impianti fotovoltaici. Se ci sono file JSON o CSV scaricali e mostrami il contenuto con tutti gli URL collegati."
+}
+
+### ENE-5: Consumi energia elettrica serie storica
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova la serie storica dei consumi di energia elettrica. Scarica e leggi i file JSON e CSV trovati, fornendo gli URL di tutte le risorse. Per XLS dammi solo l'URL."
+}
+
+# ── 5. AMBIENTE ──────────────────────────────────────────────────
+
+### AMB-1: Aree verdi urbane
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle aree verdi urbane. Per i file in formato WMS, KML, SHP fornisci solo l'URL. Se ci sono GeoJSON o CSV scaricali e mostra il contenuto."
+}
+
+### AMB-2: Distributori di carburante
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sui distributori di carburante. Se ci sono file GeoJSON scaricali e mostrami il contenuto. Per SHP e WMS dammi solo l'URL."
+}
+
+### AMB-3: Alberi da frutto in città
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Esistono dataset sugli alberi da frutto nelle città? Cercali e per i file SHP e KML fornisci solo l'URL."
+}
+
+### AMB-4: Aree giochi
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle aree giochi per bambini. Mostrami gli URL delle risorse KML, WMS e SHP trovate."
+}
+
+### AMB-5: Faglie attive e pericolosità sismica
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Ci sono dati aperti sulle faglie attive o la pericolosità sismica? Cercali e mostrami gli URL di tutte le risorse disponibili."
+}
+
+# ── 6. GOVERNO E SETTORE PUBBLICO ───────────────────────────────
+
+### GOV-1: Area stradale (Comune di Vinci)
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset 'Area stradale' del Comune di Vinci (id 8ad84dc3-da4e-4146-9ed6-ae5b7858bec4). Mostrami tutte le risorse con i loro URL. Per GeoJSON scarica e leggi il contenuto."
+}
+
+### GOV-2: Destinazione d'uso catastale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sulla destinazione d'uso catastale dei fabbricati. Per i file GeoJSON scarica e mostra il contenuto, per gli altri formati (ZIP, SHP, KML, GML) fornisci solo l'URL."
+}
+
+### GOV-3: Norme Tecniche di Attuazione
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset 'Norme Tecniche di Attuazione' (id da3db55b-b3f4-44fb-b4de-f1e5cf35c8fb). Scarica e leggi i file TXT, CSV e JSON. Per il PDF fornisci solo l'URL."
+}
+
+### GOV-4: Consumo del suolo
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sul consumo del suolo. Per i file GeoJSON scaricali e mostra il contenuto. Per ZIP, GML, KML, SHP fornisci solo l'URL."
+}
+
+### GOV-5: Aree di circolazione pedonale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle aree di circolazione pedonale. Mostrami gli URL di tutte le risorse disponibili (GeoJSON, KML, SHP, WFS, WMS)."
+}
+
+# ── 7. SALUTE ────────────────────────────────────────────────────
+
+### SAL-1: Turni farmacie Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sui turni delle farmacie a Firenze (id 36192da7-1b8f-4a7e-922e-f44ff405f5f2). Mostrami gli URL delle risorse WMS, KML e SHP."
+}
+
+### SAL-2: Tassi assenze ASL Taranto
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sui tassi di assenze del personale ASL Taranto. Scarica e leggi i file CSV, per XLSX fornisci solo l'URL."
+}
+
+### SAL-3: Progetti AReSS Puglia
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sui progetti sanitari finanziati dell'AReSS Puglia. Scarica il CSV e mostrami il contenuto con l'URL."
+}
+
+### SAL-4: Pazienti cronici diabete
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Esistono dati aperti sui pazienti cronici affetti da diabete in Puglia? Cerca il dataset, scarica il CSV e mostra le prime righe con l'URL."
+}
+
+### SAL-5: Anagrafica Breast Unit Puglia
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset 'Anagrafica Breast Unit Puglia' (id 1425110c-cac1-451c-9037-78fb87407378). Scarica e leggi i file JSON, GeoJSON e CSV, fornendo tutti gli URL."
+}
+
+### SAL-6: Centri prescrizione diabete
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sui centri autorizzati alla prescrizione di tecnologie per il diabete. Scarica il GeoJSON e il CSV, per il PDF dammi solo l'URL."
+}
+
+# ── 8. TEMATICHE INTERNAZIONALI ──────────────────────────────────
+
+### INT-1: Progetti Interreg Pugliesi
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sui progetti Interreg pugliesi. Scarica e leggi il file CSV mostrando contenuto e URL."
+}
+
+### INT-2: Protocolli di intesa
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sui protocolli di intesa attivi del Comune di Lecce. Scarica il CSV e mostrami il contenuto con l'URL."
+}
+
+### INT-3: Progetti finanziati con partner europei
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sui progetti finanziati con risorse comunitarie e i relativi partner. Scarica il CSV e per il file XLS fornisci solo l'URL."
+}
+
+### INT-4: Osservatorio Milano Benchmark
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset 'Osservatorio Milano - Benchmark' (id 6f0cfb53-742d-4044-b4ee-e0d67bffa68d). Scarica e leggi il CSV mostrando il contenuto con l'URL."
+}
+
+### INT-5: Beneficiari Interreg IPA South Adriatic
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dati sui beneficiari del programma Interreg IPA South Adriatic. Scarica il CSV e mostrami i dati. Per il file XLSX fornisci solo l'URL."
+}
+
+# ── 9. GIUSTIZIA E SICUREZZA PUBBLICA ────────────────────────────
+
+### GIU-1: Statistica incidenti stradali 2016
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sulla statistica degli incidenti stradali 2016 (id 75355832-91da-462a-b007-7072bc9d7c49). Scarica il CSV e mostrami i dati. Per XLS fornisci solo l'URL."
+}
+
+### GIU-2: Località verbali incidenti
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sulle località dove sono avvenuti incidenti stradali. Scarica e leggi il CSV, per XLS dammi solo l'URL."
+}
+
+### GIU-3: Violazioni codice della strada
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dati aperti sulle violazioni del codice della strada con relativi articoli. Scarica il CSV e mostra il contenuto con gli URL di tutte le risorse."
+}
+
+### GIU-4: Sanzioni ambientali Polizia Locale
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sulle sanzioni ambientali della Polizia Locale di Martina Franca. Scarica il CSV e per XLS fornisci solo l'URL."
+}
+
+### GIU-5: Ricorsi al Prefetto
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sui ricorsi al Prefetto contro i verbali del Codice della Strada. Scarica e leggi il file CSV mostrando contenuto e URL."
+}
+
+### GIU-6: Ubicazione Photored
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sull'ubicazione dei Photored semaforici nel territorio comunale (id df718a8e-b5fd-49da-9d2e-7df85a48d904). Scarica il CSV e mostrami le posizioni."
+}
+
+# ── 10. REGIONI E CITTÀ ──────────────────────────────────────────
+
+### REG-1: Toponimi Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset dei toponimi ufficiali del Comune di Firenze (id 1a41df44-0d84-470c-ab5a-20999be49b2e). Scarica e leggi il CSV mostrando il contenuto con l'URL."
+}
+
+### REG-2: Tratti stradali Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sui tratti stradali della viabilità del Comune di Firenze. Per KML, SHP e WMS fornisci solo gli URL."
+}
+
+### REG-3: Civici Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset dei numeri civici del Comune di Firenze. Mostrami gli URL delle risorse SHP e WMS."
+}
+
+### REG-4: Limiti amministrativi comunali
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sui limiti amministrativi comunali della Città Metropolitana di Firenze. Per ZIP e WMS fornisci solo l'URL."
+}
+
+### REG-5: Carta Provinciale 1:10.000
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset 'Carta Provinciale 1:10.000' della Città Metropolitana di Firenze (id 9b14e2fe-2f21-4d64-8508-876c9b00ad80). Mostrami gli URL di ZIP e WMS."
+}
+
+# ── 11. POPOLAZIONE E SOCIETÀ ────────────────────────────────────
+
+### SOC-1: Popolazione residente per quartiere Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sulla popolazione residente per quartiere e classe di età di Firenze (id 2908fe96-58c4-40fe-8b29-9d4d78715ba7). Scarica e leggi il CSV, per PDF e XLSX dammi solo l'URL."
+}
+
+### SOC-2: Individui residenti censimento
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sugli individui residenti per sezione di censimento a Firenze. Scarica il CSV e mostra le prime righe. Per XLSX e PDF fornisci solo l'URL."
+}
+
+### SOC-3: Famiglie residenti per censimento
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dati sulle famiglie residenti per sezione di censimento e quartiere. Scarica e leggi il CSV, per PDF e XLSX dammi solo gli URL."
+}
+
+### SOC-4: Famiglie per numero componenti
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dataset sulle famiglie residenti per numero di componenti a Firenze. Scarica il CSV e mostra il contenuto con tutti gli URL."
+}
+
+### SOC-5: Stalli sosta disabili
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sugli stalli di sosta riservati ai disabili a Firenze (id 01a508c5-a5d0-420b-b7c9-8eb5e437978f). Mostrami gli URL delle risorse SHP, KML e WMS."
+}
+
+### SOC-6: Movimenti turistici Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati sui movimenti turistici nella Città Metropolitana di Firenze. Per PDF e ZIP fornisci solo l'URL."
+}
+
+# ── 12. SCIENZA E TECNOLOGIA ────────────────────────────────────
+
+### SCI-1: Punti accesso WiFi Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sui punti di accesso WiFi nella Città Metropolitana di Firenze. Per WMS e ZIP fornisci solo gli URL."
+}
+
+### SCI-2: WiFi Comune di Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset WiFi del Comune di Firenze (id 8d829c58-1a8f-43e6-90ff-f2838ffe572c). Mostrami gli URL di WMS, SHP e KML."
+}
+
+### SCI-3: Reti di Laboratori Puglia
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle reti di laboratori in Puglia. Scarica e leggi i file CSV e JSON, per XLS e ODS fornisci solo l'URL."
+}
+
+### SCI-4: Digital Divide
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati aperti sul digital divide. Scarica e leggi il file CSV mostrando il contenuto con l'URL."
+}
+
+### SCI-5: Distretti tecnologici
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sui distretti tecnologici pugliesi (id 6602d578-a23a-497c-a876-5e1a663eb4d7). Scarica il CSV e mostrami i dati. Per ODS, XML, XSD fornisci solo l'URL."
+}
+
+### SCI-6: Prezzario Regione Puglia 2024
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset 'Prezzario Regione Puglia 2024'. Scarica e leggi il file CSV mostrando contenuto e URL."
+}
+
+# ── 13. TRASPORTI ────────────────────────────────────────────────
+
+### TRA-1: Trasporto pubblico tempo reale Toscana
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sul trasporto pubblico in tempo reale della Regione Toscana. Mostrami i dettagli e l'URL della risorsa BIN."
+}
+
+### TRA-2: Incidentalità percorsi ciclabili
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova dati sull'incidentalità sui percorsi ciclabili della Provincia di Pistoia. Per GeoJSON scarica e mostra il contenuto, per ZIP, GML, KML, SHP, WFS, WMS fornisci solo l'URL."
+}
+
+### TRA-3: Ciclostazioni
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca il dataset sulle ciclostazioni della Provincia di Pistoia (id e83ac204-fdb8-4d8e-89d4-a8f5bec8daa6). Per GeoJSON scarica e leggi il contenuto, per gli altri formati dammi solo l'URL."
+}
+
+### TRA-4: Viabilità Provincia di Pistoia
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sulla viabilità della Provincia di Pistoia. Per GeoJSON scarica e mostra il contenuto, per tutti gli altri formati (ZIP, GML, KML, SHP, WFS, WMS) fornisci solo l'URL."
+}
+
+### TRA-5: Aree a ciclabilità diffusa
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Cerca dataset sulle aree a ciclabilità diffusa. Per GeoJSON scarica e leggi il contenuto, per KML, SHP, WFS, WMS dammi solo l'URL."
+}
+
+### TRA-6: Svincoli FIPILI Firenze
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
+  "query": "Trova il dataset sugli svincoli della FIPILI nella Città Metropolitana di Firenze (id 480fb1df-2c52-442e-a7d0-397316213538). Mostrami gli URL delle risorse WMS e ZIP."
+}

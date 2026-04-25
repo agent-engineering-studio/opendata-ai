@@ -10,7 +10,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .ckan_client import CkanClient
+from .ckan_client import DOWNLOADABLE_FORMATS, CkanClient
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -196,6 +196,35 @@ def register_tools(mcp: FastMCP) -> None:
                 base_url=base_url,
                 params={"sql": sql},
             )
+
+    @mcp.tool()
+    async def ckan_resource_download(
+        resource_url: str,
+        format: str | None = None,
+    ) -> dict[str, Any]:
+        """Download the content of a CKAN resource file and return it as text.
+
+        Use this tool ONLY for resources whose format is one of: CSV, JSON, GeoJSON, TXT.
+        For all other formats (PDF, XLSX, XLS, SHP, WMS, KML, ZIP, etc.) do NOT call this
+        tool — just provide the URL to the user.
+
+        Args:
+            resource_url: Direct download URL of the resource (from the resource metadata).
+            format: Resource format hint (e.g. "CSV"). Optional, used only for logging.
+        """
+        fmt_upper = (format or "").upper()
+        if fmt_upper and fmt_upper not in DOWNLOADABLE_FORMATS:
+            return {
+                "url": resource_url,
+                "content": None,
+                "note": (
+                    f"Format '{format}' is not downloadable. "
+                    f"Only {', '.join(sorted(DOWNLOADABLE_FORMATS))} are supported. "
+                    "Provide the URL to the user instead."
+                ),
+            }
+        async with CkanClient() as c:
+            return await c.download_resource(resource_url)
 
     @mcp.tool()
     async def ckan_site_read(base_url: str | None = None) -> dict[str, Any]:

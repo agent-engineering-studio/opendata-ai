@@ -42,6 +42,13 @@ def build_server() -> FastMCP:
         streamable_http_path=MCP_PATH,
     )
     register_tools(mcp)
+
+    @mcp.custom_route("/healthz", methods=["GET"])
+    async def healthz(request):  # noqa: ARG001
+        from starlette.responses import JSONResponse
+
+        return JSONResponse({"status": "ok"})
+
     return mcp
 
 
