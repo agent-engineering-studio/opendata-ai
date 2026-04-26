@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 COMPOSE := docker compose
-OLLAMA_MODEL ?= qwen3:8b
+OLLAMA_MODEL ?= llama3.2:3b
 
 .DEFAULT_GOAL := help
 

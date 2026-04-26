@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # Ollama (OpenAI-compatible)
     ollama_base_url: str = Field(default="http://localhost:11434")
-    ollama_llm_model: str = Field(default="llama3.2:3b")
+    ollama_llm_model: str = Field(default="llama3.1:8b")
 
     # Azure AI Foundry
     azure_ai_project_endpoint: str | None = Field(default=None)
