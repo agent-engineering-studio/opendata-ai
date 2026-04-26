@@ -21,11 +21,17 @@ _RESOURCES_RE = re.compile(
     r"<!--RESOURCES_JSON-->\s*(.*?)\s*<!--/RESOURCES_JSON-->",
     re.DOTALL,
 )
-_URL_RE = re.compile(r'https?://[^\s\)\]>"\']+')
+_URL_RE = re.compile(r"https?://[^\s\)\]>\"'`]+")
 _EXT_FORMAT = {
     ".csv": "CSV", ".json": "JSON", ".geojson": "GEOJSON", ".txt": "TXT",
     ".pdf": "PDF", ".shp": "SHP", ".xlsx": "XLSX", ".xls": "XLS",
     ".zip": "ZIP", ".kml": "KML", ".xml": "XML", ".rdf": "RDF",
+}
+_SEGMENT_FORMAT = {
+    "csv": "CSV", "json": "JSON", "geojson": "GEOJSON", "txt": "TXT",
+    "pdf": "PDF", "shp": "SHP", "xlsx": "XLSX", "xls": "XLS",
+    "zip": "ZIP", "kml": "KML", "xml": "XML", "rdf": "RDF",
+    "wfs": "WFS", "wms": "WMS", "wcs": "WCS",
 }
 _NON_DATA_HOSTS = frozenset({
     "creativecommons.org", "opensource.org", "www.gnu.org",
@@ -65,8 +71,12 @@ def _extract_urls_fallback(text: str) -> list[Resource]:
         if host in _NON_DATA_HOSTS:
             continue
         lower = url.lower()
-        fmt = next((v for k, v in _EXT_FORMAT.items() if lower.endswith(k)), "UNKNOWN")
-        name = url.rstrip("/").split("/")[-1] or url
+        segment = lower.rstrip("/").split("/")[-1].split("?")[0]
+        fmt = (
+            next((v for k, v in _EXT_FORMAT.items() if segment.endswith(k)), None)
+            or _SEGMENT_FORMAT.get(segment, "UNKNOWN")
+        )
+        name = url.rstrip("/").split("/")[-1].split("?")[0] or url
         resources.append(Resource(name=name, url=url, format=fmt, content=None))
     return resources
 
