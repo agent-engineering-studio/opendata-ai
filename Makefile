@@ -4,7 +4,7 @@ COMPOSE := docker compose
 OLLAMA_BASE_MODEL ?= llama3.1:8b
 OLLAMA_NUM_CTX   ?= 16384
 OLLAMA_MODEL     ?= llama3.1:16k
-OLLAMA_IMAGE     ?= ghcr.io/hevolus/ckan-mcp-ollama:latest
+OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/ckan-mcp-ollama:latest
 
 .DEFAULT_GOAL := help
 
