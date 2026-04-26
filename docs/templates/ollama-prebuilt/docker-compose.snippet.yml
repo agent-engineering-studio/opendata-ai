@@ -1,0 +1,53 @@
+# ── SNIPPET docker-compose.yml ───────────────────────────────────────────────
+# Incolla questo blocco nel tuo docker-compose.yml.
+# Sostituisci ghcr.io/MY-ORG/MY-PROJECT-ollama con il nome della tua immagine.
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-ollama-base: &ollama-base
+  # Immagine pre-buildata con modello già incluso.
+  # Pubblicata su ghcr.io via .github/workflows/publish-ollama.yml.
+  # Fallback al plain ollama: OLLAMA_IMAGE=ollama/ollama:latest + make pull-models
+  image: ${OLLAMA_IMAGE:-ghcr.io/MY-ORG/MY-PROJECT-ollama:latest}
+  container_name: my-project-ollama
+  ports:
+    - "${OLLAMA_PORT:-11434}:11434"
+  volumes:
+    - ollama_data:/root/.ollama
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "ollama", "list"]
+    interval: 15s
+    timeout: 5s
+    retries: 10
+    start_period: 30s
+
+services:
+  # ── Ollama CPU ──
+  ollama-cpu:
+    <<: *ollama-base
+    profiles: ["cpu"]
+
+  # ── Ollama GPU (NVIDIA) ──
+  ollama-gpu:
+    <<: *ollama-base
+    profiles: ["gpu"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── Il tuo servizio che usa Ollama ──
+  my-service:
+    image: my-service:local
+    environment:
+      OLLAMA_BASE_URL: http://my-project-ollama:11434
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.1:16k}   # deve corrispondere al MODEL_TAG nel Dockerfile
+    depends_on:
+      - ollama-cpu   # oppure ollama-gpu
+
+volumes:
+  ollama_data:
+    name: my-project-ollama-data

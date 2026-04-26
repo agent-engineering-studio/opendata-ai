@@ -52,9 +52,11 @@ pull-models: ## Fallback: pull model directly into a running ckan-ollama contain
 	docker exec ckan-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
 	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX)"
 
-.PHONY: rebuild
+.PHONY: rebuild rebuild-all
 rebuild: ## Rebuild mcp + agent images without cache
 	$(COMPOSE) build --no-cache ckan-mcp ckan-agent
+
+rebuild-all: build-ollama rebuild ## Rebuild ALL images: Ollama (baked model, ~7 GB) + mcp + agent
 
 # ──────────────────────────── Interactive ────────────────────────
 

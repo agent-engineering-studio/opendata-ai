@@ -1,0 +1,52 @@
+# ── SNIPPET Makefile ─────────────────────────────────────────────────────────
+# Incolla questi target nel Makefile del tuo progetto.
+# Personalizza le variabili nella sezione "Configurazione".
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Configurazione ────────────────────────────────────────────────────────────
+OLLAMA_BASE_MODEL ?= llama3.1:8b           # modello base da scaricare
+OLLAMA_NUM_CTX   ?= 16384                  # context window
+OLLAMA_MODEL     ?= llama3.1:16k           # nome del modelfile custom (deve corrispondere a MODEL_TAG nel Dockerfile)
+OLLAMA_IMAGE     ?= ghcr.io/MY-ORG/MY-PROJECT-ollama:latest   # immagine pre-buildata
+OLLAMA_CONTAINER ?= my-project-ollama      # nome container_name nel compose
+
+COMPOSE := docker compose
+
+# ── Stack ─────────────────────────────────────────────────────────────────────
+.PHONY: up up-cpu up-gpu down logs ps
+up: up-cpu
+
+up-cpu:  ## Avvia stack con Ollama CPU
+	$(COMPOSE) --profile cpu up -d
+
+up-gpu:  ## Avvia stack con Ollama GPU (NVIDIA)
+	$(COMPOSE) --profile gpu up -d
+
+down:    ## Ferma lo stack
+	$(COMPOSE) --profile cpu --profile gpu down
+
+logs:    ## Log in tempo reale
+	$(COMPOSE) logs -f --tail=100
+
+ps:      ## Stato container
+	$(COMPOSE) ps
+
+# ── Ollama image (build locale) ───────────────────────────────────────────────
+.PHONY: build-ollama
+build-ollama:  ## Build locale dell'immagine Ollama con modello baked in (~7 GB, lenta)
+	docker build \
+	  --build-arg BASE_MODEL=$(OLLAMA_BASE_MODEL) \
+	  --build-arg NUM_CTX=$(OLLAMA_NUM_CTX) \
+	  --build-arg MODEL_TAG=$(OLLAMA_MODEL) \
+	  -t $(OLLAMA_IMAGE) \
+	  infra/ollama
+
+# ── Fallback: pull diretto nel container ─────────────────────────────────────
+.PHONY: pull-models
+pull-models:  ## Fallback: scarica il modello nel container in esecuzione (usa con OLLAMA_IMAGE=ollama/ollama:latest)
+	@echo "Pulling $(OLLAMA_BASE_MODEL)..."
+	docker exec $(OLLAMA_CONTAINER) ollama pull $(OLLAMA_BASE_MODEL)
+	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX)..."
+	docker exec $(OLLAMA_CONTAINER) bash -c \
+	  'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
+	@echo "Done"
