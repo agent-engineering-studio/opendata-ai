@@ -1,7 +1,7 @@
 name: ckan-mcp
 
 x-ollama-base: &ollama-base
-  # Pre-built image with llama3.1:16k (num_ctx=16384) already baked in.
+  # Pre-built image with qwen2.5:16k (num_ctx=16384) already baked in.
   # Published via .github/workflows/publish-ollama.yml.
   # Fallback: set OLLAMA_IMAGE=ollama/ollama:latest and run `make pull-models`.
   image: ${OLLAMA_IMAGE:-ghcr.io/agent-engineering-studio/ckan-mcp-ollama:latest}
@@ -68,7 +68,7 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ckan-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.1:16k}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}

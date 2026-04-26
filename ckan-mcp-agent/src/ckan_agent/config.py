@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # Ollama (OpenAI-compatible)
     ollama_base_url: str = Field(default="http://localhost:11434")
-    ollama_llm_model: str = Field(default="llama3.1:16k")
+    ollama_llm_model: str = Field(default="qwen2.5:16k")
     ollama_num_ctx: int = Field(default=16384)
 
     # Azure AI Foundry

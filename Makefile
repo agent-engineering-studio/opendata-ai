@@ -1,9 +1,9 @@
 SHELL := /bin/bash
 
 COMPOSE := docker compose
-OLLAMA_BASE_MODEL ?= llama3.1:8b
+OLLAMA_BASE_MODEL ?= qwen2.5:7b-instruct
 OLLAMA_NUM_CTX   ?= 16384
-OLLAMA_MODEL     ?= llama3.1:16k
+OLLAMA_MODEL     ?= qwen2.5:16k
 OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/ckan-mcp-ollama:latest
 
 .DEFAULT_GOAL := help
@@ -57,6 +57,16 @@ rebuild: ## Rebuild mcp + agent images without cache
 	$(COMPOSE) build --no-cache ckan-mcp ckan-agent
 
 rebuild-all: build-ollama rebuild ## Rebuild ALL images: Ollama (baked model, ~7 GB) + mcp + agent
+
+.PHONY: refresh-ollama refresh-gpu refresh
+
+refresh-gpu: rebuild down up-gpu
+	@echo "Stack refreshed with GPU-enabled Ollama and rebuilt images"
+
+
+
+refresh: rebuild down up
+	@echo "Stack refreshed with CPU-only Ollama and rebuilt images"
 
 # ──────────────────────────── Interactive ────────────────────────
 

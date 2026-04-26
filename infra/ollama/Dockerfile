@@ -2,9 +2,9 @@ FROM ollama/ollama:latest
 
 # Build arguments — override at build time to change model or context size:
 #   docker build --build-arg BASE_MODEL=llama3.2:3b --build-arg NUM_CTX=8192 .
-ARG BASE_MODEL=llama3.1:8b
+ARG BASE_MODEL=qwen2.5:7b-instruct
 ARG NUM_CTX=16384
-ARG MODEL_TAG=llama3.1:16k
+ARG MODEL_TAG=qwen2.5:16k
 
 ENV OLLAMA_BASE_MODEL=${BASE_MODEL}
 ENV OLLAMA_NUM_CTX=${NUM_CTX}
