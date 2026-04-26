@@ -1,7 +1,10 @@
 name: ckan-mcp
 
 x-ollama-base: &ollama-base
-  image: ollama/ollama:latest
+  # Pre-built image with llama3.1:16k (num_ctx=16384) already baked in.
+  # Published via .github/workflows/publish-ollama.yml.
+  # Fallback to plain ollama/ollama:latest by setting OLLAMA_IMAGE in .env.
+  image: ${OLLAMA_IMAGE:-ghcr.io/hevolus/ckan-mcp-ollama:latest}
   container_name: ckan-ollama
   ports:
     - "${OLLAMA_PORT:-11434}:11434"
@@ -13,7 +16,7 @@ x-ollama-base: &ollama-base
     interval: 15s
     timeout: 5s
     retries: 10
-    start_period: 20s
+    start_period: 30s
 
 services:
   # ───── Ollama — GPU profile ─────

@@ -1,0 +1,130 @@
+name: publish-ollama
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+    paths:
+      - 'infra/ollama/Dockerfile'
+      - '.github/workflows/publish-ollama.yml'
+  workflow_dispatch:
+    inputs:
+      base_model:
+        description: 'Base Ollama model to bake in'
+        required: false
+        default: 'llama3.1:8b'
+      num_ctx:
+        description: 'Context window size (num_ctx)'
+        required: false
+        default: '16384'
+      model_tag:
+        description: 'Name of the custom model created inside the image'
+        required: false
+        default: 'llama3.1:16k'
+      push_latest:
+        description: 'Also tag as :latest'
+        required: false
+        default: 'true'
+        type: choice
+        options: [ 'true', 'false' ]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ckan-mcp-ollama
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set lowercase image owner
+        id: owner
+        run: echo "value=${IMAGE_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve build args
+        id: args
+        run: |
+          echo "base_model=${{ github.event.inputs.base_model || 'llama3.1:8b' }}"    >> "$GITHUB_OUTPUT"
+          echo "num_ctx=${{ github.event.inputs.num_ctx || '16384' }}"                >> "$GITHUB_OUTPUT"
+          echo "model_tag=${{ github.event.inputs.model_tag || 'llama3.1:16k' }}"    >> "$GITHUB_OUTPUT"
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' || github.event.inputs.push_latest == 'true' }}
+            type=raw,value=${{ steps.args.outputs.model_tag }}
+          labels: |
+            org.opencontainers.image.title=ckan-mcp-ollama
+            org.opencontainers.image.description=Ollama with ${{ steps.args.outputs.model_tag }} (num_ctx=${{ steps.args.outputs.num_ctx }}) pre-loaded for mcp-ckan
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build & push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/ollama
+          file: infra/ollama/Dockerfile
+          # Ollama ships linux/amd64 only; arm64 support is experimental
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_MODEL=${{ steps.args.outputs.base_model }}
+            NUM_CTX=${{ steps.args.outputs.num_ctx }}
+            MODEL_TAG=${{ steps.args.outputs.model_tag }}
+          # No GHA layer cache — the 4.9 GB model layer must be stored in the
+          # registry, not the ephemeral GHA cache (10 GB cap).
+          provenance: false
+
+      - name: Job summary
+        run: |
+          {
+            echo "### Published \`${{ env.IMAGE_NAME }}\`"
+            echo ""
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| Base model | \`${{ steps.args.outputs.base_model }}\` |"
+            echo "| num_ctx | \`${{ steps.args.outputs.num_ctx }}\` |"
+            echo "| Model tag | \`${{ steps.args.outputs.model_tag }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo ""
+            echo "**Tags:**"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "**Pull command:**"
+            echo '```bash'
+            echo "docker pull ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/${{ env.IMAGE_NAME }}:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -4,6 +4,7 @@ COMPOSE := docker compose
 OLLAMA_BASE_MODEL ?= llama3.1:8b
 OLLAMA_NUM_CTX   ?= 16384
 OLLAMA_MODEL     ?= llama3.1:16k
+OLLAMA_IMAGE     ?= ghcr.io/hevolus/ckan-mcp-ollama:latest
 
 .DEFAULT_GOAL := help
 
@@ -34,13 +35,21 @@ logs: ## Tail logs for all services
 ps: ## Show service status
 	$(COMPOSE) ps
 
+.PHONY: build-ollama
+build-ollama: ## Build the Ollama image with $(OLLAMA_MODEL) baked in (local, ~7 GB)
+	docker build \
+	  --build-arg BASE_MODEL=$(OLLAMA_BASE_MODEL) \
+	  --build-arg NUM_CTX=$(OLLAMA_NUM_CTX) \
+	  --build-arg MODEL_TAG=$(OLLAMA_MODEL) \
+	  -t $(OLLAMA_IMAGE) \
+	  infra/ollama
+
 .PHONY: pull-models
-pull-models: ## Pull base model and create $(OLLAMA_MODEL) modelfile with num_ctx=$(OLLAMA_NUM_CTX)
+pull-models: ## Fallback: pull model directly into a running ckan-ollama container (no prebuild image)
 	@echo "Pulling base model $(OLLAMA_BASE_MODEL)..."
 	docker exec ckan-ollama ollama pull $(OLLAMA_BASE_MODEL)
 	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX)..."
-	@printf 'FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n' | \
-	  docker exec -i ckan-ollama ollama create $(OLLAMA_MODEL) -f -
+	docker exec ckan-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
 	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX)"
 
 .PHONY: rebuild
