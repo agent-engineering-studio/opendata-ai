@@ -10,13 +10,17 @@ run_test() {
   local body="$2"
   local http_code
 
-  http_code=$(curl -s -o /tmp/ckan_resp.json -w "%{http_code}" \
+  curl_out=$(curl -s -o /tmp/ckan_resp.json \
+    -w "%{http_code} %{size_download} %{time_total}" \
     -X POST "${BASE_URL}/chat" \
     -H "Content-Type: application/json" \
     -d "$body")
+  read -r http_code size_bytes time_total <<< "$curl_out"
+  size_kb=$(python3 -c "print(round(${size_bytes}/1024,2))")
 
   if [[ "$http_code" == "200" ]]; then
     echo "[PASS] $label"
+    echo "  POST ${BASE_URL}/chat [200 OK, ${size_kb}kB, ${time_total}s]"
     python3 - <<'PYEOF'
 import json, sys
 

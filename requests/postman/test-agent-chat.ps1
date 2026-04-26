@@ -6,12 +6,20 @@ $Fail = 0
 function Invoke-ChatTest {
     param([string]$Label, [string]$Body)
     try {
-        $response = Invoke-RestMethod -Uri "$BaseUrl/chat" `
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $raw = Invoke-WebRequest -Uri "$BaseUrl/chat" `
             -Method Post `
             -ContentType "application/json" `
-            -Body $Body
+            -Body $Body `
+            -UseBasicParsing
+        $sw.Stop()
+
+        $elapsed  = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+        $sizeKb   = [math]::Round($raw.RawContentLength / 1024, 2)
+        $response = $raw.Content | ConvertFrom-Json
 
         Write-Host "[PASS] $Label" -ForegroundColor Green
+        Write-Host "  POST $BaseUrl/chat [200 OK, ${sizeKb}kB, ${elapsed}s]" -ForegroundColor DarkGray
 
         # --- TEXT ---
         Write-Host ""
