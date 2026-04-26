@@ -95,6 +95,14 @@ def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
     json_block = matches[0].group(1)
     try:
         items = json.loads(json_block)
+        if isinstance(items, dict):
+            # model wrapped array: {"resources": [...]} or {"data": [...]}
+            for key in ("resources", "data", "items", "results"):
+                if isinstance(items.get(key), list):
+                    items = items[key]
+                    break
+            else:
+                raise ValueError(f"Expected JSON array, got object with keys: {list(items)}")
         if not isinstance(items, list):
             raise ValueError(f"Expected JSON array, got {type(items).__name__}")
         resources = [Resource(**item) for item in items]

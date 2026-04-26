@@ -113,6 +113,7 @@ def test_block_in_middle_of_response_preserves_surrounding_text():
 
 
 def test_json_object_instead_of_array_falls_back():
+    # A plain resource dict (not a list) has no known wrapper key — falls back
     raw = (
         "Testo.\n"
         "<!--RESOURCES_JSON-->\n"
@@ -122,6 +123,22 @@ def test_json_object_instead_of_array_falls_back():
     text, resources = parse_agent_reply(raw)
     assert text == raw
     assert resources == []
+
+
+def test_json_wrapped_object_resources_key():
+    # Model returns {"resources": [...]} instead of bare array
+    raw = (
+        "Dataset trovato.\n"
+        "<!--RESOURCES_JSON-->\n"
+        '{"resources":[{"name":"dati.csv","url":"https://example.com/dati.csv","format":"CSV","content":"a,b"}]}\n'
+        "<!--/RESOURCES_JSON-->"
+    )
+    text, resources = parse_agent_reply(raw)
+    assert text == "Dataset trovato."
+    assert len(resources) == 1
+    assert resources[0].name == "dati.csv"
+    assert resources[0].format == "CSV"
+    assert resources[0].content == "a,b"
 
 
 # ── URL extraction fallback ───────────────────────────────────────
