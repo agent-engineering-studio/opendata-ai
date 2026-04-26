@@ -167,12 +167,10 @@ def test_url_fallback_deduplicates_urls():
     assert len(resources) == 1
 
 
-def test_url_fallback_unknown_extension():
-    raw = "Risorsa: https://example.com/api/endpoint"
+def test_url_fallback_skips_unknown_extension():
+    raw = "Pagina: https://example.com/datasets/some-uuid"
     text, resources = parse_agent_reply(raw)
-    assert len(resources) == 1
-    assert resources[0].format == "UNKNOWN"
-    assert resources[0].name == "endpoint"
+    assert resources == []
 
 
 def test_url_fallback_not_used_when_marker_present():

@@ -74,8 +74,10 @@ def _extract_urls_fallback(text: str) -> list[Resource]:
         segment = lower.rstrip("/").split("/")[-1].split("?")[0]
         fmt = (
             next((v for k, v in _EXT_FORMAT.items() if segment.endswith(k)), None)
-            or _SEGMENT_FORMAT.get(segment, "UNKNOWN")
+            or _SEGMENT_FORMAT.get(segment)
         )
+        if fmt is None:
+            continue
         name = url.rstrip("/").split("/")[-1].split("?")[0] or url
         resources.append(Resource(name=name, url=url, format=fmt, content=None))
     return resources
