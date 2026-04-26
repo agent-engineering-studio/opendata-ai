@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -16,6 +17,8 @@ from .config import (
 )
 
 log = logging.getLogger("ckan-agent.factory")
+
+_REGIONAL_CTX_RE = re.compile(r"REGIONAL_SEARCH_CONTEXT\s*:", re.IGNORECASE)
 
 
 def build_chat_client(settings: Settings) -> Any:
@@ -168,31 +171,45 @@ class AgentSession:
         ).build()
 
         result = await workflow.run(query)
-
-        # WorkflowRunResult.get_outputs() returns the data payloads of "output" events.
-        # SequentialBuilder produces list[Message] outputs (the conversation so far).
-        # The final answer is the last assistant message in the last output's conversation.
         outputs = result.get_outputs()
         if not outputs:
             log.warning("Sequential workflow produced no outputs for query: %r", query)
             return ""
 
         last_output = outputs[-1]
+        if not isinstance(last_output, list):
+            text = getattr(last_output, "text", None)
+            return text if text is not None else str(last_output)
 
-        # Case 1: list[Message] (SequentialBuilder default output)
-        if isinstance(last_output, list):
-            for msg in reversed(last_output):
-                role = getattr(msg, "role", None)
-                role_str = getattr(role, "value", role) if role is not None else None
-                if role_str in ("assistant", "agent", None):
-                    text = getattr(msg, "text", None)
-                    if text:
-                        return text
+        # SequentialBuilder produces list[Message] containing the full conversation.
+        # We need to pick the right agent's message:
+        # - If the orchestrator emitted REGIONAL_SEARCH_CONTEXT, the regional_search
+        #   ran a portal search → return the regional_search's last assistant message
+        # - Otherwise the orchestrator's answer is the final one → return it
+        assistant_messages = [
+            msg for msg in last_output
+            if (role := getattr(msg, "role", None))
+            and getattr(role, "value", role) == "assistant"
+            and getattr(msg, "text", None)
+        ]
+        if not assistant_messages:
+            log.warning("No assistant messages in workflow output")
             return ""
 
-        # Case 2: object with .text (e.g. AgentResponse from a single-agent fallback)
-        text = getattr(last_output, "text", None)
-        if text is not None:
-            return text
+        orchestrator_msg = assistant_messages[0]
+        orchestrator_text = orchestrator_msg.text
 
-        return str(last_output)
+        if _REGIONAL_CTX_RE.search(orchestrator_text):
+            # Regional handoff path: the answer is the regional_search's reply
+            # (the LAST assistant message). Fall back to orchestrator if absent.
+            if len(assistant_messages) >= 2:
+                log.info("Regional handoff: returning regional_search output")
+                return assistant_messages[-1].text
+            log.warning(
+                "Orchestrator emitted REGIONAL_SEARCH_CONTEXT but no regional reply found"
+            )
+            return orchestrator_text
+
+        # No handoff: orchestrator already produced the final answer
+        log.info("No handoff: returning orchestrator output")
+        return orchestrator_text
