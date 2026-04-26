@@ -1,13 +1,13 @@
-"""Factories that build the chat client and the HandoffBuilder-based orchestration."""
+"""Factories that build the chat client and the two-agent orchestration pipeline."""
 
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import AsyncExitStack
 from typing import Any
 
 from agent_framework import Agent, MCPStreamableHTTPTool
-from agent_framework.orchestrations import HandoffBuilder
 
 from .config import (
     ORCHESTRATOR_INSTRUCTIONS,
@@ -16,6 +16,9 @@ from .config import (
 )
 
 log = logging.getLogger("ckan-agent.factory")
+
+# Marker the orchestrator writes when it decides a regional search is needed.
+_REGIONAL_CTX_RE = re.compile(r"REGIONAL_SEARCH_CONTEXT:", re.IGNORECASE)
 
 
 def build_chat_client(settings: Settings) -> Any:
@@ -74,12 +77,23 @@ def build_chat_client(settings: Settings) -> Any:
     raise RuntimeError(f"Unsupported LLM_PROVIDER={provider!r}")
 
 
-class AgentSession:
-    """Async context manager that wires MCP tools + HandoffBuilder orchestration together.
+def _agent_text(result: Any) -> str:
+    text = getattr(result, "text", None)
+    return text if text is not None else str(result)
 
-    Two-agent handoff pattern:
-      orchestrator  → searches dati.gov.it, decides if regional search is needed
-      regional_search → searches the specific regional portal, produces final answer
+
+class AgentSession:
+    """Async context manager that wires MCP tools + sequential two-agent orchestration.
+
+    Two-agent pipeline (Python-level orchestration):
+      1. orchestrator  — searches dati.gov.it, decides if a regional search is needed.
+                         If yes, outputs a REGIONAL_SEARCH_CONTEXT block.
+      2. regional_search — activated only when orchestrator emits REGIONAL_SEARCH_CONTEXT.
+                           Searches the identified regional portal and produces the final answer.
+
+    Note: HandoffBuilder from agent-framework-orchestrations is not used here because
+    OllamaChatClient does not support the `allow_multiple_tool_calls` parameter that
+    HandoffBuilder injects. The same two-agent logic is implemented at the Python level.
 
     Usage:
         async with AgentSession(settings) as session:
@@ -89,7 +103,8 @@ class AgentSession:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._stack = AsyncExitStack()
-        self._workflow: Any = None
+        self._orchestrator: Agent | None = None
+        self._regional_agent: Agent | None = None
 
     async def __aenter__(self) -> "AgentSession":
         log.info("Connecting to MCP server at %s", self._settings.mcp_server_url)
@@ -106,80 +121,64 @@ class AgentSession:
         if self._settings.llm_provider == "ollama":
             default_options["num_ctx"] = self._settings.ollama_num_ctx
 
-        # HandoffBuilder requires per-service-call history persistence on all participants.
         agent_kwargs: dict[str, Any] = dict(
             tools=[mcp_tool],
-            require_per_service_call_history_persistence=True,
             default_options=default_options or None,
         )
 
-        orchestrator = Agent(
+        self._orchestrator = Agent(
             chat_client,
             instructions=ORCHESTRATOR_INSTRUCTIONS,
             name=self._settings.orchestrator_name,
-            description=(
-                "Searches the Italian national open data portal (dati.gov.it) and "
-                "decides whether a regional portal search is needed."
-            ),
             **agent_kwargs,
         )
-
-        regional_agent = Agent(
+        self._regional_agent = Agent(
             chat_client,
             instructions=REGIONAL_SEARCH_INSTRUCTIONS,
             name=self._settings.regional_agent_name,
-            description=(
-                "Searches a specific Italian regional CKAN portal "
-                "and merges results with what the orchestrator already found."
-            ),
             **agent_kwargs,
         )
 
-        await self._stack.enter_async_context(orchestrator)
-        await self._stack.enter_async_context(regional_agent)
-
-        self._workflow = (
-            HandoffBuilder(participants=[orchestrator, regional_agent])
-            .with_start_agent(orchestrator)
-            .add_handoff(orchestrator, [regional_agent])
-            .add_handoff(regional_agent, [orchestrator])
-            .build()
-        )
+        await self._stack.enter_async_context(self._orchestrator)
+        await self._stack.enter_async_context(self._regional_agent)
 
         log.info(
-            "Handoff workflow ready: %s → %s",
+            "Two-agent pipeline ready: %s → (if needed) %s",
             self._settings.orchestrator_name,
             self._settings.regional_agent_name,
         )
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        self._workflow = None
+        self._orchestrator = None
+        self._regional_agent = None
         await self._stack.aclose()
 
     async def run(self, query: str) -> str:
-        if self._workflow is None:
+        if self._orchestrator is None or self._regional_agent is None:
             raise RuntimeError("AgentSession not entered")
 
-        result = await self._workflow.run(query)
+        # Phase 1 — orchestrator searches the national portal.
+        log.info("[%s] Running on query: %r", self._settings.orchestrator_name, query)
+        orch_result = await self._orchestrator.run(query)
+        orch_text = _agent_text(orch_result)
+        log.debug("[%s] Output length: %d chars", self._settings.orchestrator_name, len(orch_text))
 
-        # WorkflowRunResult is a list of WorkflowEvents.
-        # get_outputs() returns the data payloads of "output"-type events.
-        outputs = result.get_outputs()
-        if not outputs:
-            log.warning("Workflow produced no outputs for query: %r", query)
-            return ""
+        # Phase 2 — if the orchestrator identified a regional portal, delegate.
+        if _REGIONAL_CTX_RE.search(orch_text):
+            log.info(
+                "[%s] REGIONAL_SEARCH_CONTEXT detected — activating %s",
+                self._settings.orchestrator_name,
+                self._settings.regional_agent_name,
+            )
+            regional_query = (
+                f"The orchestrator has searched the national portal and found the following context.\n"
+                f"Complete the regional search as instructed.\n\n"
+                f"{orch_text}"
+            )
+            regional_result = await self._regional_agent.run(regional_query)
+            return _agent_text(regional_result)
 
-        # The last output is the final agent response.
-        last = outputs[-1]
-        text = getattr(last, "text", None)
-        if text is not None:
-            return text
-
-        # Fallback: collect all text outputs and join them.
-        parts = []
-        for out in outputs:
-            t = getattr(out, "text", None)
-            if t:
-                parts.append(t)
-        return "\n".join(parts) if parts else str(last)
+        # No regional search needed — return orchestrator's answer directly.
+        log.info("[%s] No regional handoff needed — returning directly", self._settings.orchestrator_name)
+        return orch_text
