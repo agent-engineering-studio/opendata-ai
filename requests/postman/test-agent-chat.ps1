@@ -10,16 +10,46 @@ function Invoke-ChatTest {
             -Method Post `
             -ContentType "application/json" `
             -Body $Body
-        $textPreview = if ($response.text.Length -gt 200) { $response.text.Substring(0, 200) } else { $response.text }
-        $resourceCount = if ($null -eq $response.resources) { 0 } else { $response.resources.Count }
+
         Write-Host "[PASS] $Label" -ForegroundColor Green
-        Write-Host "       text: $textPreview"
-        Write-Host "       resources: $resourceCount"
+
+        # --- TEXT ---
+        Write-Host ""
+        Write-Host "  TEXT" -ForegroundColor White
+        Write-Host ("  " + "-" * 72)
+        foreach ($line in ($response.text -split "`n")) {
+            Write-Host "  $line"
+        }
+
+        # --- RESOURCES ---
+        $resources = if ($null -eq $response.resources) { @() } else { $response.resources }
+        Write-Host ""
+        Write-Host "  RESOURCES ($($resources.Count))" -ForegroundColor White
+        Write-Host ("  " + "-" * 72)
+        foreach ($r in $resources) {
+            Write-Host "  name   : $($r.name)"
+            Write-Host "  url    : $($r.url)" -ForegroundColor Cyan
+            Write-Host "  format : $($r.format)"
+            if ($null -ne $r.content) {
+                $lines = ($r.content -split "`n")
+                $preview = $lines | Select-Object -First 5
+                Write-Host "  content:"
+                foreach ($cl in $preview) { Write-Host "    $cl" }
+                if ($lines.Count -gt 5) {
+                    Write-Host "    ... ($($lines.Count) lines total)"
+                }
+            } else {
+                Write-Host "  content: (null - not downloaded)"
+            }
+            Write-Host ""
+        }
+
         $script:Pass++
     } catch {
         Write-Host "[FAIL] $Label - $_" -ForegroundColor Red
         $script:Fail++
     }
+    Write-Host ("  " + "=" * 72)
     Write-Host ""
 }
 

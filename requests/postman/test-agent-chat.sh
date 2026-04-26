@@ -16,17 +16,44 @@ run_test() {
     -d "$body")
 
   if [[ "$http_code" == "200" ]]; then
-    local text resources_count
-    text=$(python3 -c "import json; d=json.load(open('/tmp/ckan_resp.json')); print(d.get('text','')[:200])" 2>/dev/null || echo "(parse error)")
-    resources_count=$(python3 -c "import json; d=json.load(open('/tmp/ckan_resp.json')); print(len(d.get('resources',[])))" 2>/dev/null || echo "?")
     echo "[PASS] $label"
-    echo "       text: ${text}"
-    echo "       resources: ${resources_count}"
+    python3 - <<'PYEOF'
+import json, sys
+
+d = json.load(open('/tmp/ckan_resp.json'))
+text = d.get('text', '')
+resources = d.get('resources', [])
+
+print()
+print("  TEXT")
+print("  " + "-" * 72)
+for line in text.splitlines():
+    print("  " + line)
+print()
+print(f"  RESOURCES ({len(resources)})")
+print("  " + "-" * 72)
+for r in resources:
+    print(f"  name   : {r.get('name','')}")
+    print(f"  url    : {r.get('url','')}")
+    print(f"  format : {r.get('format','')}")
+    content = r.get('content')
+    if content is not None:
+        preview_lines = content.splitlines()[:5]
+        print("  content:")
+        for line in preview_lines:
+            print("    " + line)
+        if len(content.splitlines()) > 5:
+            print(f"    ... ({len(content.splitlines())} lines total)")
+    else:
+        print("  content: (null — not downloaded)")
+    print()
+PYEOF
     ((PASS++))
   else
     echo "[FAIL] $label - HTTP $http_code"
     ((FAIL++))
   fi
+  echo "  ════════════════════════════════════════════════════════════════════════"
   echo ""
 }
 
