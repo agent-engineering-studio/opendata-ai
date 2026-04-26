@@ -367,4 +367,4 @@ $Total = $Pass + $Fail
 Write-Host "=== SUMMARY ===" -ForegroundColor Cyan
 Write-Host "Passed: $Pass / $Total"
 Write-Host "Failed: $Fail / $Total"
-exit ($Fail -gt 0 ? 1 : 0)
+if ($Fail -gt 0) { exit 1 } else { exit 0 }
