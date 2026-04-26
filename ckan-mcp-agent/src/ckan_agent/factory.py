@@ -1,4 +1,4 @@
-"""Factories that build the chat client and the agent with MCP tools wired in."""
+"""Factories that build the chat client and the HandoffBuilder-based orchestration."""
 
 from __future__ import annotations
 
@@ -7,8 +7,13 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from agent_framework import Agent, MCPStreamableHTTPTool
+from agent_framework.orchestrations import HandoffBuilder
 
-from .config import Settings
+from .config import (
+    ORCHESTRATOR_INSTRUCTIONS,
+    REGIONAL_SEARCH_INSTRUCTIONS,
+    Settings,
+)
 
 log = logging.getLogger("ckan-agent.factory")
 
@@ -70,20 +75,25 @@ def build_chat_client(settings: Settings) -> Any:
 
 
 class AgentSession:
-    """Async context manager that wires MCP tool + agent together.
+    """Async context manager that wires MCP tools + HandoffBuilder orchestration together.
+
+    Two-agent handoff pattern:
+      orchestrator  → searches dati.gov.it, decides if regional search is needed
+      regional_search → searches the specific regional portal, produces final answer
 
     Usage:
         async with AgentSession(settings) as session:
-            reply = await session.run("Find air quality datasets on dati.gov.it")
+            reply = await session.run("Trova dati sul trasporto pubblico in Toscana")
     """
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._stack = AsyncExitStack()
-        self._agent: Agent | None = None
+        self._workflow: Any = None
 
     async def __aenter__(self) -> "AgentSession":
         log.info("Connecting to MCP server at %s", self._settings.mcp_server_url)
+
         mcp_tool = MCPStreamableHTTPTool(
             name=self._settings.mcp_server_name,
             url=self._settings.mcp_server_url,
@@ -96,25 +106,80 @@ class AgentSession:
         if self._settings.llm_provider == "ollama":
             default_options["num_ctx"] = self._settings.ollama_num_ctx
 
-        agent = Agent(
-            chat_client,
-            instructions=self._settings.agent_instructions,
-            name=self._settings.agent_name,
+        # HandoffBuilder requires per-service-call history persistence on all participants.
+        agent_kwargs: dict[str, Any] = dict(
             tools=[mcp_tool],
+            require_per_service_call_history_persistence=True,
             default_options=default_options or None,
         )
-        await self._stack.enter_async_context(agent)
-        log.info("Agent '%s' ready", self._settings.agent_name)
-        self._agent = agent
+
+        orchestrator = Agent(
+            chat_client,
+            instructions=ORCHESTRATOR_INSTRUCTIONS,
+            name=self._settings.orchestrator_name,
+            description=(
+                "Searches the Italian national open data portal (dati.gov.it) and "
+                "decides whether a regional portal search is needed."
+            ),
+            **agent_kwargs,
+        )
+
+        regional_agent = Agent(
+            chat_client,
+            instructions=REGIONAL_SEARCH_INSTRUCTIONS,
+            name=self._settings.regional_agent_name,
+            description=(
+                "Searches a specific Italian regional CKAN portal "
+                "and merges results with what the orchestrator already found."
+            ),
+            **agent_kwargs,
+        )
+
+        await self._stack.enter_async_context(orchestrator)
+        await self._stack.enter_async_context(regional_agent)
+
+        self._workflow = (
+            HandoffBuilder(participants=[orchestrator, regional_agent])
+            .with_start_agent(orchestrator)
+            .add_handoff(orchestrator, [regional_agent])
+            .add_handoff(regional_agent, [orchestrator])
+            .build()
+        )
+
+        log.info(
+            "Handoff workflow ready: %s → %s",
+            self._settings.orchestrator_name,
+            self._settings.regional_agent_name,
+        )
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        self._agent = None
+        self._workflow = None
         await self._stack.aclose()
 
     async def run(self, query: str) -> str:
-        if self._agent is None:
+        if self._workflow is None:
             raise RuntimeError("AgentSession not entered")
-        result = await self._agent.run(query)
-        text = getattr(result, "text", None)
-        return text if text is not None else str(result)
+
+        result = await self._workflow.run(query)
+
+        # WorkflowRunResult is a list of WorkflowEvents.
+        # get_outputs() returns the data payloads of "output"-type events.
+        outputs = result.get_outputs()
+        if not outputs:
+            log.warning("Workflow produced no outputs for query: %r", query)
+            return ""
+
+        # The last output is the final agent response.
+        last = outputs[-1]
+        text = getattr(last, "text", None)
+        if text is not None:
+            return text
+
+        # Fallback: collect all text outputs and join them.
+        parts = []
+        for out in outputs:
+            t = getattr(out, "text", None)
+            if t:
+                parts.append(t)
+        return "\n".join(parts) if parts else str(last)
