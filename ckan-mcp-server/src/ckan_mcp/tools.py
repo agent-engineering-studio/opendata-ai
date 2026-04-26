@@ -69,7 +69,8 @@ def register_tools(mcp: FastMCP) -> None:
             sort: Solr sort expression (e.g. "metadata_modified desc").
             base_url: Portal root URL.
         """
-        rows = min(rows, 10)
+        rows = min(int(rows), 10)
+        start = int(start)
         params: dict[str, Any] = {"q": q, "rows": rows, "start": start}
         if fq:
             params["fq"] = fq
