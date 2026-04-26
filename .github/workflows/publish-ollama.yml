@@ -3,9 +3,6 @@ name: publish-ollama
 on:
   push:
     tags: [ 'v*.*.*' ]
-    paths:
-      - 'infra/ollama/Dockerfile'
-      - '.github/workflows/publish-ollama.yml'
   workflow_dispatch:
     inputs:
       base_model:
