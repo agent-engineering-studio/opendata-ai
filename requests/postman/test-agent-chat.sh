@@ -12,6 +12,7 @@ run_test() {
 
   curl_out=$(curl -s -o /tmp/ckan_resp.json \
     -w "%{http_code} %{size_download} %{time_total}" \
+    --max-time 300 \
     -X POST "${BASE_URL}/chat" \
     -H "Content-Type: application/json" \
     -d "$body")

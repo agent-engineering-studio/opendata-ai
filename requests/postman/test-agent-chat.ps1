@@ -11,7 +11,8 @@ function Invoke-ChatTest {
             -Method Post `
             -ContentType "application/json" `
             -Body $Body `
-            -UseBasicParsing
+            -UseBasicParsing `
+            -TimeoutSec 300
         $sw.Stop()
 
         $elapsed  = [math]::Round($sw.Elapsed.TotalSeconds, 1)
