@@ -328,6 +328,14 @@ POST {{base}}/chat
 Content-Type: {{contentType}}
 
 {
+  "query": "Trova dati su Incidentalità sui percorsi ciclabili della regione Toscana"
+}
+
+### ENE-2-bis: Punti luce pubblica illuminazione
+POST {{base}}/chat
+Content-Type: {{contentType}}
+
+{
   "query": "Trova dati aperti sui punti luce dell'illuminazione pubblica. Per i file CSV scarica e mostra il contenuto. Per gli altri formati solo URL."
 }
 
