@@ -3,8 +3,9 @@ name: ckan-mcp
 x-ollama-base: &ollama-base
   # Pre-built image with llama3.1:16k (num_ctx=16384) already baked in.
   # Published via .github/workflows/publish-ollama.yml.
-  # Fallback to plain ollama/ollama:latest by setting OLLAMA_IMAGE in .env.
+  # Fallback: set OLLAMA_IMAGE=ollama/ollama:latest and run `make pull-models`.
   image: ${OLLAMA_IMAGE:-ghcr.io/hevolus/ckan-mcp-ollama:latest}
+  pull_policy: ${OLLAMA_PULL_POLICY:-always}
   container_name: ckan-ollama
   ports:
     - "${OLLAMA_PORT:-11434}:11434"
@@ -67,7 +68,7 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ckan-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.1:8b}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.1:16k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
@@ -77,6 +78,12 @@ services:
     depends_on:
       ckan-mcp:
         condition: service_started
+      ollama-cpu:
+        condition: service_healthy
+        required: false
+      ollama-gpu:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
 
 volumes:
