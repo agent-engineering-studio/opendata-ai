@@ -27,6 +27,10 @@ _EXT_FORMAT = {
     ".pdf": "PDF", ".shp": "SHP", ".xlsx": "XLSX", ".xls": "XLS",
     ".zip": "ZIP", ".kml": "KML", ".xml": "XML", ".rdf": "RDF",
 }
+_NON_DATA_HOSTS = frozenset({
+    "creativecommons.org", "opensource.org", "www.gnu.org",
+    "www.w3.org", "schema.org", "purl.org",
+})
 
 
 class ChatRequest(BaseModel):
@@ -53,6 +57,13 @@ def _extract_urls_fallback(text: str) -> list[Resource]:
         if url in seen:
             continue
         seen.add(url)
+        try:
+            from urllib.parse import urlparse
+            host = urlparse(url).netloc.lower().lstrip("www.")
+        except Exception:
+            host = ""
+        if host in _NON_DATA_HOSTS:
+            continue
         lower = url.lower()
         fmt = next((v for k, v in _EXT_FORMAT.items() if lower.endswith(k)), "UNKNOWN")
         name = url.rstrip("/").split("/")[-1] or url
