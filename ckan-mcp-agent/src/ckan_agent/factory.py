@@ -101,7 +101,8 @@ class AgentSession:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._stack = AsyncExitStack()
-        self._workflow: Any = None
+        self._orchestrator: Agent | None = None
+        self._regional_agent: Agent | None = None
 
     async def __aenter__(self) -> "AgentSession":
         log.info("Connecting to MCP server at %s", self._settings.mcp_server_url)
@@ -139,29 +140,34 @@ class AgentSession:
         await self._stack.enter_async_context(orchestrator)
         await self._stack.enter_async_context(regional_agent)
 
-        # chain_only_agent_responses=True: each agent receives only the previous
-        # agent text messages (not raw tool calls/results), keeping the context clean.
-        self._workflow = SequentialBuilder(
-            participants=[orchestrator, regional_agent],
-            chain_only_agent_responses=True,
-        ).build()
+        self._orchestrator = orchestrator
+        self._regional_agent = regional_agent
 
         log.info(
-            "Sequential workflow ready: %s → %s",
+            "Agents ready: %s → %s",
             self._settings.orchestrator_name,
             self._settings.regional_agent_name,
         )
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        self._workflow = None
+        self._orchestrator = None
+        self._regional_agent = None
         await self._stack.aclose()
 
     async def run(self, query: str) -> str:
-        if self._workflow is None:
+        if self._orchestrator is None or self._regional_agent is None:
             raise RuntimeError("AgentSession not entered")
 
-        result = await self._workflow.run(query)
+        # A SequentialBuilder Workflow is stateful and does not support concurrent
+        # executions. Build a fresh workflow per request so concurrent HTTP requests
+        # each get their own independent execution context.
+        workflow = SequentialBuilder(
+            participants=[self._orchestrator, self._regional_agent],
+            chain_only_agent_responses=True,
+        ).build()
+
+        result = await workflow.run(query)
 
         # WorkflowRunResult.get_outputs() returns the data payloads of "output" events.
         # In a two-agent sequential pipeline the last output is the regional agent's reply.
