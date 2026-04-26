@@ -64,7 +64,8 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ckan-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen3:8b}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-llama3.1:8b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
       API_HOST: 0.0.0.0

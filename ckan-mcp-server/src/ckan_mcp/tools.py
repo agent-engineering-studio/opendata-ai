@@ -12,6 +12,29 @@ from mcp.server.fastmcp import FastMCP
 
 from .ckan_client import DOWNLOADABLE_FORMATS, CkanClient
 
+_KEEP_RESOURCE_FIELDS = {"id", "url", "name", "format", "description", "mimetype", "size"}
+_KEEP_PACKAGE_FIELDS = {
+    "id", "name", "title", "notes", "license_title",
+    "metadata_modified", "organization", "resources", "tags",
+}
+
+
+def _slim_package(pkg: dict[str, Any]) -> dict[str, Any]:
+    """Return a stripped-down package dict with only the fields the agent needs."""
+    slim: dict[str, Any] = {k: pkg[k] for k in _KEEP_PACKAGE_FIELDS if k in pkg}
+    if "notes" in slim and isinstance(slim["notes"], str) and len(slim["notes"]) > 400:
+        slim["notes"] = slim["notes"][:400] + "…"
+    if "organization" in slim and isinstance(slim["organization"], dict):
+        slim["organization"] = slim["organization"].get("name", "")
+    if "resources" in slim and isinstance(slim["resources"], list):
+        slim["resources"] = [
+            {k: r[k] for k in _KEEP_RESOURCE_FIELDS if k in r}
+            for r in slim["resources"]
+        ]
+    if "tags" in slim and isinstance(slim["tags"], list):
+        slim["tags"] = [t.get("name", "") for t in slim["tags"] if isinstance(t, dict)]
+    return slim
+
 
 def register_tools(mcp: FastMCP) -> None:
     """Register all CKAN tools on the given FastMCP instance."""
@@ -52,7 +75,9 @@ def register_tools(mcp: FastMCP) -> None:
         if sort:
             params["sort"] = sort
         async with CkanClient() as c:
-            return await c.action("package_search", base_url=base_url, params=params)
+            result = await c.action("package_search", base_url=base_url, params=params)
+        slimmed = [_slim_package(p) for p in result.get("results", [])]
+        return {"count": result.get("count", 0), "results": slimmed}
 
     @mcp.tool()
     async def ckan_package_show(id: str, base_url: str | None = None) -> dict[str, Any]:
@@ -63,7 +88,8 @@ def register_tools(mcp: FastMCP) -> None:
             base_url: Portal root URL.
         """
         async with CkanClient() as c:
-            return await c.action("package_show", base_url=base_url, params={"id": id})
+            result = await c.action("package_show", base_url=base_url, params={"id": id})
+        return _slim_package(result)
 
     @mcp.tool()
     async def ckan_organization_list(

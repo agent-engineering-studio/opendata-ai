@@ -21,10 +21,14 @@ def build_chat_client(settings: Settings) -> Any:
     if provider == "ollama":
         from agent_framework_ollama import OllamaChatClient
 
-        log.info("Ollama: host=%s model=%s", settings.ollama_base_url, settings.ollama_llm_model)
+        log.info(
+            "Ollama: host=%s model=%s num_ctx=%d",
+            settings.ollama_base_url, settings.ollama_llm_model, settings.ollama_num_ctx,
+        )
         return OllamaChatClient(
             host=settings.ollama_base_url,
             model=settings.ollama_llm_model,
+            options={"num_ctx": settings.ollama_num_ctx},
         )
 
     if provider == "azure_foundry":
