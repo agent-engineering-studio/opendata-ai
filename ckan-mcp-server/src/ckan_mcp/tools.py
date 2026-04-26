@@ -54,7 +54,7 @@ def register_tools(mcp: FastMCP) -> None:
     async def ckan_package_search(
         q: str = "*:*",
         fq: str | None = None,
-        rows: int = 10,
+        rows: int = 5,
         start: int = 0,
         sort: str | None = None,
         base_url: str | None = None,
@@ -64,11 +64,12 @@ def register_tools(mcp: FastMCP) -> None:
         Args:
             q: Solr query string (e.g. "air quality", "title:transport").
             fq: Solr filter query (e.g. "organization:ministry-of-x").
-            rows: Max results to return (default 10, CKAN usually caps at 1000).
+            rows: Max results to return (default 5, hard-capped at 10 to stay within LLM context).
             start: Pagination offset.
             sort: Solr sort expression (e.g. "metadata_modified desc").
             base_url: Portal root URL.
         """
+        rows = min(rows, 10)
         params: dict[str, Any] = {"q": q, "rows": rows, "start": start}
         if fq:
             params["fq"] = fq
