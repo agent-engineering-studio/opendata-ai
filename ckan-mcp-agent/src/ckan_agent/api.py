@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -37,6 +39,16 @@ _NON_DATA_HOSTS = frozenset({
     "creativecommons.org", "opensource.org", "www.gnu.org",
     "www.w3.org", "schema.org", "purl.org",
 })
+
+# Formats where the file content is plain text and worth embedding inline.
+_DOWNLOADABLE_FORMATS = frozenset({"CSV", "JSON", "GEOJSON", "TXT"})
+
+# Cap embedded content per resource to keep responses bounded. CKAN files can
+# easily exceed several MB; truncating preserves the schema/header for the
+# caller while keeping the JSON payload manageable.
+_MAX_CONTENT_BYTES = 200_000  # ~200 KB per resource
+_DOWNLOAD_TIMEOUT_SECONDS = 20.0
+_DOWNLOAD_CONCURRENCY = 4
 
 
 class ChatRequest(BaseModel):
@@ -113,6 +125,54 @@ def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
     return text, resources
 
 
+async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
+    """GET a URL and return up to _MAX_CONTENT_BYTES of decoded text.
+
+    Returns None on any error (timeout, non-2xx, decode failure, oversize fetch).
+    """
+    try:
+        resp = await client.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning("download failed for %s: %s", url, exc)
+        return None
+
+    raw = resp.content[:_MAX_CONTENT_BYTES]
+    encoding = resp.encoding or "utf-8"
+    try:
+        text = raw.decode(encoding, errors="replace")
+    except LookupError:
+        text = raw.decode("utf-8", errors="replace")
+
+    if len(resp.content) > _MAX_CONTENT_BYTES:
+        text += f"\n\n[…truncated at {_MAX_CONTENT_BYTES} bytes; original size {len(resp.content)} bytes]"
+    return text
+
+
+async def _fill_missing_content(resources: list[Resource]) -> None:
+    """Mutate `resources` in place: download CSV/JSON/GEOJSON/TXT entries with
+    content=None. Failures leave content as None.
+
+    Concurrency capped at _DOWNLOAD_CONCURRENCY to be polite to portals.
+    """
+    targets = [
+        r for r in resources
+        if r.content is None and r.format.upper() in _DOWNLOADABLE_FORMATS
+    ]
+    if not targets:
+        return
+
+    log.info("Downloading %d resources whose content was missing", len(targets))
+    sem = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
+
+    async with httpx.AsyncClient() as client:
+        async def fetch_one(resource: Resource) -> None:
+            async with sem:
+                resource.content = await _fetch_text(client, resource.url)
+
+        await asyncio.gather(*(fetch_one(r) for r in targets), return_exceptions=False)
+
+
 _session: AgentSession | None = None
 
 
@@ -155,6 +215,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
     )
     raw = await _session.run(query)
     text, resources = parse_agent_reply(raw)
+    await _fill_missing_content(resources)
     return ChatResponse(text=text, resources=resources)
 
 
