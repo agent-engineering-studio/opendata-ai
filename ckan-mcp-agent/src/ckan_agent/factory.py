@@ -1,4 +1,21 @@
-"""Factories that build the chat client and the SequentialBuilder orchestration."""
+"""Factories that build the chat client and the agent pipeline.
+
+Architecture: deterministic Python router + single CKAN search agent.
+
+  Why not LLM-based orchestration:
+    Smaller open models (llama3.1:8b) are unreliable at following multi-mode
+    instructions like "if region detected emit MARKER else produce final answer".
+    They tend to either hallucinate text-formatted tool calls or pick the wrong
+    branch. We move the routing decision to deterministic Python regex matching
+    against a known list of Italian regional portals, and give the agent a single
+    unambiguous job: search the portal pre-selected by the router.
+
+  Flow:
+    1. detect_region(query) → (region, portal_url) or (None, None) via regex
+    2. Python rewrites the user query, prefixing an explicit portal hint
+    3. Single agent runs ckan_package_search → ckan_resource_download
+       and produces narrative + RESOURCES_JSON
+"""
 
 from __future__ import annotations
 
@@ -8,17 +25,40 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from agent_framework import Agent, MCPStreamableHTTPTool
-from agent_framework.orchestrations import SequentialBuilder
 
-from .config import (
-    ORCHESTRATOR_INSTRUCTIONS,
-    REGIONAL_SEARCH_INSTRUCTIONS,
-    Settings,
-)
+from .config import AGENT_INSTRUCTIONS, Settings
 
 log = logging.getLogger("ckan-agent.factory")
 
-_REGIONAL_CTX_RE = re.compile(r"REGIONAL_SEARCH_CONTEXT\s*:", re.IGNORECASE)
+
+# Italian regional CKAN portals known to host open data harvested separately
+# from the national portal (dati.gov.it). Order matters only for logging — the
+# regex below is alternation-based and the first match wins.
+_REGIONAL_PORTALS: list[tuple[str, str, str]] = [
+    # (canonical_name, regex_alternation, portal_url)
+    ("Toscana",        r"toscan[ao]|tuscany",                       "https://dati.toscana.it"),
+    ("Lombardia",      r"lombard[io]a?",                            "https://www.dati.lombardia.it"),
+    ("Piemonte",       r"piemont[ei]|piedmont",                     "https://www.dati.piemonte.it/catalogodati/catalog"),
+    ("Emilia-Romagna", r"emilia[\s-]*romagna",                      "https://dati.emiliaromagna.it"),
+    ("Lazio",          r"lazi[oa]",                                 "https://dati.lazio.it/catalog"),
+    ("Veneto",         r"venet[oa]",                                "https://dati.veneto.it"),
+    ("Campania",       r"campan[io]a?",                             "https://dati.regione.campania.it"),
+    ("Sicilia",        r"sicil[io]a?n?",                            "https://dati.regione.sicilia.it"),
+]
+
+# Compile once at module load.
+_REGION_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    (name, re.compile(rf"\b({pattern})\b", re.IGNORECASE), url)
+    for name, pattern, url in _REGIONAL_PORTALS
+]
+
+
+def detect_region(query: str) -> tuple[str | None, str | None]:
+    """Return (region_name, portal_url) if the query mentions an Italian region, else (None, None)."""
+    for name, pattern, url in _REGION_PATTERNS:
+        if pattern.search(query):
+            return name, url
+    return None, None
 
 
 def build_chat_client(settings: Settings) -> Any:
@@ -78,23 +118,7 @@ def build_chat_client(settings: Settings) -> Any:
 
 
 class AgentSession:
-    """Async context manager that wires MCP tools + SequentialBuilder orchestration.
-
-    Two-agent sequential pipeline:
-      1. orchestrator  — searches dati.gov.it (national portal), analyses results.
-                         If a regional portal is needed, it writes REGIONAL_SEARCH_CONTEXT
-                         in its response. Otherwise it produces the final answer directly.
-      2. regional_search — receives the full conversation context (including the
-                           orchestrator output). If REGIONAL_SEARCH_CONTEXT is present,
-                           it searches the identified regional portal and produces the
-                           final RESOURCES_JSON response. If absent, it repeats the
-                           orchestrator's answer unchanged.
-
-    Why SequentialBuilder and not HandoffBuilder:
-      HandoffBuilder injects an allow_multiple_tool_calls flag that agent_framework_ollama
-      does not support (OllamaChatOptions declares it as None / not configurable).
-      SequentialBuilder passes conversation context between agents without multi-tool
-      injection, making it fully compatible with OllamaChatClient.
+    """Single-agent CKAN session with deterministic Python region routing.
 
     Usage:
         async with AgentSession(settings) as session:
@@ -104,8 +128,7 @@ class AgentSession:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._stack = AsyncExitStack()
-        self._orchestrator: Agent | None = None
-        self._regional_agent: Agent | None = None
+        self._agent: Agent | None = None
 
     async def __aenter__(self) -> "AgentSession":
         log.info("Connecting to MCP server at %s", self._settings.mcp_server_url)
@@ -122,94 +145,40 @@ class AgentSession:
         if self._settings.llm_provider == "ollama":
             default_options["num_ctx"] = self._settings.ollama_num_ctx
 
-        agent_kwargs: dict[str, Any] = dict(
+        agent = Agent(
+            chat_client,
+            instructions=AGENT_INSTRUCTIONS,
+            name=self._settings.agent_name,
             tools=[mcp_tool],
             default_options=default_options or None,
         )
-
-        orchestrator = Agent(
-            chat_client,
-            instructions=ORCHESTRATOR_INSTRUCTIONS,
-            name=self._settings.orchestrator_name,
-            **agent_kwargs,
-        )
-        regional_agent = Agent(
-            chat_client,
-            instructions=REGIONAL_SEARCH_INSTRUCTIONS,
-            name=self._settings.regional_agent_name,
-            **agent_kwargs,
-        )
-
-        await self._stack.enter_async_context(orchestrator)
-        await self._stack.enter_async_context(regional_agent)
-
-        self._orchestrator = orchestrator
-        self._regional_agent = regional_agent
-
-        log.info(
-            "Agents ready: %s → %s",
-            self._settings.orchestrator_name,
-            self._settings.regional_agent_name,
-        )
+        await self._stack.enter_async_context(agent)
+        self._agent = agent
+        log.info("Agent '%s' ready", self._settings.agent_name)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
-        self._orchestrator = None
-        self._regional_agent = None
+        self._agent = None
         await self._stack.aclose()
 
     async def run(self, query: str) -> str:
-        if self._orchestrator is None or self._regional_agent is None:
+        if self._agent is None:
             raise RuntimeError("AgentSession not entered")
 
-        # A SequentialBuilder Workflow is stateful and does not support concurrent
-        # executions. Build a fresh workflow per request so concurrent HTTP requests
-        # each get their own independent execution context.
-        workflow = SequentialBuilder(
-            participants=[self._orchestrator, self._regional_agent],
-            chain_only_agent_responses=True,
-        ).build()
-
-        result = await workflow.run(query)
-        outputs = result.get_outputs()
-        if not outputs:
-            log.warning("Sequential workflow produced no outputs for query: %r", query)
-            return ""
-
-        last_output = outputs[-1]
-        if not isinstance(last_output, list):
-            text = getattr(last_output, "text", None)
-            return text if text is not None else str(last_output)
-
-        # SequentialBuilder produces list[Message] containing the full conversation.
-        # We need to pick the right agent's message:
-        # - If the orchestrator emitted REGIONAL_SEARCH_CONTEXT, the regional_search
-        #   ran a portal search → return the regional_search's last assistant message
-        # - Otherwise the orchestrator's answer is the final one → return it
-        assistant_messages = [
-            msg for msg in last_output
-            if (role := getattr(msg, "role", None))
-            and getattr(role, "value", role) == "assistant"
-            and getattr(msg, "text", None)
-        ]
-        if not assistant_messages:
-            log.warning("No assistant messages in workflow output")
-            return ""
-
-        orchestrator_msg = assistant_messages[0]
-        orchestrator_text = orchestrator_msg.text
-
-        if _REGIONAL_CTX_RE.search(orchestrator_text):
-            # Regional handoff path: the answer is the regional_search's reply
-            # (the LAST assistant message). Fall back to orchestrator if absent.
-            if len(assistant_messages) >= 2:
-                log.info("Regional handoff: returning regional_search output")
-                return assistant_messages[-1].text
-            log.warning(
-                "Orchestrator emitted REGIONAL_SEARCH_CONTEXT but no regional reply found"
+        region, portal = detect_region(query)
+        if region:
+            log.info("Region detected: %s → %s", region, portal)
+            enriched = (
+                f"PORTAL_HINT: use base_url={portal} for all CKAN tool calls (region: {region}).\n"
+                f"USER QUERY: {query}"
             )
-            return orchestrator_text
+        else:
+            log.info("No region detected — using national portal (default)")
+            enriched = (
+                "PORTAL_HINT: omit base_url (server default https://www.dati.gov.it/opendata applies).\n"
+                f"USER QUERY: {query}"
+            )
 
-        # No handoff: orchestrator already produced the final answer
-        log.info("No handoff: returning orchestrator output")
-        return orchestrator_text
+        result = await self._agent.run(enriched)
+        text = getattr(result, "text", None)
+        return text if text is not None else str(result)

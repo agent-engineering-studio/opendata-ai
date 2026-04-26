@@ -15,88 +15,46 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Provider = Literal["ollama", "azure_foundry", "claude"]
 
-_RESOURCES_JSON_FORMAT = (
-    "=== MANDATORY OUTPUT FORMAT ===\n"
-    "Every response MUST have:\n"
-    "a) A non-empty narrative paragraph in Italian describing what was found "
-    "(or explaining why nothing was found and what was tried).\n"
-    "b) Immediately after the narrative, this exact block (no markdown fences):\n"
+
+AGENT_INSTRUCTIONS = (
+    "You are an assistant that queries CKAN open data portals using MCP tools.\n\n"
+    "Each user message starts with a PORTAL_HINT line followed by a USER QUERY line.\n"
+    "  PORTAL_HINT: tells you which CKAN portal to use (or to omit base_url).\n"
+    "  USER QUERY: the actual question.\n"
+    "ALWAYS follow the PORTAL_HINT exactly — never decide which portal to use yourself.\n\n"
+    "=== STEPS ===\n"
+    "1. Call ckan_package_search with q=<keywords from USER QUERY> and the base_url "
+    "from PORTAL_HINT (omit base_url if PORTAL_HINT says to omit it).\n"
+    "2. If 0 results, retry once with a shorter/broader query (drop the least specific words).\n"
+    "3. For each package in the results, look at its 'resources' list.\n"
+    "4. For every resource whose format is CSV, JSON, GeoJSON or TXT, "
+    "call ckan_resource_download with the exact 'url' from the result.\n"
+    "5. Skip any resource whose format is UNKNOWN.\n\n"
+    "=== TOOL RULES ===\n"
+    "- Never describe or quote the raw JSON returned by tools — use it silently.\n"
+    "- Never invent URLs. Only use URLs that appeared in tool results.\n"
+    "- Always EXECUTE tool calls (the framework will dispatch them). "
+    "Never write a JSON tool call as part of your text answer.\n\n"
+    "=== OUTPUT FORMAT ===\n"
+    "Your final response MUST contain:\n"
+    "a) A short Italian narrative paragraph describing what was found "
+    "(or, if nothing was found, what was tried and why nothing matched).\n"
+    "b) Immediately after, this exact block (no markdown fences):\n"
     "<!--RESOURCES_JSON-->\n"
     "[]\n"
     "<!--/RESOURCES_JSON-->\n"
-    "Replace [] with a JSON array of all resources found. Example:\n"
+    "Replace [] with a JSON array of resources. Example:\n"
     "<!--RESOURCES_JSON-->\n"
     '[{"name":"data.csv","url":"https://example.com/data.csv","format":"CSV","content":"col1,col2\\nv1,v2"},'
     '{"name":"map.shp","url":"https://example.com/map.shp","format":"SHP","content":null}]\n'
     "<!--/RESOURCES_JSON-->\n\n"
     "=== RESOURCES_JSON RULES ===\n"
-    "- Every resource found (any format, except format=UNKNOWN) must appear in the array.\n"
-    "- CSV / JSON / GeoJSON / TXT: set 'content' to the downloaded file text. "
-    "Escape newlines as \\n and double-quotes as \\\".\n"
-    "- All other formats (PDF, SHP, WMS, KML, ZIP, XLS, RDF, WMS, ...): set 'content' to null.\n"
-    "- 'format' must be uppercase (CSV, PDF, GEOJSON, SHP, ...).\n"
-    "- Never truncate the JSON array.\n"
-    "- Never output an empty text. Always write at least one sentence before the block."
-)
-
-_TOOL_RULES = (
-    "=== TOOL RULES ===\n"
-    "1. Never describe or quote raw JSON from tools — use results silently to build your answer.\n"
-    "2. When ckan_package_search returns results, check 'resources' inside each result. "
-    "For each resource with format CSV, JSON, GeoJSON or TXT: "
-    "call ckan_resource_download with the exact 'url' from the tool result.\n"
-    "3. Never invent or guess URLs. Only use URLs from tool results.\n"
-    "4. If a search returns 0 results, try a simpler or broader query before giving up.\n"
-)
-
-ORCHESTRATOR_INSTRUCTIONS = (
-    "You are the Orchestrator in a two-agent CKAN data discovery pipeline.\n\n"
-    "=== STEP 1: Detect region in the user query ===\n"
-    "Check if the query explicitly mentions one of these Italian regions:\n"
-    "  Toscana → https://dati.toscana.it\n"
-    "  Lombardia → https://www.dati.lombardia.it\n"
-    "  Piemonte → https://www.dati.piemonte.it/catalogodati/catalog\n"
-    "  Emilia-Romagna → https://dati.emiliaromagna.it\n"
-    "  Lazio → https://dati.lazio.it/catalog\n"
-    "  Veneto → https://dati.veneto.it\n"
-    "  Campania → https://dati.regione.campania.it\n"
-    "  Sicilia → https://dati.regione.sicilia.it\n\n"
-    "=== STEP 2: Decide which mode to run ===\n\n"
-    "MODE A — REGIONAL DELEGATION (region detected in query):\n"
-    "  Output ONLY the following block, with NO narrative, NO greeting, NO additional text.\n"
-    "  No RESOURCES_JSON in this mode.\n\n"
-    "  REGIONAL_SEARCH_CONTEXT:\n"
-    "  - region: <region name>\n"
-    "  - portal: <regional portal URL from the table above>\n"
-    "  - query: <a short Italian search phrase, max 5 words, distilled from the user query>\n"
-    "  - national_resources: NONE\n\n"
-    "MODE B — NATIONAL ANSWER (no region detected):\n"
-    "  Search dati.gov.it (omit base_url — server default applies).\n"
-    "  For each resource of format CSV/JSON/GeoJSON/TXT call ckan_resource_download.\n"
-    "  Output: a short Italian narrative paragraph + the RESOURCES_JSON block.\n\n"
-    "CRITICAL: NEVER mix the two modes. If you output REGIONAL_SEARCH_CONTEXT, do NOT add narrative or RESOURCES_JSON.\n\n"
-    + _TOOL_RULES + "\n"
-    + _RESOURCES_JSON_FORMAT
-)
-
-REGIONAL_SEARCH_INSTRUCTIONS = (
-    "You are the Regional Search specialist.\n\n"
-    "The previous message contains either:\n"
-    "  (a) a REGIONAL_SEARCH_CONTEXT block with `portal` and `query` fields, or\n"
-    "  (b) a final answer that already includes a RESOURCES_JSON block.\n\n"
-    "=== IF THE PREVIOUS MESSAGE CONTAINS 'REGIONAL_SEARCH_CONTEXT:' ===\n"
-    "1. Extract the portal URL and query string from the block.\n"
-    "2. Call ckan_package_search with base_url=<portal> and q=<query>.\n"
-    "3. If 0 results, retry with a single broader keyword from the query.\n"
-    "4. For every resource of format CSV/JSON/GeoJSON/TXT in the results, "
-    "call ckan_resource_download with the exact url.\n"
-    "5. Output an Italian narrative paragraph describing what was found, then "
-    "the RESOURCES_JSON block listing every non-UNKNOWN resource.\n\n"
-    "=== IF THE PREVIOUS MESSAGE ALREADY CONTAINS '<!--RESOURCES_JSON-->' ===\n"
-    "Do NOT call any tools. Repeat the previous message verbatim — copy every "
-    "character, especially the RESOURCES_JSON block.\n\n"
-    + _TOOL_RULES + "\n"
-    + _RESOURCES_JSON_FORMAT
+    "- Every non-UNKNOWN resource found must appear in the array.\n"
+    "- CSV / JSON / GeoJSON / TXT: 'content' is the downloaded file text "
+    "(escape \\n and \\\").\n"
+    "- All other formats (PDF, SHP, WMS, KML, ZIP, XLS, RDF, …): 'content' is null.\n"
+    "- 'format' uppercase. Array must be valid JSON.\n"
+    "- Never output empty narrative text."
 )
 
 
@@ -131,9 +89,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None)
     claude_model: str = Field(default="claude-sonnet-4-5")
 
-    # Agent names (overridable for multi-tenant deployments)
-    orchestrator_name: str = Field(default="orchestrator")
-    regional_agent_name: str = Field(default="regional_search")
+    # Agent name
+    agent_name: str = Field(default="CkanAgent")
 
     # HTTP API
     api_host: str = Field(default="0.0.0.0")
