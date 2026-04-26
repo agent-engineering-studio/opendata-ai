@@ -170,16 +170,29 @@ class AgentSession:
         result = await workflow.run(query)
 
         # WorkflowRunResult.get_outputs() returns the data payloads of "output" events.
-        # In a two-agent sequential pipeline the last output is the regional agent's reply.
+        # SequentialBuilder produces list[Message] outputs (the conversation so far).
+        # The final answer is the last assistant message in the last output's conversation.
         outputs = result.get_outputs()
         if not outputs:
             log.warning("Sequential workflow produced no outputs for query: %r", query)
             return ""
 
-        last = outputs[-1]
-        text = getattr(last, "text", None)
+        last_output = outputs[-1]
+
+        # Case 1: list[Message] (SequentialBuilder default output)
+        if isinstance(last_output, list):
+            for msg in reversed(last_output):
+                role = getattr(msg, "role", None)
+                role_str = getattr(role, "value", role) if role is not None else None
+                if role_str in ("assistant", "agent", None):
+                    text = getattr(msg, "text", None)
+                    if text:
+                        return text
+            return ""
+
+        # Case 2: object with .text (e.g. AgentResponse from a single-agent fallback)
+        text = getattr(last_output, "text", None)
         if text is not None:
             return text
 
-        parts = [t for out in outputs if (t := getattr(out, "text", None))]
-        return "\n".join(parts) if parts else str(last)
+        return str(last_output)
