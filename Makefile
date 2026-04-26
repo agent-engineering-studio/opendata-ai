@@ -58,14 +58,18 @@ rebuild: ## Rebuild mcp + agent images without cache
 
 rebuild-all: build-ollama rebuild ## Rebuild ALL images: Ollama (baked model, ~7 GB) + mcp + agent
 
-.PHONY: refresh-ollama refresh-gpu refresh
+.PHONY: refresh-ollama refresh-gpu refresh-cpu
 
-refresh-gpu: rebuild down up-gpu
+refresh: rebuild down
+	@echo "Stack refreshed with CPU-only Ollama and rebuilt images"
+
+refresh-gpu: refresh up-gpu
 	@echo "Stack refreshed with GPU-enabled Ollama and rebuilt images"
 
+refresh-ollama: build-ollama refresh-gpu
+	@echo "Ollama image rebuilt with model $(OLLAMA_MODEL) and context $(OLLAMA_NUM_CTX), stack refreshed with GPU profile"
 
-
-refresh: rebuild down up
+refresh-cpu: refresh up
 	@echo "Stack refreshed with CPU-only Ollama and rebuilt images"
 
 # ──────────────────────────── Interactive ────────────────────────
