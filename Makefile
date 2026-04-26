@@ -1,7 +1,9 @@
 SHELL := /bin/bash
 
 COMPOSE := docker compose
-OLLAMA_MODEL ?= llama3.2:3b
+OLLAMA_BASE_MODEL ?= llama3.1:8b
+OLLAMA_NUM_CTX   ?= 16384
+OLLAMA_MODEL     ?= llama3.1:16k
 
 .DEFAULT_GOAL := help
 
@@ -33,9 +35,13 @@ ps: ## Show service status
 	$(COMPOSE) ps
 
 .PHONY: pull-models
-pull-models: ## Pull the configured LLM into the Ollama container
-	@echo "Pulling $(OLLAMA_MODEL) into the Ollama container..."
-	$(COMPOSE) exec ckan-ollama ollama pull $(OLLAMA_MODEL)
+pull-models: ## Pull base model and create $(OLLAMA_MODEL) modelfile with num_ctx=$(OLLAMA_NUM_CTX)
+	@echo "Pulling base model $(OLLAMA_BASE_MODEL)..."
+	docker exec ckan-ollama ollama pull $(OLLAMA_BASE_MODEL)
+	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX)..."
+	@printf 'FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n' | \
+	  docker exec -i ckan-ollama ollama create $(OLLAMA_MODEL) -f -
+	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX)"
 
 .PHONY: rebuild
 rebuild: ## Rebuild mcp + agent images without cache
