@@ -28,7 +28,6 @@ def build_chat_client(settings: Settings) -> Any:
         return OllamaChatClient(
             host=settings.ollama_base_url,
             model=settings.ollama_llm_model,
-            options={"num_ctx": settings.ollama_num_ctx},
         )
 
     if provider == "azure_foundry":
@@ -93,11 +92,16 @@ class AgentSession:
         await self._stack.enter_async_context(mcp_tool)
 
         chat_client = build_chat_client(self._settings)
+        default_options: dict[str, object] = {}
+        if self._settings.llm_provider == "ollama":
+            default_options["num_ctx"] = self._settings.ollama_num_ctx
+
         agent = Agent(
             chat_client,
             instructions=self._settings.agent_instructions,
             name=self._settings.agent_name,
             tools=[mcp_tool],
+            default_options=default_options or None,
         )
         await self._stack.enter_async_context(agent)
         log.info("Agent '%s' ready", self._settings.agent_name)
