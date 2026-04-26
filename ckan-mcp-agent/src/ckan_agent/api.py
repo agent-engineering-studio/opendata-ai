@@ -92,6 +92,13 @@ async def chat(req: ChatRequest) -> ChatResponse:
     query = req.query
     if req.base_url:
         query = f"[Target portal: {req.base_url}] {query}"
+    query += (
+        "\n\n[SYSTEM REMINDER] After your answer, you MUST append this block "
+        "(replace [] with the actual resources array — empty array [] if none found):\n"
+        "<!--RESOURCES_JSON-->\n"
+        "[]\n"
+        "<!--/RESOURCES_JSON-->"
+    )
     raw = await _session.run(query)
     text, resources = parse_agent_reply(raw)
     return ChatResponse(text=text, resources=resources)
