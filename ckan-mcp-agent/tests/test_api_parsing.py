@@ -122,3 +122,66 @@ def test_json_object_instead_of_array_falls_back():
     text, resources = parse_agent_reply(raw)
     assert text == raw
     assert resources == []
+
+
+# ── URL extraction fallback ───────────────────────────────────────
+
+def test_url_fallback_extracts_csv_url_from_narrative():
+    raw = (
+        "Ho trovato il dataset. Puoi scaricare il file da "
+        "https://example.com/dati/stazioni.csv per maggiori informazioni."
+    )
+    text, resources = parse_agent_reply(raw)
+    assert text == raw
+    assert len(resources) == 1
+    assert resources[0].url == "https://example.com/dati/stazioni.csv"
+    assert resources[0].format == "CSV"
+    assert resources[0].name == "stazioni.csv"
+    assert resources[0].content is None
+
+
+def test_url_fallback_extracts_multiple_urls():
+    raw = (
+        "Risorse trovate:\n"
+        "- CSV: https://example.com/data.csv\n"
+        "- PDF: https://example.com/report.pdf\n"
+        "- GeoJSON: https://example.com/map.geojson\n"
+    )
+    text, resources = parse_agent_reply(raw)
+    urls = {r.url for r in resources}
+    assert "https://example.com/data.csv" in urls
+    assert "https://example.com/report.pdf" in urls
+    assert "https://example.com/map.geojson" in urls
+    formats = {r.url: r.format for r in resources}
+    assert formats["https://example.com/data.csv"] == "CSV"
+    assert formats["https://example.com/report.pdf"] == "PDF"
+    assert formats["https://example.com/map.geojson"] == "GEOJSON"
+
+
+def test_url_fallback_deduplicates_urls():
+    raw = (
+        "Il file https://example.com/data.csv è disponibile qui: "
+        "https://example.com/data.csv"
+    )
+    text, resources = parse_agent_reply(raw)
+    assert len(resources) == 1
+
+
+def test_url_fallback_unknown_extension():
+    raw = "Risorsa: https://example.com/api/endpoint"
+    text, resources = parse_agent_reply(raw)
+    assert len(resources) == 1
+    assert resources[0].format == "UNKNOWN"
+    assert resources[0].name == "endpoint"
+
+
+def test_url_fallback_not_used_when_marker_present():
+    raw = (
+        "Dataset su https://example.com/data.csv trovato.\n"
+        "<!--RESOURCES_JSON-->\n"
+        "[]\n"
+        "<!--/RESOURCES_JSON-->"
+    )
+    text, resources = parse_agent_reply(raw)
+    # marker present but empty array → resources must be empty, not from URL fallback
+    assert resources == []

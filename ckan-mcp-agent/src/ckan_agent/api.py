@@ -21,6 +21,12 @@ _RESOURCES_RE = re.compile(
     r"<!--RESOURCES_JSON-->\s*(.*?)\s*<!--/RESOURCES_JSON-->",
     re.DOTALL,
 )
+_URL_RE = re.compile(r'https?://[^\s\)\]>"\']+')
+_EXT_FORMAT = {
+    ".csv": "CSV", ".json": "JSON", ".geojson": "GEOJSON", ".txt": "TXT",
+    ".pdf": "PDF", ".shp": "SHP", ".xlsx": "XLSX", ".xls": "XLS",
+    ".zip": "ZIP", ".kml": "KML", ".xml": "XML", ".rdf": "RDF",
+}
 
 
 class ChatRequest(BaseModel):
@@ -40,10 +46,27 @@ class ChatResponse(BaseModel):
     resources: list[Resource]
 
 
+def _extract_urls_fallback(text: str) -> list[Resource]:
+    seen: set[str] = set()
+    resources = []
+    for url in _URL_RE.findall(text):
+        if url in seen:
+            continue
+        seen.add(url)
+        lower = url.lower()
+        fmt = next((v for k, v in _EXT_FORMAT.items() if lower.endswith(k)), "UNKNOWN")
+        name = url.rstrip("/").split("/")[-1] or url
+        resources.append(Resource(name=name, url=url, format=fmt, content=None))
+    return resources
+
+
 def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
     matches = list(_RESOURCES_RE.finditer(raw))
     if not matches:
-        return raw, []
+        resources = _extract_urls_fallback(raw)
+        if resources:
+            log.info("parse_agent_reply: no marker block found; extracted %d URLs from text", len(resources))
+        return raw, resources
     if len(matches) > 1:
         log.warning("parse_agent_reply: %d resource blocks found; only first used", len(matches))
     json_block = matches[0].group(1)
