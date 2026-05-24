@@ -107,6 +107,7 @@ Endpoints exposed on the host:
 |----------------------|----------------------------------|------------------------------------------------------|
 | CKAN MCP server      | `http://localhost:8080/mcp`      | Streamable HTTP JSON-RPC. Try `tools/list`.          |
 | Agent API (FastAPI)  | `http://localhost:8002`          | `GET /health`, `POST /chat` (see payload below).     |
+| Web UI               | `http://localhost:3000`          | Chat demo (Next.js). Talks to the agent via `/api/chat`. |
 | Ollama               | `http://localhost:11434`         | OpenAI-compatible endpoint is at `/v1`.              |
 
 Quick `curl` test of the agent:
@@ -299,7 +300,7 @@ All configuration is environment-driven; `.env` is auto-loaded by `pydantic-sett
 | `AZURE_AI_PROJECT_ENDPOINT`        | —                                    | Required when `LLM_PROVIDER=azure_foundry`.                                 |
 | `AZURE_AI_MODEL_DEPLOYMENT_NAME`   | —                                    | Model deployment name for Azure AI Foundry.                                 |
 | `ANTHROPIC_API_KEY`                | —                                    | Required when `LLM_PROVIDER=claude`.                                        |
-| `CLAUDE_MODEL`                     | `claude-sonnet-4-5`                  | Anthropic model id.                                                         |
+| `CLAUDE_MODEL`                     | `claude-sonnet-4-6`                  | Anthropic model id.                                                         |
 | `AGENT_NAME`                       | `CkanAgent`                          | Name passed to `Agent`.                                                     |
 | `AGENT_INSTRUCTIONS`               | *(see `config.py`)*                  | System prompt — override to change agent behaviour.                         |
 | `API_HOST` / `API_PORT`            | `0.0.0.0` / `8002`                   | FastAPI bind.                                                               |

@@ -72,6 +72,8 @@ services:
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       API_HOST: 0.0.0.0
       API_PORT: "8002"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -84,6 +86,22 @@ services:
       ollama-gpu:
         condition: service_healthy
         required: false
+    restart: unless-stopped
+
+  # ───── Web UI (Next.js) ─────
+  ckan-ui:
+    build:
+      context: ./ckan-mcp-ui
+      dockerfile: Dockerfile
+    image: ckan-mcp-ui:local
+    container_name: ckan-ui
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    environment:
+      AGENT_API_URL: ${AGENT_API_URL:-http://ckan-agent:8002}
+    depends_on:
+      ckan-agent:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

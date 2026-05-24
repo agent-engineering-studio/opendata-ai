@@ -14,7 +14,7 @@ RUN apt-get update \
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN pip install --upgrade pip && pip install --pre ".[azure]"
+RUN pip install --upgrade pip && pip install --pre ".[azure,claude]"
 
 RUN useradd --system --create-home --uid 1000 app \
     && chown -R app:app /app

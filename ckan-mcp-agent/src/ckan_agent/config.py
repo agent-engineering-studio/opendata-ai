@@ -77,7 +77,7 @@ class Settings(BaseSettings):
 
     # Anthropic Claude API
     anthropic_api_key: str | None = Field(default=None)
-    claude_model: str = Field(default="claude-sonnet-4-5")
+    claude_model: str = Field(default="claude-sonnet-4-6")
 
     # Agent name
     agent_name: str = Field(default="CkanAgent")
