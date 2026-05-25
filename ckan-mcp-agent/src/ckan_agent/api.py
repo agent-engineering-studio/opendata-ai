@@ -153,8 +153,10 @@ async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
 
 
 async def _fill_missing_content(resources: list[Resource]) -> None:
-    """Mutate `resources` in place: download CSV/JSON/GEOJSON/TXT entries with
-    content=None. Failures leave content as None.
+    """Mutate `resources` in place: download text-format entries with content=None.
+
+    Eligible formats are listed in `_DOWNLOADABLE_FORMATS` (CSV, JSON, GeoJSON,
+    TXT, XML, RDF, KML, WMS, WFS, WCS). Failures leave content as None.
 
     Concurrency capped at _DOWNLOAD_CONCURRENCY to be polite to portals.
     """
