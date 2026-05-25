@@ -1,20 +1,11 @@
 "use client";
 
-import { PortalSelect } from "./PortalSelect";
-
 type Props = {
-  baseUrl: string;
-  onBaseUrlChange: (url: string) => void;
   onReset: () => void;
   canReset: boolean;
 };
 
-export function ChatHeader({
-  baseUrl,
-  onBaseUrlChange,
-  onReset,
-  canReset,
-}: Props) {
+export function ChatHeader({ onReset, canReset }: Props) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -22,11 +13,10 @@ export function ChatHeader({
           CKAN MCP Agent — Demo
         </h1>
         <p className="text-xs text-slate-500">
-          Chat stateless verso il portale CKAN selezionato.
+          Chat stateless su tutti i portali CKAN configurati.
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <PortalSelect value={baseUrl} onChange={onBaseUrlChange} />
         <button
           type="button"
           onClick={onReset}

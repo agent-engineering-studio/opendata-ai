@@ -17,7 +17,7 @@ venv/
 !.env.example
 !.env.azure.example
 !.env.dev-claude.example
-!ckan-mcp-ui/.env.local.example
+!opendata-ai-ui/.env.local.example
 
 # IDE
 .vscode/

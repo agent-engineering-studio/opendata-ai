@@ -89,12 +89,12 @@ services:
     restart: unless-stopped
 
   # ───── Web UI (Next.js) ─────
-  ckan-ui:
+  opendata-ai-ui:
     build:
-      context: ./ckan-mcp-ui
+      context: ./opendata-ai-ui
       dockerfile: Dockerfile
-    image: ckan-mcp-ui:local
-    container_name: ckan-ui
+    image: opendata-ai-ui:local
+    container_name: opendata-ai-ui
     ports:
       - "${UI_PORT:-3000}:3000"
     environment:

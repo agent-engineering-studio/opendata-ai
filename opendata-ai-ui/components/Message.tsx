@@ -1,4 +1,5 @@
 import type { ChatMessage } from "@/lib/types";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 import { ResourceList } from "./ResourceList";
 
 function Paragraphs({ text }: { text: string }) {
@@ -42,7 +43,7 @@ export function Message({ message }: { message: ChatMessage }) {
   return (
     <div className="flex justify-start">
       <div className="w-full max-w-[90%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 text-slate-800 shadow-sm">
-        <Paragraphs text={message.text} />
+        <AssistantMarkdown text={message.text} />
         <ResourceList resources={message.resources} />
         <div className="mt-3 text-xs text-slate-400">
           ⏱ {(message.durationMs / 1000).toFixed(1)}s

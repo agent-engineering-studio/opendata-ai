@@ -1,4 +1,4 @@
-# ckan-mcp-ui
+# opendata-ai-ui
 
 A minimal Next.js (App Router) chat UI that demonstrates the CKAN MCP agent.
 The browser talks only to a Next.js API route which proxies server-side to
@@ -14,7 +14,7 @@ make up
 
 Then open <http://localhost:3000>.
 
-The compose service `ckan-ui` reads `AGENT_API_URL=http://ckan-agent:8002`
+The compose service `opendata-ai-ui` reads `AGENT_API_URL=http://ckan-agent:8002`
 from the compose environment.
 
 ## Local dev (without Docker)
@@ -23,7 +23,7 @@ Prerequisites: Node.js 20+, the `ckan-mcp-agent` running on `:8002` (e.g. via
 `docker compose up ckan-agent`).
 
 ```bash
-cd ckan-mcp-ui
+cd opendata-ai-ui
 cp .env.local.example .env.local
 npm install
 npm run dev

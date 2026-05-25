@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
+@layer components {
+  .json-key {
+    color: #0369a1;
+  }
+  .json-string {
+    color: #15803d;
+  }
+  .json-number {
+    color: #b45309;
+  }
+  .json-boolean {
+    color: #7c3aed;
+  }
+  .json-null {
+    color: #64748b;
+    font-style: italic;
+  }
+}
