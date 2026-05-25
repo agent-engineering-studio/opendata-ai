@@ -53,6 +53,39 @@ _MAX_CONTENT_BYTES = 200_000  # ~200 KB per resource
 _DOWNLOAD_TIMEOUT_SECONDS = 20.0
 _DOWNLOAD_CONCURRENCY = 4
 
+# Magic-byte prefixes for common binary container formats. CKAN portals
+# frequently mislabel a ZIP/PDF/OLE archive as "CSV" or "XML"; without this
+# check the bytes get UTF-8 decoded into mojibake and rendered as a preview.
+_BINARY_MAGIC = (
+    b"PK\x03\x04",      # ZIP (also XLSX, ODS, DOCX — they are ZIP containers)
+    b"PK\x05\x06",      # empty ZIP
+    b"PK\x07\x08",      # spanned ZIP
+    b"\x1f\x8b",        # gzip
+    b"%PDF",            # PDF
+    b"\xd0\xcf\x11\xe0",  # OLE2 (legacy XLS/DOC)
+    b"7z\xbc\xaf'\x1c", # 7z
+    b"Rar!\x1a\x07",    # RAR
+    b"BZh",             # bzip2
+    b"\x89PNG",         # PNG
+    b"\xff\xd8\xff",    # JPEG
+    b"GIF8",            # GIF
+)
+
+
+def _is_binary(raw: bytes) -> bool:
+    """Return True if `raw` looks like a binary container, not decodable text."""
+    if not raw:
+        return False
+    if any(raw.startswith(sig) for sig in _BINARY_MAGIC):
+        return True
+    # Fallback heuristic: NUL bytes or a high ratio of non-printable bytes
+    # in the leading sample is a strong signal of binary content.
+    sample = raw[:1024]
+    if b"\x00" in sample:
+        return True
+    nonprintable = sum(1 for b in sample if b < 0x09 or (0x0e <= b < 0x20 and b not in (0x09, 0x0a, 0x0d)))
+    return nonprintable / max(len(sample), 1) > 0.30
+
 
 class ChatRequest(BaseModel):
     query: str
@@ -141,6 +174,10 @@ async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
         return None
 
     raw = resp.content[:_MAX_CONTENT_BYTES]
+    if _is_binary(raw):
+        log.info("skip binary content for %s (mislabelled format, magic=%r)", url, raw[:8])
+        return None
+
     encoding = resp.encoding or "utf-8"
     try:
         text = raw.decode(encoding, errors="replace")
@@ -210,7 +247,10 @@ async def chat(req: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail="Agent session not initialised")
     query = req.query
     if req.base_url:
-        query = f"[Target portal: {req.base_url}] {query}"
+        query = (
+            f"PORTAL_HINT: use base_url={req.base_url} for all CKAN tool calls.\n"
+            f"USER QUERY: {query}"
+        )
     query += (
         "\n\n[SYSTEM REMINDER] After your answer, you MUST append this block "
         "(replace [] with the actual resources array — empty array [] if none found):\n"

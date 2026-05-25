@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
-import { DEFAULT_PORTAL } from "@/lib/portals";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
 import { ChatInput } from "@/components/ChatInput";
@@ -10,7 +9,6 @@ import { ExampleQueries } from "@/components/ExampleQueries";
 
 export default function Page() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [baseUrl, setBaseUrl] = useState<string>(DEFAULT_PORTAL);
   const [loading, setLoading] = useState<boolean>(false);
   const [prefill, setPrefill] = useState<string | undefined>(undefined);
   const [prefillKey, setPrefillKey] = useState<number>(0);
@@ -25,7 +23,7 @@ export default function Page() {
     setLoading(true);
     const t0 = performance.now();
 
-    const body: ChatRequest = baseUrl ? { query, base_url: baseUrl } : { query };
+    const body: ChatRequest = { query };
 
     try {
       const res = await fetch("/api/chat", {
@@ -73,8 +71,6 @@ export default function Page() {
   return (
     <div className="flex h-screen flex-col">
       <ChatHeader
-        baseUrl={baseUrl}
-        onBaseUrlChange={setBaseUrl}
         onReset={() => setMessages([])}
         canReset={messages.length > 0 && !loading}
       />
@@ -84,8 +80,8 @@ export default function Page() {
         emptyState={
           <div className="space-y-3">
             <p className="text-slate-500">
-              Fai una domanda al portale CKAN selezionato. Puoi partire da uno
-              degli esempi:
+              Fai una domanda: l&apos;agent cercherà nei portali CKAN
+              disponibili. Puoi partire da uno degli esempi:
             </p>
             <ExampleQueries onPick={pickExample} disabled={loading} />
           </div>

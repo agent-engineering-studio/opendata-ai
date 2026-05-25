@@ -17,7 +17,11 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   const [expanded, setExpanded] = useState(false);
   const display = resource.name || resource.url || "(senza nome)";
   const badge = resource.format?.trim() ? resource.format.toUpperCase() : "—";
-  const canPreview = isPreviewable(resource.format, resource.content);
+  const canPreview = isPreviewable(
+    resource.format,
+    resource.content,
+    resource.url,
+  );
 
   return (
     <div className="rounded-md border border-slate-200 bg-white">
@@ -54,7 +58,8 @@ export function ResourceCard({ resource }: { resource: Resource }) {
             <div className="mt-2">
               <ResourcePreview
                 format={resource.format}
-                content={resource.content as string}
+                content={resource.content}
+                url={resource.url}
               />
             </div>
           ) : null}

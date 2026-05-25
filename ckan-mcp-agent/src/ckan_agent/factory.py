@@ -173,11 +173,8 @@ class AgentSession:
                 f"USER QUERY: {query}"
             )
         else:
-            log.info("No region detected — using national portal (default)")
-            enriched = (
-                "PORTAL_HINT: omit base_url (server default https://www.dati.gov.it/opendata applies).\n"
-                f"USER QUERY: {query}"
-            )
+            log.info("No region detected — agent will pick a portal from the international list")
+            enriched = query
 
         result = await self._agent.run(enriched)
         text = getattr(result, "text", None)

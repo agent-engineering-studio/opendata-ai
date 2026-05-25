@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import Papa from "papaparse";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useProxyFetch } from "@/lib/useProxyFetch";
 
 type ParsedCsv = {
   fields: string[];
@@ -28,7 +29,7 @@ function parseCsv(content: string): ParsedCsv {
 
 const ROW_HEIGHT = 32;
 
-export function CsvTablePreview({ content }: { content: string }) {
+function CsvTable({ content }: { content: string }) {
   const { fields, rows, errors } = useMemo(() => parseCsv(content), [content]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -119,4 +120,41 @@ export function CsvTablePreview({ content }: { content: string }) {
       </div>
     </div>
   );
+}
+
+function LazyCsvTable({ url }: { url: string }) {
+  const decode = useCallback((resp: Response) => resp.text(), []);
+  const state = useProxyFetch<string>(url, decode);
+
+  if (state.status === "loading") {
+    return <div className="text-xs text-slate-500">Caricamento CSV…</div>;
+  }
+  if (state.status === "error") {
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        Impossibile scaricare il CSV: {state.message}
+      </div>
+    );
+  }
+  if (state.magic) {
+    return (
+      <div className="rounded border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+        Il file dichiarato come CSV è in realtà un archivio {state.magic}.
+        Apri il link per scaricarlo.
+      </div>
+    );
+  }
+  return <CsvTable content={state.data} />;
+}
+
+export function CsvTablePreview({
+  content,
+  url,
+}: {
+  content?: string | null;
+  url?: string;
+}) {
+  if (content) return <CsvTable content={content} />;
+  if (url) return <LazyCsvTable url={url} />;
+  return null;
 }
