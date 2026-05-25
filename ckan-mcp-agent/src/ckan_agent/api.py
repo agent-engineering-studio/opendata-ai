@@ -41,7 +41,10 @@ _NON_DATA_HOSTS = frozenset({
 })
 
 # Formats where the file content is plain text and worth embedding inline.
-_DOWNLOADABLE_FORMATS = frozenset({"CSV", "JSON", "GEOJSON", "TXT"})
+_DOWNLOADABLE_FORMATS = frozenset({
+    "CSV", "JSON", "GEOJSON", "TXT",
+    "XML", "RDF", "KML", "WMS", "WFS", "WCS",
+})
 
 # Cap embedded content per resource to keep responses bounded. CKAN files can
 # easily exceed several MB; truncating preserves the schema/header for the
