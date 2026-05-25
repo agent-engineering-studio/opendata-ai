@@ -1,5 +1,7 @@
 # ckan-mcp-server
 
+> Part of the **opendata-ai** mono-repo — see the [root README](../README.md) for the full architecture and the two supported stack configurations.
+
 MCP server exposing [CKAN Action API](https://docs.ckan.org/en/2.8/api/index.html) tools for **any** CKAN open data portal.
 
 Built with the official [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) (`FastMCP`). Supports both **stdio** (for local MCP hosts) and **Streamable HTTP** (for container deployment).

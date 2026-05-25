@@ -1,5 +1,7 @@
 # opendata-ai-ui
 
+> Part of the **opendata-ai** mono-repo — see the [root README](../README.md) for the full architecture and the two supported stack configurations.
+
 A minimal Next.js (App Router) chat UI that demonstrates the CKAN MCP agent.
 The browser talks only to a Next.js API route which proxies server-side to
 `ckan-agent` (`POST /chat`). Stateless — each question is independent.

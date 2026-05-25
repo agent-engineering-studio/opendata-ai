@@ -1,5 +1,7 @@
 # ckan-mcp-agent
 
+> Part of the **opendata-ai** mono-repo — see the [root README](../README.md) for the full architecture and the two supported stack configurations.
+
 [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/) agent that consumes the **ckan-mcp-server** via Streamable HTTP, letting an LLM reason over any CKAN open data portal.
 
 Supports three LLM providers out of the box:
