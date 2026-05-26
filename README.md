@@ -78,8 +78,8 @@ The repository demonstrates an end-to-end **agent-over-MCP** pattern:
 | `.github/workflows/ci.yml` | CI: ruff + pytest matrix across both packages, then Docker buildx for both images.             |
 | `.github/workflows/docker-publish.yml` | Publish multi-arch images to **GitHub Container Registry** (GHCR) on push / tags.   |
 | `.github/workflows/deploy-azure.yml` | CD: Azure OIDC login, ACR Tasks build, Bicep deploy, restart + healthcheck.         |
-| `.env.example`             | Template for the local stack.                                                                 |
-| `.env.azure.example`       | Template for Azure deploy inputs (subscription, RG, ACR, Azure AI Foundry).                   |
+| `.env.local.example`       | Template for LOCAL DEBUG (default: `LLM_PROVIDER=ollama`; opt-in to claude for host debug).   |
+| `.env.production.example`  | Template for PRODUCTION (`LLM_PROVIDER=claude` by default, `azure_foundry` as variant B).     |
 
 ---
 
@@ -89,7 +89,7 @@ Prerequisites: Docker + Docker Compose, GNU Make (optional but convenient). An N
 
 ```bash
 # 1. Prep env
-cp .env.example .env
+cp .env.local.example .env
 
 # 2. Bring up the stack (CPU by default; use `make up-gpu` with an NVIDIA GPU)
 make up
@@ -295,7 +295,7 @@ All configuration is environment-driven; `.env` is auto-loaded by `pydantic-sett
 | `MCP_SERVER_URL`                   | `http://localhost:8080/mcp`          | Streamable HTTP endpoint of the MCP server.                                 |
 | `MCP_SERVER_NAME`                  | `ckan`                               | Logical name used inside the agent.                                         |
 | `CKAN_DEFAULT_BASE_URL`            | `https://www.dati.gov.it/opendata`   | Default portal hint surfaced to the LLM.                                    |
-| `OLLAMA_BASE_URL`                  | `http://localhost:11434`             | In Compose, resolves to `http://ckan-ollama:11434`.                         |
+| `OLLAMA_BASE_URL`                  | `http://localhost:11434`             | In Compose, resolves to `http://opendata-ai-ollama:11434`.                  |
 | `OLLAMA_LLM_MODEL`                 | `qwen3:8b`                           | Any model pulled into Ollama.                                               |
 | `AZURE_AI_PROJECT_ENDPOINT`        | —                                    | Required when `LLM_PROVIDER=azure_foundry`.                                 |
 | `AZURE_AI_MODEL_DEPLOYMENT_NAME`   | —                                    | Model deployment name for Azure AI Foundry.                                 |
@@ -370,9 +370,9 @@ The workflow: logs in with OIDC → ensures RG + ACR → runs `az acr build` for
 Bash:
 
 ```bash
-cp .env.azure.example .env.azure
-# edit .env.azure
-set -a ; source .env.azure ; set +a
+cp .env.production.example .env.production
+# edit .env.production — uncomment Variant B (azure_foundry) + the Azure deploy block
+set -a ; source .env.production ; set +a
 
 ./infra/scripts/deploy.sh \
   --subscription "$AZURE_SUBSCRIPTION_ID" \

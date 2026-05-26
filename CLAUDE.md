@@ -4,95 +4,111 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository purpose
 
-`mcp-ckan` is a polyglot mono-repo with three deployable units that wrap **any** CKAN open-data portal behind an MCP server and an agent:
+`opendata-ai` is a polyglot mono-repo that fans a user query across **up to four open-data sources** (CKAN portals + three SDMX-based statistical providers: ISTAT, Eurostat, OECD) and synthesises a single answer. Five Python services + one Next.js UI:
 
-- `ckan-mcp-server/` — Python MCP server (FastMCP). Wraps the CKAN Action API (`/api/3/action/*`). Runs over `stdio` (Claude Desktop) or `streamable-http` (containerised). Entry: `ckan_mcp.server:main` → `ckan-mcp-server`.
-- `ckan-mcp-agent/` — Python Microsoft Agent Framework client. CLI (`ckan-agent`) + FastAPI (`ckan-agent-api`, port 8002). Mounts the MCP server as an `MCPStreamableHTTPTool` and reasons with one of three LLM providers. Entry: `ckan_agent.main:main` and `ckan_agent.api:main`.
-- `opendata-ai-ui/` — Next.js 15 chat demo (port 3000). Proxies `/api/chat` to the agent (`AGENT_API_URL`).
+- `ckan-mcp-server/` — FastMCP server wrapping the CKAN Action API (`/api/3/action/*`). Transport: `stdio` or `streamable-http`. Entry: `ckan_mcp.server:main` → `ckan-mcp-server`. Default port `8080`.
+- `ckan-mcp-agent/` — Microsoft Agent Framework client for CKAN. CLI `ckan-agent` + FastAPI `ckan-agent-api` on port `8002`. Mounts the CKAN MCP server via `MCPStreamableHTTPTool`.
+- `istat-mcp-server/` — FastMCP server wrapping the SDMX 2.1 REST protocol. **Despite the legacy name, this server is source-agnostic** — `istat_list_dataflows` accepts an `agency` parameter ("IT1" for ISTAT, "ESTAT" for Eurostat, "all" for OECD) and every tool takes a `base_url`. Default port `8081`. 9 tools: dataflow search, structure, codelist, concept, constraints, get-data (CSV), territorial codes (ISTAT-only), cache stats.
+- `istat-mcp-agent/` — Microsoft Agent Framework client for ISTAT proper. CLI `istat-agent` + FastAPI `istat-agent-api` on port `8003`. Mounts the SDMX MCP server via `MCPStreamableHTTPTool`. Same three LLM providers as `ckan-mcp-agent`. **The Dockerfile installs both `[azure]` and `[claude]` extras** so production deploys can pick the provider via `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY` without rebuilding.
+- `opendata-orchestrator/` — **Multi-agent orchestrator** built with `agent_framework.orchestrations.ConcurrentBuilder`. Fans the query out in parallel to up to 4 specialists (CKAN + ISTAT + Eurostat + OECD; the last two are opt-in via `ENABLE_EUROSTAT` / `ENABLE_OECD`). The three SDMX specialists all dial **the same** `istat-mcp-server` — they differ only by the `agency` + `base_url` baked into their instructions. A tool-less `synth` agent then merges their narratives. Returns the canonical `{text, resources[]}` shape with a `source: "ckan" | "istat" | "eurostat" | "oecd"` tag on each resource. CLI `opendata-agent` + FastAPI `opendata-orchestrator-api` on port `8000`. **This is the entry the UI talks to.**
+- `opendata-ai-ui/` — Next.js 15 chat demo (port `3000`). Proxies `/api/chat` to the orchestrator (`AGENT_API_URL=http://opendata-orchestrator:8000`). ResourceCard renders a per-source coloured badge (violet=ckan, amber=istat, sky=eurostat, rose=oecd).
 
-The agent is **always** wired to the MCP server. What changes per environment is the **LLM provider** behind the agent.
+Each specialist agent still exposes its own `/chat` (8002 / 8003) for direct debug; the UI uses only the orchestrator on `:8000`.
 
-## The two supported configurations
+## LLM provider — two environments, one mental model
 
-This repo is explicitly designed around two day-to-day setups. Treat them as first-class — every change must work in both.
+All three agents (`ckan-mcp-agent`, `istat-mcp-agent`, `opendata-orchestrator`) share the **same** `Provider = Literal["ollama", "azure_foundry", "claude"]` and the same 3-branch `build_chat_client(settings)` in their respective `factory.py`. All three Docker images pre-install BOTH the `[azure]` and `[claude]` optional dependencies, so a deploy can switch provider via env vars alone, with no image rebuild.
 
-### 1. Local Docker stack with Ollama (default — no API key)
+The repo is designed around exactly **two `.env*.example` files**:
 
-- `.env` is the active config (copy from `.env.example`).
-- `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL=http://ckan-ollama:11434`.
-- The Ollama image bakes a custom modelfile `qwen2.5:16k` (= base `qwen2.5:7b-instruct` + `PARAMETER num_ctx 16384`). `OLLAMA_LLM_MODEL` must match the baked tag — using the base name yields *"model not found"*.
-- `OLLAMA_IMAGE` defaults to the GHCR pre-built image (~7 GB). For a locally-built image set `OLLAMA_PULL_POLICY=if_not_present`, otherwise compose's default `always` will overwrite it on each `up`.
-- All four services run via `docker compose`: `ckan-ollama` (cpu or gpu profile), `ckan-mcp` (8080), `ckan-agent` (8002), `opendata-ai-ui` (3000).
-- Bring up with `make up` (CPU) / `make up-gpu` (NVIDIA). First boot needs `make pull-models` only when *not* using the baked image.
+### `.env.local.example` — local debug
+Default `LLM_PROVIDER=ollama`. Two sub-variants of local debug live in this same file:
 
-### 2. Local debug against Anthropic Claude API (no Ollama, no agent container)
+- **Docker stack (default)**: copy to `.env` (or `.env.local`), `make up` brings up `opendata-ai-ollama` + `ckan-mcp` (8080) + `istat-mcp` (8081) + `ckan-agent` (8002) + `istat-agent` (8003) + `opendata-orchestrator` (8000) + `opendata-ai-ui` (3000). No API key needed. `OLLAMA_LLM_MODEL=qwen2.5:16k` must match the modelfile tag baked in the Ollama image (`ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest`).
+- **Host-side Python with Claude**: set `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY` in the same file, run MCP servers + agents + orchestrator as host Python processes (VS Code stack debug), and flip `CKAN_MCP_URL` / `ISTAT_MCP_URL` to `http://localhost:…`. Ollama is not started.
 
-- `.env.dev-claude` is the active config (copy from `.env.dev-claude.example`).
-- `LLM_PROVIDER=claude`, requires `ANTHROPIC_API_KEY`. Model via `CLAUDE_MODEL` (default `claude-sonnet-4-6`).
-- The agent and MCP server run **as host Python processes** (typically VS Code → *"Stack debug — Claude"*), not in Docker.
-- `MCP_SERVER_URL=http://localhost:8080/mcp` (not the compose-internal `http://ckan-mcp:8080/mcp`).
-- No Ollama container is started; the Ollama service in `docker-compose.yml` is irrelevant here.
+In LOCAL DEBUG `azure_foundry` is intentionally not exercised — reserve it for production.
 
-A third provider, `azure_foundry`, exists for cloud deploys (Azure Container Apps) and uses `AZURE_AI_PROJECT_ENDPOINT` + `AZURE_AI_MODEL_DEPLOYMENT_NAME` via `DefaultAzureCredential`. It is the default in Bicep deploys; locally it's an opt-in.
+### `.env.production.example` — production deploy
+Two production variants, **same file**, pick one by setting `LLM_PROVIDER`:
 
-When editing provider-selection code (`ckan_agent/factory.py`, `config.py`) verify all three branches still build. When editing env handling, update all three of `.env.example`, `.env.dev-claude.example`, `.env.azure.example` so they stay in sync.
+- **A — Claude (default)**: `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY` (store as platform secret). Cheapest path. Works on any container host.
+- **B — Azure AI Foundry**: `LLM_PROVIDER=azure_foundry` + `AZURE_AI_PROJECT_ENDPOINT` + `AZURE_AI_MODEL_DEPLOYMENT_NAME`. Auth via `DefaultAzureCredential` (managed identity in Azure Container Apps). Required for the Bicep-based ACA deploy.
+
+In PRODUCTION Ollama is not used — leave all `OLLAMA_*` unset.
+
+When editing provider-selection code (`*/factory.py`, `*/config.py`) verify all three branches still build in **all three** of `ckan-mcp-agent`, `istat-mcp-agent`, `opendata-orchestrator`. When editing env handling, update both `.env.local.example` and `.env.production.example` so they stay in sync.
 
 ## Commands
 
 ```bash
 # Stack lifecycle (Ollama profile)
-make up            # CPU stack
-make up-gpu        # NVIDIA stack
-make down          # stop everything (both profiles)
-make ps / logs     # status / tail logs
-make rebuild       # rebuild ckan-mcp + ckan-agent images, no cache
-make build-ollama  # bake the Ollama image with qwen2.5:16k locally
-make pull-models   # fallback when Ollama image has no baked model
+make up              # CPU stack
+make up-gpu          # NVIDIA stack
+make down            # stop everything (both profiles)
+make ps / logs       # status / tail logs
+make rebuild         # rebuild all MCP servers + agents + orchestrator (no cache)
+make build-ollama    # bake the Ollama image with qwen2.5:16k locally
+make pull-models     # fallback when Ollama image has no baked model
 
-# Interactive agent against the running stack
-make agent
+# Interactive REPL against the running stack
+make agent                       # default = orchestrator (fan-out)
+make agent SOURCE=ckan           # CKAN specialist only
+make agent SOURCE=istat          # ISTAT specialist only
 
-# Lint + test both Python packages
+# Lint + test all five Python packages
 make lint
 make test
 
 # Single test
-cd ckan-mcp-agent  && pytest -q tests/test_api_parsing.py::test_name
-cd ckan-mcp-server && pytest -q tests/test_ckan_client.py
+cd ckan-mcp-agent       && pytest -q tests/test_api_parsing.py::test_name
+cd opendata-orchestrator && pytest -q tests/test_synth_merge.py
 ```
 
 Per-package editable installs (note `--pre` — `agent-framework` is pre-release):
 
 ```bash
-cd ckan-mcp-server && pip install -e ".[dev]"
-cd ckan-mcp-agent  && pip install --pre -e ".[dev,azure]"
+cd ckan-mcp-server       && pip install -e ".[dev]"
+cd ckan-mcp-agent        && pip install --pre -e ".[dev,azure]"
+cd istat-mcp-server      && pip install -e ".[dev]"
+cd istat-mcp-agent       && pip install --pre -e ".[dev,azure]"
+cd opendata-orchestrator && pip install --pre -e ".[dev,azure,claude]"
 ```
 
 Run a service standalone:
 
 ```bash
-# MCP server only, HTTP
-cd ckan-mcp-server && TRANSPORT=streamable-http PORT=8080 ckan-mcp-server
+# A specialist MCP server, host-side
+cd ckan-mcp-server  && TRANSPORT=streamable-http PORT=8080 ckan-mcp-server
+cd istat-mcp-server && TRANSPORT=streamable-http PORT=8081 istat-mcp-server
 
-# MCP server only, stdio (for Claude Desktop)
-cd ckan-mcp-server && TRANSPORT=stdio ckan-mcp-server
+# A specialist agent (requires its MCP server + an LLM reachable)
+cd ckan-mcp-agent       && ckan-agent              # REPL
+cd ckan-mcp-agent       && ckan-agent-api          # FastAPI on :8002
+cd istat-mcp-agent      && istat-agent-api         # FastAPI on :8003
 
-# Agent only (requires MCP + an LLM reachable)
-cd ckan-mcp-agent && ckan-agent           # REPL
-cd ckan-mcp-agent && ckan-agent-api       # FastAPI on :8002
+# The orchestrator (requires BOTH MCP servers + an LLM reachable)
+cd opendata-orchestrator && opendata-orchestrator-api   # FastAPI on :8000
+cd opendata-orchestrator && opendata-agent              # REPL
 ```
 
 ## Architecture notes that span files
 
-- **Per-call `base_url` is the design contract.** Every MCP tool in `ckan_mcp/tools.py` takes an optional `base_url`; when omitted, `CkanClient` falls back to `CKAN_DEFAULT_BASE_URL`. Portal selection happens at two layers: (1) `ckan_agent/factory.py::detect_region` prepends an explicit `PORTAL_HINT` line for Italian regional portals it recognises by regex; (2) for everything else the LLM picks one portal from the international list embedded in `AGENT_INSTRUCTIONS` (`ckan_agent/config.py`) based on the query language and scope. The UI no longer ships a portal selector. Do not hard-code portals in the server.
-- **Agent output contract.** The agent is instructed to produce a narrative paragraph followed by a `<!--RESOURCES_JSON-->…<!--/RESOURCES_JSON-->` block. `ckan_agent/api.py` parses this into `{text, resources[]}`. The narrative MUST NOT contain URLs; resources carry `content` only for CSV / JSON / GeoJSON / TXT (other formats → `null`). If the LLM fails to emit the block, the API falls back to `text = raw reply, resources = []`. Tests for this live in `tests/test_api_parsing.py` and `tests/test_fill_missing_content.py`.
-- **Transport dispatch.** `ckan_mcp/server.py` switches between `stdio`, `streamable-http`, and `sse` based on `TRANSPORT`. The Docker image runs `streamable-http`; Claude Desktop integrations run `stdio`. Tools and the CKAN client are transport-agnostic.
-- **CkanError surface.** `ckan_mcp/ckan_client.py` raises a single `CkanError` for transport failure, non-2xx, non-JSON, or `success=false`. Keep that contract — `tools.py` only handles `CkanError`.
-- **CI matrix.** `.github/workflows/ci.yml` runs ruff + pytest **per package** in a matrix, then a buildx docker build for both images. `docker-publish.yml` pushes multi-arch images to GHCR. `deploy-azure.yml` does OIDC → `az acr build` → Bicep deploy of two Container Apps.
+- **Two MCP servers, four (optional) specialist agents, one orchestrator.** The orchestrator does **not** call the specialist agents over HTTP; it builds its own `Agent` instances (one per enabled source) that connect directly to an MCP server. CKAN talks to `ckan-mcp`; ISTAT / Eurostat / OECD all talk to `istat-mcp` (same server, different `agency` + `base_url` baked into their instructions). The standalone specialist agents (`ckan-agent`, `istat-agent`) are kept around for direct debug only.
+- **Concurrent fan-out.** `opendata-orchestrator/src/orchestrator/workflow.py` builds `ConcurrentBuilder(participants=[…]).with_aggregator(synth).build()` where `participants` is built dynamically from the enable flags (`ENABLE_CKAN`, `ENABLE_ISTAT`, `ENABLE_EUROSTAT`, `ENABLE_OECD`). The aggregator (`orchestrator/synth.py`) parses each branch's reply with `parse_agent_reply`, deterministically dedupes resources by URL (preferring entries with non-null content), tags each resource with `source: "ckan" | "istat" | "eurostat" | "oecd"`, then calls a tool-less synth agent (`SYNTH_INSTRUCTIONS`) to merge the N narratives into one paragraph. The final output keeps the existing `<narrative>\n<!--RESOURCES_JSON-->\n<array>\n<!--/RESOURCES_JSON-->` shape so `opendata-ai-ui` consumes it unchanged.
+- **Eurostat / OECD default OFF.** Each enabled SDMX specialist adds 1 LLM call per query, so flipping them on globally roughly doubles or triples the per-query cost on Claude / Foundry. The defaults in `Settings` are `enable_eurostat=False` and `enable_oecd=False`; production envs opt in via the `ENABLE_EUROSTAT=true` / `ENABLE_OECD=true` envs (already set to `true` in `.env.production.example`, left `false` in `.env.local.example`).
+- **Response contract preserved.** All three agents (CKAN, ISTAT, orchestrator) emit the same `{text, resources[]}` shape via `/chat`. The only addition is the optional `source` field on each `Resource`. UI components `ResourceCard.tsx` render a small extra badge when `source` is present.
+- **Per-call `base_url` is the design contract.** Every MCP tool in `ckan_mcp/tools.py` and `istat_mcp/tools.py` takes an optional `base_url`. The CKAN agent's instructions (in `ckan_agent/config.py` AND in `orchestrator/config.py::CKAN_INSTRUCTIONS` — kept in sync verbatim) pick one portal from an embedded international list when no `PORTAL_HINT:` prefix is given. ISTAT only has one base URL.
+- **Instruction duplication is intentional.** `orchestrator/config.py` carries verbatim copies of `CKAN_INSTRUCTIONS` and a shared SDMX template that renders `ISTAT_INSTRUCTIONS`, `EUROSTAT_INSTRUCTIONS`, `OECD_INSTRUCTIONS` at module load. The orchestrator package has no Python-level dependency on `ckan-mcp-agent` or `istat-mcp-agent`. **If you edit `ckan_agent.config.AGENT_INSTRUCTIONS` or `istat_agent.config.AGENT_INSTRUCTIONS`, port the change to `orchestrator/config.py` as well.** Adding a new SDMX source means: extend `_SDMX_INSTRUCTIONS_TEMPLATE.format(...)` invocations, add the corresponding Settings fields + enable flag, add a tuple in `OrchestratorSession.__aenter__::sdmx_specs`, extend `parsing.SourceTag` + `synth._normalise_source_tag` + `synth._SYNTH_SOURCE_ORDER`, and finally `opendata-ai-ui/lib/types.ts::ResourceSource` + `ResourceCard.tsx::sourceBadgeColor / sourceTooltip`.
+- **CkanError / SdmxError surface.** `ckan_mcp/ckan_client.py::CkanError` and `istat_mcp/sdmx_client.py::SdmxError` are each the single error class for their server. Keep that contract — tools modules only handle the dedicated error.
+- **Transport dispatch.** Both MCP servers switch between `stdio` / `streamable-http` / `sse` via `TRANSPORT`. Docker images run `streamable-http`; Claude Desktop integrations run `stdio`.
+- **CI matrix.** `.github/workflows/ci.yml` runs ruff + pytest **per package** across all five Python packages, then buildx docker builds for each image. `docker-publish.yml` pushes multi-arch images to GHCR for all five.
 
 ## Things easy to get wrong
 
-- `OLLAMA_LLM_MODEL` must match the modelfile *tag* baked in the Ollama image (`qwen2.5:16k`), not the base model name (`qwen2.5:7b-instruct`).
-- `MCP_SERVER_URL` is `http://ckan-mcp:8080/mcp` inside the compose network but `http://localhost:8080/mcp` for host-side debug. Pick the right one for the active `.env*` file.
-- When changing provider plumbing, also touch `factory.py` (build path), `config.py` (settings + the `Provider` literal), and the three `.env*.example` files.
-- Don't strip `--pre` from the agent install — `agent-framework` is published as a pre-release.
+- `OLLAMA_LLM_MODEL` must match the modelfile *tag* baked in the Ollama image (`qwen2.5:16k`), not the base model name.
+- `CKAN_MCP_URL` / `ISTAT_MCP_URL` use compose-internal hostnames inside Docker (`http://ckan-mcp:8080/mcp`, `http://istat-mcp:8081/mcp`) but `http://localhost:8080/mcp` / `http://localhost:8081/mcp` for host-side debug. Pick the right one for the active `.env*` file.
+- When changing provider plumbing, touch **all three** `factory.py` / `config.py` pairs (`ckan-mcp-agent`, `istat-mcp-agent`, `opendata-orchestrator`) plus the three `.env*.example` files. The provider literal and the builder branches are duplicated by design (side-by-side layout, no shared package).
+- When changing the agent response contract (the `<!--RESOURCES_JSON-->` block), update **four** sources of truth: `ckan_agent.config.AGENT_INSTRUCTIONS`, `istat_agent.config.AGENT_INSTRUCTIONS`, `orchestrator.config.CKAN_INSTRUCTIONS` and `orchestrator.config.ISTAT_INSTRUCTIONS`. The parser lives in three places (each agent's `api.py` + `orchestrator/parsing.py`); changes must be mirrored.
+- Don't strip `--pre` from the agent installs — `agent-framework` is published as a pre-release.
+- The orchestrator's port is `8000`, not `8002`. The UI's `AGENT_API_URL` default has been updated accordingly; if a `.env.local` already exists locally with `:8002`, update it.

@@ -1,8 +1,11 @@
+export type ResourceSource = "ckan" | "istat" | "eurostat" | "oecd";
+
 export type Resource = {
   name: string;
   url: string;
   format: string;
   content: string | null;
+  source?: ResourceSource | null;
 };
 
 export type ChatRequest = {

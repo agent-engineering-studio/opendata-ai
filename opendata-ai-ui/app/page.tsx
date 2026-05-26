@@ -80,8 +80,10 @@ export default function Page() {
         emptyState={
           <div className="space-y-3">
             <p className="text-slate-500">
-              Fai una domanda: l&apos;agent cercherà nei portali CKAN
-              disponibili. Puoi partire da uno degli esempi:
+              Fai una domanda: l&apos;orchestrator interroga in parallelo i
+              portali CKAN e le fonti statistiche ufficiali (ISTAT
+              {", Eurostat e OCSE se abilitate"}). Parti da uno degli esempi —
+              il tag colorato indica la fonte attesa:
             </p>
             <ExampleQueries onPick={pickExample} disabled={loading} />
           </div>

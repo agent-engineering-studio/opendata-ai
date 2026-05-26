@@ -30,7 +30,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ckan-mcp-ollama
+  IMAGE_NAME: opendata-ai-ollama
   IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -79,8 +79,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' || github.event.inputs.push_latest == 'true' }}
             type=raw,value=${{ steps.args.outputs.model_tag }}
           labels: |
-            org.opencontainers.image.title=ckan-mcp-ollama
-            org.opencontainers.image.description=Ollama with ${{ steps.args.outputs.model_tag }} (num_ctx=${{ steps.args.outputs.num_ctx }}) pre-loaded for mcp-ckan
+            org.opencontainers.image.title=opendata-ai-ollama
+            org.opencontainers.image.description=Ollama with ${{ steps.args.outputs.model_tag }} (num_ctx=${{ steps.args.outputs.num_ctx }}) pre-loaded for opendata-ai (CKAN + ISTAT + Eurostat + OECD)
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
 

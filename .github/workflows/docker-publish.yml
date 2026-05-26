@@ -7,6 +7,9 @@ on:
     paths:
       - 'ckan-mcp-server/**'
       - 'ckan-mcp-agent/**'
+      - 'istat-mcp-server/**'
+      - 'istat-mcp-agent/**'
+      - 'opendata-orchestrator/**'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
     inputs:
@@ -42,6 +45,15 @@ jobs:
           - name: ckan-mcp-agent
             context: ckan-mcp-agent
             dockerfile: ckan-mcp-agent/Dockerfile
+          - name: istat-mcp-server
+            context: istat-mcp-server
+            dockerfile: istat-mcp-server/Dockerfile
+          - name: istat-mcp-agent
+            context: istat-mcp-agent
+            dockerfile: istat-mcp-agent/Dockerfile
+          - name: opendata-orchestrator
+            context: opendata-orchestrator
+            dockerfile: opendata-orchestrator/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +90,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.event.inputs.push_latest == 'true' }}
           labels: |
             org.opencontainers.image.title=${{ matrix.service.name }}
-            org.opencontainers.image.description=${{ matrix.service.name }} — part of mcp-ckan
+            org.opencontainers.image.description=${{ matrix.service.name }} — part of opendata-ai
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
 

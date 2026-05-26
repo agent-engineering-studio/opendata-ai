@@ -1,10 +1,22 @@
 SHELL := /bin/bash
 
-COMPOSE := docker compose
+# `ENV_FILE` is the docker-compose env file all targets read by default.
+# Override on the command line:  `make ENV_FILE=.env.production up-host-ollama`
+ENV_FILE ?= .env.local
+
+COMPOSE := docker compose --env-file $(ENV_FILE)
 OLLAMA_BASE_MODEL ?= qwen2.5:7b-instruct
 OLLAMA_NUM_CTX   ?= 16384
 OLLAMA_MODEL     ?= qwen2.5:16k
-OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/ckan-mcp-ollama:latest
+OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
+
+# Custom-built compose services (skip the Ollama service — it uses a pre-built image
+# managed by `make build-ollama` / `make pull-models`, not by `docker compose build`).
+CUSTOM_SERVICES := ckan-mcp istat-mcp ckan-agent istat-agent opendata-orchestrator opendata-ai-ui
+
+# `make agent SOURCE=ckan|istat|orchestrator` selects which REPL to launch.
+SOURCE ?= orchestrator
+COMPOSE_PROJECT ?= opendata-ai
 
 .DEFAULT_GOAL := help
 
@@ -16,14 +28,22 @@ help: ## Show this help
 
 # ──────────────────────────── Local stack ────────────────────────
 
-.PHONY: up up-cpu up-gpu
+.PHONY: up up-cpu up-gpu up-host-ollama
 up: up-cpu ## Start the stack (CPU profile — default)
 
-up-cpu: ## Start the stack with CPU-only Ollama
+up-cpu: ## Start the stack with CPU-only Ollama (Dockerized)
 	$(COMPOSE) --profile cpu up -d
 
-up-gpu: ## Start the stack with GPU-enabled Ollama
+up-gpu: ## Start the stack with GPU-enabled Ollama (Linux + NVIDIA only)
 	$(COMPOSE) --profile gpu up -d
+
+up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ollama). Best on macOS for Metal GPU.
+	@if ! curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then \
+		echo "⚠️  Host Ollama not reachable at http://localhost:11434 — start it with: ollama serve &"; \
+		exit 1; \
+	fi
+	@echo "✅ Host Ollama reachable. Bringing up stack without the Ollama container…"
+	$(COMPOSE) up -d $(CUSTOM_SERVICES)
 
 .PHONY: down logs ps
 down: ## Stop the stack
@@ -45,18 +65,25 @@ build-ollama: ## Build the Ollama image with $(OLLAMA_MODEL) baked in (local, ~7
 	  infra/ollama
 
 .PHONY: pull-models
-pull-models: ## Fallback: pull model directly into a running ckan-ollama container (no prebuild image)
+pull-models: ## Fallback: pull model directly into a running opendata-ai-ollama container (no prebuild image)
 	@echo "Pulling base model $(OLLAMA_BASE_MODEL)..."
-	docker exec ckan-ollama ollama pull $(OLLAMA_BASE_MODEL)
+	docker exec opendata-ai-ollama ollama pull $(OLLAMA_BASE_MODEL)
 	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX)..."
-	docker exec ckan-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
+	docker exec opendata-ai-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
 	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX)"
 
-.PHONY: rebuild rebuild-all
-rebuild: ## Rebuild mcp + agent images without cache
-	$(COMPOSE) build --no-cache ckan-mcp ckan-agent
+.PHONY: build build-svc rebuild rebuild-all
+build: ## Build all custom images (mcp servers + agents + orchestrator + UI), reusing cache
+	$(COMPOSE) build $(CUSTOM_SERVICES)
 
-rebuild-all: build-ollama rebuild ## Rebuild ALL images: Ollama (baked model, ~7 GB) + mcp + agent
+build-svc: ## Build a single service — usage: make build-svc SVC=istat-mcp
+	@if [ -z "$(SVC)" ]; then echo "usage: make build-svc SVC=<service-name>  (one of: $(CUSTOM_SERVICES))" >&2; exit 2; fi
+	$(COMPOSE) build $(SVC)
+
+rebuild: ## Rebuild all custom images (mcp servers + agents + orchestrator + UI) WITHOUT cache
+	$(COMPOSE) build --no-cache $(CUSTOM_SERVICES)
+
+rebuild-all: build-ollama rebuild ## Rebuild ALL images: Ollama (baked model, ~7 GB) + every custom image (no cache)
 
 .PHONY: refresh-ollama refresh-gpu refresh-cpu
 
@@ -74,22 +101,47 @@ refresh-cpu: refresh up
 
 # ──────────────────────────── Interactive ────────────────────────
 
-.PHONY: agent
-agent: ## Launch the interactive agent CLI against the running stack
-	docker run --rm -it --network ckan-mcp_default \
+.PHONY: agent agent-ckan agent-istat agent-orchestrator
+agent: agent-$(SOURCE) ## Interactive REPL — SOURCE=orchestrator|ckan|istat (default: orchestrator)
+
+agent-orchestrator: ## Launch the orchestrator REPL against the running stack
+	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
 	  -e LLM_PROVIDER=ollama \
-	  -e OLLAMA_BASE_URL=http://ckan-ollama:11434 \
+	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
+	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
+	  -e CKAN_MCP_URL=http://ckan-mcp:8080/mcp \
+	  -e ISTAT_MCP_URL=http://istat-mcp:8081/mcp \
+	  opendata-orchestrator:local opendata-agent
+
+agent-ckan: ## Launch the CKAN specialist REPL against the running stack
+	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
+	  -e LLM_PROVIDER=ollama \
+	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
 	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
 	  -e MCP_SERVER_URL=http://ckan-mcp:8080/mcp \
 	  ckan-mcp-agent:local ckan-agent
 
+agent-istat: ## Launch the ISTAT specialist REPL against the running stack
+	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
+	  -e LLM_PROVIDER=ollama \
+	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
+	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
+	  -e MCP_SERVER_URL=http://istat-mcp:8081/mcp \
+	  istat-mcp-agent:local istat-agent
+
 # ──────────────────────────── Dev tasks ──────────────────────────
 
 .PHONY: lint test
-lint: ## Run ruff on both packages
+lint: ## Run ruff on all Python packages
 	cd ckan-mcp-server && ruff check src
 	cd ckan-mcp-agent && ruff check src
+	cd istat-mcp-server && ruff check src
+	cd istat-mcp-agent && ruff check src
+	cd opendata-orchestrator && ruff check src
 
-test: ## Run pytest on both packages
+test: ## Run pytest on all Python packages
 	cd ckan-mcp-server && pytest -q
 	cd ckan-mcp-agent && pytest -q
+	cd istat-mcp-server && pytest -q
+	cd istat-mcp-agent && pytest -q
+	cd opendata-orchestrator && pytest -q

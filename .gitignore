@@ -14,9 +14,8 @@ venv/
 # Environment files
 .env
 .env.*
-!.env.example
-!.env.azure.example
-!.env.dev-claude.example
+!.env.local.example
+!.env.production.example
 !opendata-ai-ui/.env.local.example
 
 # IDE

@@ -1,0 +1,259 @@
+"""Runtime configuration for the multi-agent orchestrator.
+
+Supports the same three LLM providers as the specialists:
+  - ollama, azure_foundry, claude.
+
+Carries verbatim copies of the CKAN and ISTAT agent instructions so the
+orchestrator is *self-contained* and does not import from the specialist
+packages — it talks to them only over their MCP servers.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+Provider = Literal["ollama", "azure_foundry", "claude"]
+
+
+# Verbatim copy of ckan_agent.config.AGENT_INSTRUCTIONS — keep in sync.
+CKAN_INSTRUCTIONS = (
+    "You query CKAN open data portals via MCP tools. You MUST USE the tools — "
+    "never write tool calls as JSON or markdown text.\n\n"
+    "=== PORTAL SELECTION ===\n"
+    "If the user message starts with a 'PORTAL_HINT:' line, follow it exactly "
+    "and skip the rest of this section.\n\n"
+    "Otherwise, pick exactly ONE portal from this list, based on the user query "
+    "(language, geographic scope, domain). If the user explicitly names a portal "
+    "in the query, use that one. Otherwise infer from language and context:\n"
+    "  - https://www.dati.gov.it/opendata  — Italian, Italy (default for Italian queries)\n"
+    "  - https://data.gov.uk               — English, United Kingdom\n"
+    "  - https://data.gov                  — English, United States\n"
+    "  - https://open.canada.ca/data/en    — English, Canada\n"
+    "  - https://data.gov.au               — English, Australia\n"
+    "When in doubt, default to dati.gov.it. Do NOT query multiple portals.\n\n"
+    "=== HOW TO RESPOND ===\n"
+    "Do NOT plan, explain steps, or describe what you would do. Just ACT:\n\n"
+    "First, USE the ckan_package_search tool with q=<keywords from the user query> "
+    "and base_url=<the portal URL you picked above>. "
+    "If you get 0 results, USE the tool one more time with shorter keywords.\n\n"
+    "Then, for each result that has resources of format CSV / JSON / GeoJSON / TXT, "
+    "USE the ckan_resource_download tool on each such resource URL.\n\n"
+    "Finally, write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) describing the "
+    "datasets you found and naming the portal you used, or explaining that nothing "
+    "was found and what query was tried>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":<UPPERCASE str>,"
+    "\"content\":<str or null>}.\n"
+    "Set 'content' to the downloaded file text for CSV/JSON/GeoJSON/TXT (escape \\n and \\\"); "
+    "set 'content' to null for every other format. Skip resources with format=UNKNOWN.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output the literal text 'ckan_package_search' or 'ckan_resource_download' "
+    "in your final response. Tools are executed by the framework, not written in text.\n"
+    "- NEVER output Python code blocks, JSON code blocks, or step-by-step plans.\n"
+    "- NEVER invent URLs. Only use URLs returned by tools.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- If you cannot find any data, the array is [] but the narrative is still required."
+)
+
+
+# Shared template for SDMX-based statistical specialists (ISTAT / Eurostat / OECD).
+# IMPORTANT: each specialist talks to its OWN MCP server instance whose default
+# endpoint is already the right one — so the agent must NEVER pass `base_url`
+# (a small local model truncates the URL and breaks content negotiation → HTTP 406).
+# The only per-source argument is `agency`.
+_SDMX_INSTRUCTIONS_TEMPLATE = (
+    "You are a data-retrieval agent for the {source_name} SDMX 2.1 REST API. "
+    "You have NO knowledge of statistics from memory — every number in your answer "
+    "MUST come from a tool call you actually executed in THIS turn. Answering from "
+    "prior knowledge is FORBIDDEN and counts as a failure.\n\n"
+    "=== MANDATORY ACTION SEQUENCE (do not skip, do not just describe) ===\n"
+    "STEP 1 — ALWAYS call `istat_list_dataflows` with q=<keywords from the query> "
+    "and agency=\"{agency_id}\". Never pass base_url (the server is already pointed "
+    "at {source_name}).\n"
+    "STEP 2 — pick the most relevant dataflow id from the results, then call "
+    "`istat_get_structure` (and `istat_get_constraints` if useful) to learn its "
+    "dimensions and allowed codes.\n"
+    "STEP 3 — if the query names categories (a country, sex, age class…), call "
+    "`istat_get_codelist` to resolve their codes.\n"
+    "STEP 4 — YOU MUST call `istat_get_data` to pull the actual observations as CSV. "
+    "Build `key` from the resolved codes (dot-separated, DSD dimension order) and "
+    "narrow with `start_period`/`end_period` or `last_n`. A reply WITHOUT a prior "
+    "`istat_get_data` call is INCOMPLETE — go back and call it.\n\n"
+    "Only AFTER step 4 may you write your final answer. The system captures the "
+    "`istat_get_data` CSV automatically and attaches it as a downloadable/chartable "
+    "resource, so you do not need to copy it.\n\n"
+    "{source_hint}\n\n"
+    "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) describing what you "
+    "found: dataflow id, agency, version, the dimension filter you used, and the key "
+    "numbers from the observations — do NOT paste URLs in the narrative>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {{\"name\":<str>,\"url\":<str>,\"format\":<UPPERCASE str>,"
+    "\"content\":<str or null>}}.\n"
+    "Set 'content' to the downloaded text for CSV / JSON / TXT (escape \\n and \\\"); "
+    "set 'content' to null for every other format. Skip resources with format=UNKNOWN.\n"
+    "NOTE: you do NOT need to attach the CSV observations yourself — the system "
+    "captures every `istat_get_data` result automatically and adds it as a CSV "
+    "resource. Focus your RESOURCES_JSON on dataset/dataflow links you found; if "
+    "you have none, emit an empty array [].\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names like 'istat_list_dataflows' or 'istat_get_data' "
+    "in your final response. Tools are executed by the framework, not written in text.\n"
+    "- NEVER output Python code blocks, JSON code blocks, or step-by-step plans.\n"
+    "- NEVER invent URLs. Only use URLs derived from SDMX requests you actually executed.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- If you cannot find any data, the array is [] but the narrative is still required.\n"
+    "- Cite dataflow ids, agency ids and versions in the narrative when relevant."
+)
+
+
+# Default base URLs. Mirrored in Settings below; the constants here are used to
+# render the instructions at module load time.
+_ISTAT_BASE_URL = "https://esploradati.istat.it/SDMXWS/rest"
+_EUROSTAT_BASE_URL = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1"
+_OECD_BASE_URL = "https://sdmx.oecd.org/public/rest"
+
+
+ISTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
+    source_name="ISTAT (Italian National Institute of Statistics)",
+    agency_id="IT1",
+    source_hint=(
+        "SCOPE: focus on Italy. Reject queries that are clearly about non-Italian "
+        "geographies by returning an empty resources array and a one-line narrative "
+        "saying ISTAT does not cover that scope. CL_ITTER107 is the Italian "
+        "territorial codelist; use `istat_territorial_codes` to resolve it.\n"
+        "⚠️ ISTAT BUG: `end_period=N` returns up to N+1; prefer `last_n` or pass "
+        "end_period=str(N-1)."
+    ),
+)
+
+
+EUROSTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
+    source_name="Eurostat (European Union statistical office)",
+    agency_id="ESTAT",
+    source_hint=(
+        "SCOPE: focus on EU member states + EFTA. Geography codelist is typically "
+        "`GEO` with NUTS / country codes (e.g. IT, FR, DE, EU27_2020). When the "
+        "user query is about a single country only, prefer pulling the country code "
+        "via `istat_get_codelist(agency=\"ESTAT\", codelist_id=\"GEO\")`."
+    ),
+)
+
+
+OECD_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
+    source_name="OECD (Organisation for Economic Co-operation and Development)",
+    agency_id="all",
+    source_hint=(
+        "SCOPE: focus on OECD member countries + key economic partners. The OECD "
+        "endpoint hosts datasets from many sub-agencies (OECD.SDD.STES, OECD.ELS, "
+        "OECD.TAD, …). Use agency=\"all\" when listing dataflows, then read the "
+        "actual agencyID from the dataflow record when calling get_structure / "
+        "get_codelist for that dataflow."
+    ),
+)
+
+
+SYNTH_INSTRUCTIONS = (
+    "You are a synthesiser that merges the outputs of up to FOUR open-data "
+    "specialists into a single coherent narrative:\n"
+    "  - CKAN     — generic open-data portals (national + regional)\n"
+    "  - ISTAT    — official Italian statistics (SDMX)\n"
+    "  - EUROSTAT — European Union statistical office (SDMX)\n"
+    "  - OECD     — international economic statistics (SDMX)\n\n"
+    "INPUT: a structured prompt with up to four sections labelled "
+    "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, each "
+    "containing a short narrative produced by the respective specialist. Any "
+    "section can be empty (the specialist may have found nothing or errored).\n\n"
+    "OUTPUT: ONE paragraph (3–6 sentences), written in the SAME LANGUAGE as the "
+    "original user query, that:\n"
+    "  - integrates the available perspectives without duplicating information;\n"
+    "  - never contains URLs (URLs live in the RESOURCES_JSON block, which is "
+    "    appended by the orchestrator after your response);\n"
+    "  - never mentions the words 'specialist', 'agent', 'section' — speak "
+    "    naturally about the sources by their real names ('i dati ISTAT', "
+    "    'Eurostat', 'l'OCSE', 'il portale dati.gov.it', etc.);\n"
+    "  - is honest about gaps: if a source returned nothing for this query, "
+    "    omit it from the narrative rather than restating that it was empty;\n"
+    "  - if ALL sources returned nothing, say so in one sentence.\n\n"
+    "Output the paragraph and NOTHING ELSE — no preamble, no markdown headers, "
+    "no JSON, no code blocks. Just the prose."
+)
+
+
+class Settings(BaseSettings):
+    """Settings loaded from environment variables and/or a .env file."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    # LLM provider selection
+    llm_provider: Provider = Field(default="ollama")
+
+    # MCP server URLs. The CKAN agent uses ckan-mcp; the three SDMX-based stats
+    # specialists (istat / eurostat / oecd) all share the istat-mcp instance —
+    # the SDMX tools are generic, only base_url + agency differ per call.
+    # Each SDMX source has its OWN MCP server instance (same image, different
+    # ISTAT_SDMX_BASE_URL) so the agent never has to pass a base_url at all.
+    ckan_mcp_url: str = Field(default="http://localhost:8080/mcp")
+    istat_mcp_url: str = Field(default="http://localhost:8081/mcp")
+    eurostat_mcp_url: str = Field(default="http://localhost:8082/mcp")
+    oecd_mcp_url: str = Field(default="http://localhost:8083/mcp")
+
+    # Source defaults — informational, but ALSO embedded in *_INSTRUCTIONS so
+    # each specialist knows which SDMX endpoint to query
+    ckan_default_base_url: str = Field(default="https://www.dati.gov.it/opendata")
+    istat_sdmx_base_url: str = Field(default=_ISTAT_BASE_URL)
+    eurostat_sdmx_base_url: str = Field(default=_EUROSTAT_BASE_URL)
+    oecd_sdmx_base_url: str = Field(default=_OECD_BASE_URL)
+
+    # Ollama (OpenAI-compatible)
+    ollama_base_url: str = Field(default="http://localhost:11434")
+    ollama_llm_model: str = Field(default="qwen2.5:16k")
+    ollama_num_ctx: int = Field(default=16384)
+
+    # Azure AI Foundry
+    azure_ai_project_endpoint: str | None = Field(default=None)
+    azure_ai_model_deployment_name: str | None = Field(default=None)
+
+    # Anthropic Claude API
+    anthropic_api_key: str | None = Field(default=None)
+    claude_model: str = Field(default="claude-sonnet-4-6")
+
+    # Agent names — these become executor_ids in the ConcurrentBuilder and
+    # are the strings the synth aggregator uses to tag resources with `source`.
+    # Keep them stable (the UI's ResourceCard reads `source` to colour-code).
+    ckan_agent_name: str = Field(default="ckan")
+    istat_agent_name: str = Field(default="istat")
+    eurostat_agent_name: str = Field(default="eurostat")
+    oecd_agent_name: str = Field(default="oecd")
+    synth_agent_name: str = Field(default="synth")
+
+    # Source enable flags — let operators turn off expensive sources per env.
+    # Eurostat/OECD default OFF so existing deployments do not silently triple
+    # their LLM bill on first upgrade; flip to true in production envs as needed.
+    enable_ckan: bool = Field(default=True)
+    enable_istat: bool = Field(default=True)
+    enable_eurostat: bool = Field(default=False)
+    enable_oecd: bool = Field(default=False)
+
+    # HTTP API
+    api_host: str = Field(default="0.0.0.0")
+    api_port: int = Field(default=8000)
+
+    log_level: str = Field(default="INFO")
+
+
+def get_settings() -> Settings:
+    return Settings()  # type: ignore[call-arg]

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ChatRequest, ChatResponse } from "@/lib/types";
 
-const AGENT_API_URL = process.env.AGENT_API_URL ?? "http://localhost:8002";
+const AGENT_API_URL = process.env.AGENT_API_URL ?? "http://localhost:8000";
 const TIMEOUT_MS = Number(process.env.AGENT_API_TIMEOUT_MS ?? 300_000);
 
 export const runtime = "nodejs";

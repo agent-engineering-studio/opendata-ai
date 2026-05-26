@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Resource } from "@/lib/types";
 import { ResourcePreview, isPreviewable } from "./preview/ResourcePreview";
+import { CsvTablePreview } from "./preview/CsvTablePreview";
+import { ChartPreview, isChartable } from "./preview/ChartPreview";
 
 function formatBadgeColor(format: string): string {
   const f = format.toUpperCase();
@@ -13,8 +15,25 @@ function formatBadgeColor(format: string): string {
   return "bg-slate-100 text-slate-700";
 }
 
+function sourceBadgeColor(source: string): string {
+  if (source === "ckan") return "bg-violet-100 text-violet-800";
+  if (source === "istat") return "bg-amber-100 text-amber-800";
+  if (source === "eurostat") return "bg-sky-100 text-sky-800";
+  if (source === "oecd") return "bg-rose-100 text-rose-800";
+  return "bg-slate-100 text-slate-700";
+}
+
+function sourceTooltip(source: string): string {
+  if (source === "ckan") return "Portale CKAN (open data)";
+  if (source === "istat") return "ISTAT — statistica ufficiale italiana (SDMX)";
+  if (source === "eurostat") return "Eurostat — statistica UE (SDMX)";
+  if (source === "oecd") return "OCSE / OECD — statistica internazionale (SDMX)";
+  return source;
+}
+
 export function ResourceCard({ resource }: { resource: Resource }) {
   const [expanded, setExpanded] = useState(false);
+  const [view, setView] = useState<"table" | "chart">("table");
   const display = resource.name || resource.url || "(senza nome)";
   const badge = resource.format?.trim() ? resource.format.toUpperCase() : "—";
   const canPreview = isPreviewable(
@@ -22,6 +41,12 @@ export function ResourceCard({ resource }: { resource: Resource }) {
     resource.content,
     resource.url,
   );
+  const isCsv = resource.format?.toUpperCase() === "CSV";
+  // Offer the chart toggle when we have chartable inline content, or when the
+  // CSV will be lazily fetched (no inline content but a URL is present).
+  const canChart =
+    isCsv &&
+    (isChartable(resource.content) || (!resource.content && !!resource.url));
 
   return (
     <div className="rounded-md border border-slate-200 bg-white">
@@ -31,6 +56,14 @@ export function ResourceCard({ resource }: { resource: Resource }) {
         >
           {badge}
         </span>
+        {resource.source ? (
+          <span
+            className={`inline-flex justify-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sourceBadgeColor(resource.source)}`}
+            title={sourceTooltip(resource.source)}
+          >
+            {resource.source}
+          </span>
+        ) : null}
         <span className="flex-1 truncate text-sm text-slate-800">{display}</span>
         {resource.url ? (
           <a
@@ -55,12 +88,36 @@ export function ResourceCard({ resource }: { resource: Resource }) {
             {expanded ? "▾ Nascondi anteprima" : "▸ Mostra anteprima"}
           </button>
           {expanded ? (
-            <div className="mt-2">
-              <ResourcePreview
-                format={resource.format}
-                content={resource.content}
-                url={resource.url}
-              />
+            <div className="mt-2 space-y-2">
+              {canChart ? (
+                <div className="inline-flex overflow-hidden rounded border border-slate-300 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setView("table")}
+                    className={`px-2.5 py-1 ${view === "table" ? "bg-slate-800 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                  >
+                    Tabella
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("chart")}
+                    className={`px-2.5 py-1 ${view === "chart" ? "bg-slate-800 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                  >
+                    Grafico
+                  </button>
+                </div>
+              ) : null}
+              {canChart && view === "chart" ? (
+                <ChartPreview content={resource.content} url={resource.url} />
+              ) : canChart ? (
+                <CsvTablePreview content={resource.content} url={resource.url} />
+              ) : (
+                <ResourcePreview
+                  format={resource.format}
+                  content={resource.content}
+                  url={resource.url}
+                />
+              )}
             </div>
           ) : null}
         </div>
