@@ -6,6 +6,7 @@ import type {
   GeoJSON as LeafletGeoJSON,
   Map as LeafletMap,
 } from "leaflet";
+import { toWgs84 } from "@/lib/geoReproject";
 
 export type GeoLayer = {
   id: string;
@@ -74,7 +75,8 @@ export function GeoMap({ layers }: { layers: GeoLayer[] }) {
       for (const layer of layers) {
         if (!layer.visible || objs.has(layer.id)) continue;
         try {
-          const gj = L.geoJSON(layer.geojson as never, {
+          const wgs84 = toWgs84(layer.geojson as Record<string, unknown>);
+          const gj = L.geoJSON(wgs84 as never, {
             style: { color: layer.color, weight: 2, fillOpacity: 0.35 },
             pointToLayer: (_f, latlng) =>
               L.circleMarker(latlng, {

@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type { GeoJSON as LeafletGeoJSON, Map as LeafletMap } from "leaflet";
 import { useProxyFetch } from "@/lib/useProxyFetch";
+import { toWgs84 } from "@/lib/geoReproject";
 
 /** Formats we can turn into GeoJSON and draw on a client-side Leaflet map. */
-export const GEO_MAP_FORMATS = new Set(["GEOJSON", "TOPOJSON", "KML", "GPX", "GML"]);
+export const GEO_MAP_FORMATS = new Set(["GEOJSON", "TOPOJSON", "KML", "GPX", "GML", "SHP"]);
 
 const _GEO_EXT: [string, string][] = [
   [".geojson", "GEOJSON"],
@@ -14,6 +15,7 @@ const _GEO_EXT: [string, string][] = [
   [".kml", "KML"],
   [".gpx", "GPX"],
   [".gml", "GML"],
+  [".shp", "SHP"],
 ];
 
 /** Detect a geographic resource even when the portal mislabels the format
@@ -74,7 +76,8 @@ function MapView({ geojson }: { geojson: GeoJsonObject }) {
       }).addTo(map);
       let layer: LeafletGeoJSON | null = null;
       try {
-        layer = L.geoJSON(geojson as never, {
+        const wgs84 = toWgs84(geojson);
+        layer = L.geoJSON(wgs84 as never, {
           style: { color: "#2563eb", weight: 2, fillOpacity: 0.35 },
           pointToLayer: (_f, latlng) =>
             L.circleMarker(latlng, { radius: 6, color: "#2563eb", fillColor: "#2563eb", fillOpacity: 0.7 }),
@@ -176,6 +179,57 @@ function LazyMap({ url, format }: { url: string; format: string }) {
   return <MapFromContent content={state.data} format={format} />;
 }
 
+type GeoJsonObjectOrList = GeoJsonObject | GeoJsonObject[];
+
+/** Shapefiles are binary (and usually a .shp/.dbf/.prj set, often zipped).
+ *  We fetch the bytes via the proxy and parse them client-side with shpjs;
+ *  a .zip bundle is unpacked by shpjs, a bare .shp yields geometry only.
+ *  shpjs does not reproject, so MapView's toWgs84 handles the CRS. */
+function ShpMap({ url }: { url: string }) {
+  const decode = useCallback((resp: Response) => resp.arrayBuffer(), []);
+  const state = useProxyFetch<ArrayBuffer>(url, decode);
+  const [geojson, setGeojson] = useState<GeoJsonObject | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.status !== "ok") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const shp = (await import("shpjs")).default;
+        const parsed = (await shp(state.data)) as unknown as GeoJsonObjectOrList;
+        // A multi-layer zip yields an array of FeatureCollections → merge them.
+        const merged: GeoJsonObject = Array.isArray(parsed)
+          ? {
+              type: "FeatureCollection",
+              features: parsed.flatMap(
+                (fc) => ((fc.features as unknown[]) ?? []) as unknown[],
+              ),
+            }
+          : parsed;
+        if (!cancelled) setGeojson(merged);
+      } catch {
+        if (!cancelled) setError("shapefile non leggibile (manca .dbf/.prj o file corrotto)");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state]);
+
+  if (state.status === "loading")
+    return <div className="text-xs text-slate-500">Caricamento shapefile…</div>;
+  if (state.status === "error")
+    return (
+      <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        Impossibile scaricare lo shapefile: {state.message}
+      </div>
+    );
+  if (error) return <div className="text-xs text-slate-500">Mappa: {error}.</div>;
+  if (!geojson) return <div className="text-xs text-slate-500">Lettura shapefile…</div>;
+  return <MapView geojson={geojson} />;
+}
+
 /** Inline client-side map for a geographic resource (GeoJSON/KML/GPX…). */
 export function GeoResourceMap({
   content,
@@ -186,6 +240,12 @@ export function GeoResourceMap({
   url?: string;
   format: string;
 }) {
+  // Shapefiles are binary — no usable inline content; always parse the file bytes.
+  if (format.toUpperCase() === "SHP") {
+    if (url) return <ShpMap url={url} />;
+    return <div className="text-xs text-slate-500">Mappa: shapefile senza URL scaricabile.</div>;
+  }
+
   const inline = (content || "").trim();
   // The orchestrator caps embedded content; a truncated GeoJSON is invalid JSON,
   // so prefer the full file from the URL and only use inline content when it's complete.

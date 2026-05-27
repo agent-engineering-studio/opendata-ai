@@ -7,7 +7,7 @@ import type { Resource } from "@/lib/types";
 type Row = Record<string, string>;
 
 const TIME_RE = /^(time_period|time|date|anno|year|periodo|ref_period)$/i;
-const GEO_FORMATS = new Set(["GEOJSON", "SHP", "KML", "KMZ", "GPKG", "WKT", "GML", "TOPOJSON"]);
+const GEO_FORMATS = new Set(["GEOJSON", "SHP", "KML", "KMZ", "GPX", "GPKG", "WKT", "GML", "TOPOJSON"]);
 const _NUM_RE = /^-?\s*\d{1,3}([.,]\d{3})*([.,]\d+)?\s*%?$/;
 
 type Described = {
@@ -92,7 +92,7 @@ function describe(resource: Resource): Described | null {
   const fmt = (resource.format || "").toUpperCase();
 
   if (GEO_FORMATS.has(fmt)) {
-    const mapped = new Set(["GEOJSON", "KML", "GPX", "GML", "TOPOJSON"]).has(fmt);
+    const mapped = new Set(["GEOJSON", "KML", "GPX", "SHP"]).has(fmt);
     return {
       kind: "Dati geografici",
       summary: mapped
