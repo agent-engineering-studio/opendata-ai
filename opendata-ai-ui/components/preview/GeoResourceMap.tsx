@@ -8,6 +8,40 @@ import { useProxyFetch } from "@/lib/useProxyFetch";
 /** Formats we can turn into GeoJSON and draw on a client-side Leaflet map. */
 export const GEO_MAP_FORMATS = new Set(["GEOJSON", "TOPOJSON", "KML", "GPX", "GML"]);
 
+const _GEO_EXT: [string, string][] = [
+  [".geojson", "GEOJSON"],
+  [".topojson", "TOPOJSON"],
+  [".kml", "KML"],
+  [".gpx", "GPX"],
+  [".gml", "GML"],
+];
+
+/** Detect a geographic resource even when the portal mislabels the format
+ *  (e.g. a GeoJSON served as "TXT"/"JSON"). Order: declared format → file
+ *  extension in name/url → content sniff (GeoJSON starts with a FeatureCollection
+ *  / Feature object). Returns the effective format to render, or null. */
+export function detectGeoFormat(
+  format?: string | null,
+  content?: string | null,
+  ref?: string | null,
+): string | null {
+  const fmt = (format || "").toUpperCase();
+  if (GEO_MAP_FORMATS.has(fmt)) return fmt;
+  const r = (ref || "").toLowerCase();
+  for (const [ext, f] of _GEO_EXT) if (r.includes(ext)) return f;
+  const c = (content || "").trimStart();
+  if (c.startsWith("{")) {
+    const head = c.slice(0, 800);
+    if (
+      /"type"\s*:\s*"FeatureCollection"/.test(head) ||
+      /"type"\s*:\s*"Feature"/.test(head) ||
+      /"features"\s*:\s*\[/.test(head)
+    )
+      return "GEOJSON";
+  }
+  return null;
+}
+
 type GeoJsonObject = Record<string, unknown>;
 
 /** Parse only the JSON family (GeoJSON). KML/GPX are converted async in the

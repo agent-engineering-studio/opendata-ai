@@ -7,7 +7,7 @@ import { CsvTablePreview } from "./preview/CsvTablePreview";
 import { ChartPreview, isChartable } from "./preview/ChartPreview";
 import { DataDescription } from "./preview/DataDescription";
 import { MapEmbed } from "./preview/MapEmbed";
-import { GeoResourceMap, GEO_MAP_FORMATS } from "./preview/GeoResourceMap";
+import { GeoResourceMap, detectGeoFormat } from "./preview/GeoResourceMap";
 
 function formatBadgeColor(format: string): string {
   const f = format.toUpperCase();
@@ -38,9 +38,16 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState<"table" | "chart">("table");
   const display = resource.name || resource.url || "(senza nome)";
-  const badge = resource.format?.trim() ? resource.format.toUpperCase() : "—";
   const hasMap = !!resource.preview_html;
-  const isGeo = GEO_MAP_FORMATS.has((resource.format || "").toUpperCase());
+  const geoFormat = detectGeoFormat(
+    resource.format,
+    resource.content,
+    resource.url || resource.name,
+  );
+  // Show the detected geographic format on the badge even when the portal
+  // mislabelled it (e.g. a GeoJSON served as TXT).
+  const badge = geoFormat ?? (resource.format?.trim() ? resource.format.toUpperCase() : "—");
+  const isGeo = !!geoFormat;
   const canPreview =
     hasMap ||
     (isGeo && (!!resource.content || !!resource.url)) ||
@@ -100,7 +107,7 @@ export function ResourceCard({ resource }: { resource: Resource }) {
                 <GeoResourceMap
                   content={resource.content}
                   url={resource.url}
-                  format={resource.format}
+                  format={geoFormat as string}
                 />
               ) : (
                 <>
