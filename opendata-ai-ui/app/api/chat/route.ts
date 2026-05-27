@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ChatRequest, ChatResponse } from "@/lib/types";
 
 const AGENT_API_URL = process.env.AGENT_API_URL ?? "http://localhost:8000";
-const TIMEOUT_MS = Number(process.env.AGENT_API_TIMEOUT_MS ?? 300_000);
+// Local multi-agent queries on a large Ollama model (e.g. qwen2.5:32b) can take
+// several minutes (3 sequential LLM calls + SDMX catalogue fetch). Default 10 min
+// so slow local replies aren't aborted; lower it for fast cloud providers.
+const TIMEOUT_MS = Number(process.env.AGENT_API_TIMEOUT_MS ?? 600_000);
 
 export const runtime = "nodejs";
 

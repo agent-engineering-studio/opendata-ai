@@ -222,6 +222,8 @@ services:
       - "${UI_PORT:-3000}:3000"
     environment:
       AGENT_API_URL: ${AGENT_API_URL:-http://opendata-orchestrator:8000}
+      # Slow local models (qwen2.5:32b fan-out) can take minutes; default 10 min.
+      AGENT_API_TIMEOUT_MS: ${AGENT_API_TIMEOUT_MS:-600000}
     depends_on:
       opendata-orchestrator:
         condition: service_started
