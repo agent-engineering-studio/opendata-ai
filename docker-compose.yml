@@ -1,7 +1,7 @@
 name: opendata-ai
 
 x-ollama-base: &ollama-base
-  # Pre-built image with qwen2.5:16k (num_ctx=16384) already baked in.
+  # Pre-built image with qwen2.5:32k (num_ctx=16384, temperature 0) already baked in.
   # Published via .github/workflows/publish-ollama.yml.
   # Fallback: set OLLAMA_IMAGE=ollama/ollama:latest and run `make pull-models`.
   image: ${OLLAMA_IMAGE:-ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest}
@@ -90,7 +90,7 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       MCP_SERVER_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
@@ -123,7 +123,7 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       MCP_SERVER_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
@@ -156,7 +156,7 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       CKAN_MCP_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}

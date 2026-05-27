@@ -5,9 +5,13 @@ SHELL := /bin/bash
 ENV_FILE ?= .env.local
 
 COMPOSE := docker compose --env-file $(ENV_FILE)
-OLLAMA_BASE_MODEL ?= qwen2.5:7b-instruct
+# Baked Ollama model. Default qwen2.5:32b → qwen2.5:32k (num_ctx 16384,
+# temperature 0) for best faithfulness on a 48GB Apple-Silicon box; override
+# e.g. `make build-ollama OLLAMA_BASE_MODEL=qwen2.5:14b OLLAMA_MODEL=qwen2.5:14k`.
+OLLAMA_BASE_MODEL ?= qwen2.5:32b
 OLLAMA_NUM_CTX   ?= 16384
-OLLAMA_MODEL     ?= qwen2.5:16k
+OLLAMA_TEMPERATURE ?= 0
+OLLAMA_MODEL     ?= qwen2.5:32k
 OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
 
 # Custom-built compose services (skip the Ollama service — it uses a pre-built image
@@ -61,6 +65,7 @@ build-ollama: ## Build the Ollama image with $(OLLAMA_MODEL) baked in (local, ~7
 	  --build-arg BASE_MODEL=$(OLLAMA_BASE_MODEL) \
 	  --build-arg NUM_CTX=$(OLLAMA_NUM_CTX) \
 	  --build-arg MODEL_TAG=$(OLLAMA_MODEL) \
+	  --build-arg TEMPERATURE=$(OLLAMA_TEMPERATURE) \
 	  -t $(OLLAMA_IMAGE) \
 	  infra/ollama
 
@@ -68,9 +73,9 @@ build-ollama: ## Build the Ollama image with $(OLLAMA_MODEL) baked in (local, ~7
 pull-models: ## Fallback: pull model directly into a running opendata-ai-ollama container (no prebuild image)
 	@echo "Pulling base model $(OLLAMA_BASE_MODEL)..."
 	docker exec opendata-ai-ollama ollama pull $(OLLAMA_BASE_MODEL)
-	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX)..."
-	docker exec opendata-ai-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
-	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX)"
+	@echo "Creating $(OLLAMA_MODEL) with num_ctx=$(OLLAMA_NUM_CTX) temperature=$(OLLAMA_TEMPERATURE)..."
+	docker exec opendata-ai-ollama bash -c 'printf "FROM $(OLLAMA_BASE_MODEL)\nPARAMETER num_ctx $(OLLAMA_NUM_CTX)\nPARAMETER temperature $(OLLAMA_TEMPERATURE)\n" > /tmp/Modelfile && ollama create $(OLLAMA_MODEL) -f /tmp/Modelfile'
+	@echo "Done — model $(OLLAMA_MODEL) ready with context $(OLLAMA_NUM_CTX), temperature $(OLLAMA_TEMPERATURE)"
 
 .PHONY: build build-svc rebuild rebuild-all
 build: ## Build all custom images (mcp servers + agents + orchestrator + UI), reusing cache

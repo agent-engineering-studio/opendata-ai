@@ -24,7 +24,7 @@ The repo is designed around exactly **two `.env*.example` files**:
 ### `.env.local.example` — local debug
 Default `LLM_PROVIDER=ollama`. Two sub-variants of local debug live in this same file:
 
-- **Docker stack (default)**: copy to `.env` (or `.env.local`), `make up` brings up `opendata-ai-ollama` + `ckan-mcp` (8080) + `istat-mcp` (8081) + `ckan-agent` (8002) + `istat-agent` (8003) + `opendata-orchestrator` (8000) + `opendata-ai-ui` (3000). No API key needed. `OLLAMA_LLM_MODEL=qwen2.5:16k` must match the modelfile tag baked in the Ollama image (`ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest`).
+- **Docker stack (default)**: copy to `.env` (or `.env.local`), `make up` brings up `opendata-ai-ollama` + `ckan-mcp` (8080) + `istat-mcp` (8081) + `ckan-agent` (8002) + `istat-agent` (8003) + `opendata-orchestrator` (8000) + `opendata-ai-ui` (3000). No API key needed. `OLLAMA_LLM_MODEL=qwen2.5:32k` must match the modelfile tag baked in the Ollama image (`ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest` — qwen2.5:32b + num_ctx 16384 + temperature 0).
 - **Host-side Python with Claude**: set `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY` in the same file, run MCP servers + agents + orchestrator as host Python processes (VS Code stack debug), and flip `CKAN_MCP_URL` / `ISTAT_MCP_URL` to `http://localhost:…`. Ollama is not started.
 
 In LOCAL DEBUG `azure_foundry` is intentionally not exercised — reserve it for production.
@@ -48,7 +48,7 @@ make up-gpu          # NVIDIA stack
 make down            # stop everything (both profiles)
 make ps / logs       # status / tail logs
 make rebuild         # rebuild all MCP servers + agents + orchestrator (no cache)
-make build-ollama    # bake the Ollama image with qwen2.5:16k locally
+make build-ollama    # bake the Ollama image with qwen2.5:32k (num_ctx 16384, temp 0) locally
 make pull-models     # fallback when Ollama image has no baked model
 
 # Interactive REPL against the running stack
@@ -106,7 +106,7 @@ cd opendata-orchestrator && opendata-agent              # REPL
 
 ## Things easy to get wrong
 
-- `OLLAMA_LLM_MODEL` must match the modelfile *tag* baked in the Ollama image (`qwen2.5:16k`), not the base model name.
+- `OLLAMA_LLM_MODEL` must match the modelfile *tag* baked in the Ollama image (`qwen2.5:32k`), not the base model name (`qwen2.5:32b`). `make build-ollama` and `publish-ollama.yml` bake `num_ctx 16384` + `temperature 0`; override the base/tag via the Makefile `OLLAMA_*` vars for lighter machines (e.g. `qwen2.5:14b`/`:14k`).
 - `CKAN_MCP_URL` / `ISTAT_MCP_URL` use compose-internal hostnames inside Docker (`http://ckan-mcp:8080/mcp`, `http://istat-mcp:8081/mcp`) but `http://localhost:8080/mcp` / `http://localhost:8081/mcp` for host-side debug. Pick the right one for the active `.env*` file.
 - When changing provider plumbing, touch **all three** `factory.py` / `config.py` pairs (`ckan-mcp-agent`, `istat-mcp-agent`, `opendata-orchestrator`) plus the three `.env*.example` files. The provider literal and the builder branches are duplicated by design (side-by-side layout, no shared package).
 - When changing the agent response contract (the `<!--RESOURCES_JSON-->` block), update **four** sources of truth: `ckan_agent.config.AGENT_INSTRUCTIONS`, `istat_agent.config.AGENT_INSTRUCTIONS`, `orchestrator.config.CKAN_INSTRUCTIONS` and `orchestrator.config.ISTAT_INSTRUCTIONS`. The parser lives in three places (each agent's `api.py` + `orchestrator/parsing.py`); changes must be mirrored.
