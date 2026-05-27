@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tmcw/togeojson": "^5.8.1",
     "leaflet": "^1.9.4",
     "next": "15.1.4",
     "papaparse": "^5.5.3",

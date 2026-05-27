@@ -7,6 +7,7 @@ import { CsvTablePreview } from "./preview/CsvTablePreview";
 import { ChartPreview, isChartable } from "./preview/ChartPreview";
 import { DataDescription } from "./preview/DataDescription";
 import { MapEmbed } from "./preview/MapEmbed";
+import { GeoResourceMap, GEO_MAP_FORMATS } from "./preview/GeoResourceMap";
 
 function formatBadgeColor(format: string): string {
   const f = format.toUpperCase();
@@ -39,8 +40,10 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   const display = resource.name || resource.url || "(senza nome)";
   const badge = resource.format?.trim() ? resource.format.toUpperCase() : "—";
   const hasMap = !!resource.preview_html;
+  const isGeo = GEO_MAP_FORMATS.has((resource.format || "").toUpperCase());
   const canPreview =
     hasMap ||
+    (isGeo && (!!resource.content || !!resource.url)) ||
     isPreviewable(resource.format, resource.content, resource.url);
   const isCsv = resource.format?.toUpperCase() === "CSV";
   // Offer the chart toggle when we have chartable inline content, or when the
@@ -93,6 +96,12 @@ export function ResourceCard({ resource }: { resource: Resource }) {
               <DataDescription resource={resource} />
               {hasMap ? (
                 <MapEmbed html={resource.preview_html as string} />
+              ) : isGeo ? (
+                <GeoResourceMap
+                  content={resource.content}
+                  url={resource.url}
+                  format={resource.format}
+                />
               ) : (
                 <>
                   {canChart ? (
