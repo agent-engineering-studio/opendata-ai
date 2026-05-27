@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Agent, setGlobalDispatcher } from "undici";
 import type { ChatRequest, ChatResponse } from "@/lib/types";
 
 const AGENT_API_URL = process.env.AGENT_API_URL ?? "http://localhost:8000";
@@ -6,6 +7,14 @@ const AGENT_API_URL = process.env.AGENT_API_URL ?? "http://localhost:8000";
 // several minutes (3 sequential LLM calls + SDMX catalogue fetch). Default 10 min
 // so slow local replies aren't aborted; lower it for fast cloud providers.
 const TIMEOUT_MS = Number(process.env.AGENT_API_TIMEOUT_MS ?? 600_000);
+
+// The orchestrator is non-streaming: it sends response headers only once the
+// whole query is done. Node's fetch (undici) has a *default* 300s headersTimeout
+// that fires independently of our AbortSignal → UND_ERR_HEADERS_TIMEOUT
+// ("fetch failed") on long queries. Raise headers/body timeouts to match.
+setGlobalDispatcher(
+  new Agent({ headersTimeout: TIMEOUT_MS, bodyTimeout: TIMEOUT_MS }),
+);
 
 export const runtime = "nodejs";
 
