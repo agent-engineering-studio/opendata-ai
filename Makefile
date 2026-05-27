@@ -116,6 +116,7 @@ agent-orchestrator: ## Launch the orchestrator REPL against the running stack
 	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
 	  -e CKAN_MCP_URL=http://ckan-mcp:8080/mcp \
 	  -e ISTAT_MCP_URL=http://istat-mcp:8081/mcp \
+	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-orchestrator:local opendata-agent
 
 agent-ckan: ## Launch the CKAN specialist REPL against the running stack
