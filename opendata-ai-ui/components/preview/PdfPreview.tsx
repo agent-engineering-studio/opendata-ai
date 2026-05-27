@@ -36,6 +36,20 @@ export function PdfPreview({ url }: { url: string }) {
           return;
         }
         const buf = await resp.blob();
+        // Verify it's really a PDF (%PDF magic). Portals often return an HTML
+        // landing/error page at the resource URL; forcing application/pdf on that
+        // makes the viewer show "we can't open this file". Detect and fall back.
+        const head = new Uint8Array(await buf.slice(0, 5).arrayBuffer());
+        const isPdf =
+          head[0] === 0x25 && // %
+          head[1] === 0x50 && // P
+          head[2] === 0x44 && // D
+          head[3] === 0x46 && // F
+          head[4] === 0x2d; // -
+        if (!isPdf) {
+          setError("il file non è un PDF (il portale ha restituito una pagina web)");
+          return;
+        }
         const blob =
           buf.type === "application/pdf"
             ? buf
