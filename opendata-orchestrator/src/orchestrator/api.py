@@ -20,8 +20,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .factory import OrchestratorSession
+from .osm_map import attach_maps
 from .parsing import Resource, fill_missing_content, parse_agent_reply
 
 log = logging.getLogger("opendata-orchestrator-api")
@@ -38,12 +39,14 @@ class ChatResponse(BaseModel):
 
 
 _session: OrchestratorSession | None = None
+_settings: Settings | None = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    global _session
+    global _session, _settings
     settings = get_settings()
+    _settings = settings
     log.info(
         "Starting orchestrator | provider=%s ckan_mcp=%s istat_mcp=%s",
         settings.llm_provider, settings.ckan_mcp_url, settings.istat_mcp_url,
@@ -114,6 +117,14 @@ async def chat(req: ChatRequest) -> ChatResponse:
     log.info("orchestrator reply ready in %.0fms, length=%d chars", elapsed, len(raw))
     text, resources = parse_agent_reply(raw)
     await fill_missing_content(resources)
+    # Render OSM maps for any GeoJSON resources (best-effort, no LLM).
+    if _settings is not None and _settings.enable_osm_maps:
+        try:
+            n = await attach_maps(_settings.osm_mcp_url, text, resources)
+            if n:
+                log.info("attached %d OSM map(s)", n)
+        except Exception:
+            log.warning("attach_maps failed", exc_info=True)
     return ChatResponse(text=text, resources=resources)
 
 

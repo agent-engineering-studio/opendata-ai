@@ -1,0 +1,196 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import type { ChatMessage, ChatRequest, ChatResponse, Resource } from "@/lib/types";
+import type { GeoLayer } from "@/components/GeoMap";
+import { ChatInput } from "@/components/ChatInput";
+
+// Leaflet touches `window`; load the map only on the client.
+const GeoMap = dynamic(() => import("@/components/GeoMap").then((m) => m.GeoMap), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-sm text-slate-400">
+      Caricamento mappa…
+    </div>
+  ),
+});
+
+const LAYER_COLORS = [
+  "#2563eb", "#dc2626", "#059669", "#d97706",
+  "#7c3aed", "#0891b2", "#db2777", "#65a30d",
+];
+
+function parseGeoJson(resource: Resource): unknown | null {
+  const fmt = (resource.format || "").toUpperCase();
+  if (!resource.content) return null;
+  if (fmt !== "GEOJSON" && fmt !== "JSON" && fmt !== "TOPOJSON") return null;
+  try {
+    const obj = JSON.parse(resource.content) as { type?: string };
+    const t = obj?.type;
+    if (t === "FeatureCollection" || t === "Feature" || t === "GeometryCollection")
+      return obj;
+    // bare geometry
+    if (t && ["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"].includes(t))
+      return obj;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export default function MapPage() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [layers, setLayers] = useState<GeoLayer[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  function toggleLayer(id: string) {
+    setLayers((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)),
+    );
+  }
+
+  async function send(query: string) {
+    setMessages((prev) => [...prev, { role: "user", text: query }]);
+    setLoading(true);
+    const t0 = performance.now();
+    try {
+      const body: ChatRequest = { query };
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const raw = await res.text();
+      let parsed: ChatResponse | { error: string };
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = { error: "Risposta non valida dal proxy" };
+      }
+      const durationMs = performance.now() - t0;
+      if (!res.ok || "error" in parsed) {
+        const errText = "error" in parsed ? parsed.error : `Errore HTTP ${res.status}`;
+        setMessages((prev) => [...prev, { role: "error", text: errText }]);
+      } else {
+        const resources = parsed.resources ?? [];
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: parsed.text, resources, durationMs },
+        ]);
+        // Accumulate any GeoJSON resources as new map layers.
+        setLayers((prev) => {
+          const next = [...prev];
+          for (const r of resources) {
+            const gj = parseGeoJson(r);
+            if (!gj) continue;
+            const id = `${r.url || r.name}-${next.length}`;
+            next.push({
+              id,
+              name: r.name || `Layer ${next.length + 1}`,
+              geojson: gj,
+              color: LAYER_COLORS[next.length % LAYER_COLORS.length],
+              visible: true,
+            });
+          }
+          return next;
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setMessages((prev) => [...prev, { role: "error", text: `Errore di rete: ${message}` }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const geoCount = layers.length;
+
+  return (
+    <div className="flex h-screen flex-col">
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+        <div>
+          <h1 className="text-base font-semibold text-slate-900">OpenData AI — Mappa</h1>
+          <p className="text-xs text-slate-500">
+            Chiedi dati geografici: compaiono come layer sulla mappa OpenStreetMap.
+          </p>
+        </div>
+        <nav className="flex gap-2 text-sm">
+          <Link href="/" className="rounded-md border border-slate-300 bg-white px-3 py-1 text-slate-700 hover:bg-slate-50">
+            Chat
+          </Link>
+          <span className="rounded-md border border-blue-500 bg-blue-50 px-3 py-1 font-medium text-blue-800">
+            Mappa
+          </span>
+        </nav>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Map */}
+        <div className="relative min-h-0 flex-1">
+          <GeoMap layers={layers} />
+          {geoCount > 0 ? (
+            <div className="absolute right-3 top-3 z-[1000] max-h-[60%] w-60 overflow-auto rounded-md border border-slate-200 bg-white/95 p-2 shadow">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Layer ({geoCount})
+              </p>
+              <ul className="space-y-1">
+                {layers.map((l) => (
+                  <li key={l.id} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={l.visible}
+                      onChange={() => toggleLayer(l.id)}
+                    />
+                    <span
+                      className="inline-block h-3 w-3 shrink-0 rounded-sm"
+                      style={{ backgroundColor: l.color }}
+                    />
+                    <span className="truncate text-slate-700" title={l.name}>
+                      {l.name}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Chat sidebar */}
+        <aside className="flex w-96 min-w-0 flex-col border-l border-slate-200 bg-slate-50">
+          <div className="flex-1 space-y-3 overflow-auto p-3">
+            {messages.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Esempi: &laquo;confini della Toscana&raquo;, &laquo;comuni della
+                provincia di Bologna&raquo;, &laquo;aree naturali protette in
+                Lombardia&raquo;. I risultati GeoJSON appaiono sulla mappa.
+              </p>
+            ) : (
+              messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`rounded-md px-3 py-2 text-sm ${
+                    m.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : m.role === "error"
+                        ? "border border-red-200 bg-red-50 text-red-700"
+                        : "border border-slate-200 bg-white text-slate-800"
+                  }`}
+                >
+                  {m.text}
+                </div>
+              ))
+            )}
+            {loading ? (
+              <div className="text-xs text-slate-400">L&apos;agente sta cercando…</div>
+            ) : null}
+          </div>
+          <div className="border-t border-slate-200 p-3">
+            <ChatInput onSubmit={send} loading={loading} />
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}

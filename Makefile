@@ -16,7 +16,7 @@ OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
 
 # Custom-built compose services (skip the Ollama service — it uses a pre-built image
 # managed by `make build-ollama` / `make pull-models`, not by `docker compose build`).
-CUSTOM_SERVICES := ckan-mcp istat-mcp ckan-agent istat-agent opendata-orchestrator opendata-ai-ui
+CUSTOM_SERVICES := ckan-mcp istat-mcp osm-mcp ckan-agent istat-agent opendata-orchestrator opendata-ai-ui
 
 # `make agent SOURCE=ckan|istat|orchestrator` selects which REPL to launch.
 SOURCE ?= orchestrator
@@ -142,6 +142,7 @@ lint: ## Run ruff on all Python packages
 	cd ckan-mcp-agent && ruff check src
 	cd istat-mcp-server && ruff check src
 	cd istat-mcp-agent && ruff check src
+	cd osm-mcp && ruff check src
 	cd opendata-orchestrator && ruff check src
 
 test: ## Run pytest on all Python packages
@@ -149,4 +150,5 @@ test: ## Run pytest on all Python packages
 	cd ckan-mcp-agent && pytest -q
 	cd istat-mcp-server && pytest -q
 	cd istat-mcp-agent && pytest -q
+	cd osm-mcp && pytest -q
 	cd opendata-orchestrator && pytest -q

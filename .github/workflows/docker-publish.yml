@@ -8,6 +8,7 @@ on:
       - 'ckan-mcp-server/**'
       - 'ckan-mcp-agent/**'
       - 'istat-mcp-server/**'
+      - 'osm-mcp/**'
       - 'istat-mcp-agent/**'
       - 'opendata-orchestrator/**'
       - '.github/workflows/docker-publish.yml'
@@ -51,6 +52,9 @@ jobs:
           - name: istat-mcp-agent
             context: istat-mcp-agent
             dockerfile: istat-mcp-agent/Dockerfile
+          - name: osm-mcp
+            context: osm-mcp
+            dockerfile: osm-mcp/Dockerfile
           - name: opendata-orchestrator
             context: opendata-orchestrator
             dockerfile: opendata-orchestrator/Dockerfile

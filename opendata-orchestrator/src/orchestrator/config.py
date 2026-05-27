@@ -212,6 +212,9 @@ class Settings(BaseSettings):
     istat_mcp_url: str = Field(default="http://localhost:8081/mcp")
     eurostat_mcp_url: str = Field(default="http://localhost:8082/mcp")
     oecd_mcp_url: str = Field(default="http://localhost:8083/mcp")
+    # osm-mcp renders self-contained Leaflet+OSM HTML maps for GeoJSON resources.
+    osm_mcp_url: str = Field(default="http://localhost:8085/mcp")
+    enable_osm_maps: bool = Field(default=True)
 
     # Source defaults — informational, but ALSO embedded in *_INSTRUCTIONS so
     # each specialist knows which SDMX endpoint to query

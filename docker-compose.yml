@@ -78,6 +78,24 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
+  osm-mcp:
+    build:
+      context: ./osm-mcp
+      dockerfile: Dockerfile
+    image: osm-mcp:local
+    container_name: osm-mcp
+    # Container listens on 8080 (its Dockerfile healthcheck is hardcoded to 8080);
+    # exposed on the host as 8085 to avoid clashing with ckan-mcp.
+    ports:
+      - "${OSM_MCP_PORT:-8085}:8080"
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── CKAN specialist agent (standalone debug entry on :8002) ─────
   ckan-agent:
     build:
@@ -163,6 +181,8 @@ services:
       ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}
       OECD_MCP_URL: ${OECD_MCP_URL:-}
+      OSM_MCP_URL: ${OSM_MCP_URL:-http://osm-mcp:8080/mcp}
+      ENABLE_OSM_MAPS: ${ENABLE_OSM_MAPS:-true}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
       EUROSTAT_SDMX_BASE_URL: ${EUROSTAT_SDMX_BASE_URL:-https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1}
@@ -180,6 +200,8 @@ services:
       ckan-mcp:
         condition: service_started
       istat-mcp:
+        condition: service_started
+      osm-mcp:
         condition: service_started
       ollama-cpu:
         condition: service_healthy

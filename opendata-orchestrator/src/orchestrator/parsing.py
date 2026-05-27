@@ -66,6 +66,8 @@ class Resource(BaseModel):
     source: SourceTag | None = None
     # Optional human description (portal notes / SDMX dataflow name) if an agent emits it.
     description: str | None = None
+    # Self-contained Leaflet+OSM HTML map, rendered by osm-mcp for GeoJSON resources.
+    preview_html: str | None = None
 
 
 def _is_binary(raw: bytes) -> bool:
