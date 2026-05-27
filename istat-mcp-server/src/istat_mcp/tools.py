@@ -12,6 +12,10 @@ from mcp.server.fastmcp import FastMCP
 
 from .sdmx_client import SdmxClient, df_ref, data_path
 
+# Max CSV characters returned by istat_get_data. A full SDMX cube can be tens of
+# MB; returning it whole overflows LLM context windows. ~120 KB ≈ 30k tokens.
+_MAX_CSV_CHARS = 120_000
+
 
 # ──────────────────────────── extract helpers ───────────────────────────
 
@@ -266,7 +270,26 @@ def register_tools(mcp: FastMCP) -> None:
         path = data_path(dataflow_id, key)
         async with SdmxClient(base_url=base_url) as c:
             csv = await c.get_csv(path, params=params)
-        return {"path": path, "params": params, "content_type": "text/csv", "csv": csv}
+        # Cap the CSV returned to the caller: an un-narrowed cube can be tens of MB,
+        # which blows past LLM context windows (a full cube once produced a 3.3M-token
+        # prompt → API 400). The truncated text is enough for the model to summarise;
+        # the `path` lets a client fetch the full data.
+        full_len = len(csv)
+        truncated = full_len > _MAX_CSV_CHARS
+        if truncated:
+            csv = (
+                csv[:_MAX_CSV_CHARS]
+                + f"\n…[CSV troncato a {_MAX_CSV_CHARS} caratteri su {full_len}; "
+                "restringi con key / start_period / last_n / first_n per il dato completo]"
+            )
+        return {
+            "path": path,
+            "params": params,
+            "content_type": "text/csv",
+            "csv": csv,
+            "truncated": truncated,
+            "full_size_chars": full_len,
+        }
 
     @mcp.tool()
     async def istat_territorial_codes(
