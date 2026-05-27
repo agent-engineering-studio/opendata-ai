@@ -64,6 +64,8 @@ class Resource(BaseModel):
     format: str
     content: str | None = None
     source: SourceTag | None = None
+    # Optional human description (portal notes / SDMX dataflow name) if an agent emits it.
+    description: str | None = None
 
 
 def _is_binary(raw: bytes) -> bool:

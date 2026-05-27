@@ -6,6 +6,8 @@ export type Resource = {
   format: string;
   content: string | null;
   source?: ResourceSource | null;
+  /** Optional human description of the dataset (from the portal / dataflow). */
+  description?: string | null;
 };
 
 export type ChatRequest = {

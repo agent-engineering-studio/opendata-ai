@@ -5,6 +5,7 @@ import type { Resource } from "@/lib/types";
 import { ResourcePreview, isPreviewable } from "./preview/ResourcePreview";
 import { CsvTablePreview } from "./preview/CsvTablePreview";
 import { ChartPreview, isChartable } from "./preview/ChartPreview";
+import { DataDescription } from "./preview/DataDescription";
 
 function formatBadgeColor(format: string): string {
   const f = format.toUpperCase();
@@ -89,6 +90,7 @@ export function ResourceCard({ resource }: { resource: Resource }) {
           </button>
           {expanded ? (
             <div className="mt-2 space-y-2">
+              <DataDescription resource={resource} />
               {canChart ? (
                 <div className="inline-flex overflow-hidden rounded border border-slate-300 text-xs">
                   <button
