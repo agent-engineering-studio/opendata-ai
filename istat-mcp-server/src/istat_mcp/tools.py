@@ -6,6 +6,7 @@ SDMX-compatible provider; when omitted, `ISTAT_SDMX_BASE_URL` is used.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -15,6 +16,35 @@ from .sdmx_client import SdmxClient, df_ref, data_path
 # Max CSV characters returned by istat_get_data. A full SDMX cube can be tens of
 # MB; returning it whole overflows LLM context windows. ~120 KB ≈ 30k tokens.
 _MAX_CSV_CHARS = 120_000
+
+# Max serialized size of any metadata JSON payload (structure/codelist/concept/
+# constraints/dataflow). Codelists like CL_ITTER107 (every Italian municipality,
+# bilingual labels) are several MB and have caused 400 "prompt too long" errors.
+# FastMCP echoes the result in BOTH `content` and `structuredContent`, so the
+# payload is effectively doubled in the prompt — keep this conservative (~80 KB
+# preview → ~40k tokens per call, leaving room for several calls per turn).
+_MAX_PAYLOAD_CHARS = 80_000
+
+
+def _cap_payload(payload: Any, hint: str) -> Any:
+    """Return `payload` unchanged unless its JSON serialization exceeds the
+    budget, in which case return a truncated preview plus a hint telling the
+    model how to narrow the request. Keeps the LLM prompt within context limits.
+    """
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return payload
+    if len(serialized) <= _MAX_PAYLOAD_CHARS:
+        return payload
+    return {
+        "truncated": True,
+        "full_size_chars": len(serialized),
+        "note": (
+            f"Payload troppo grande ({len(serialized)} caratteri) per il contesto LLM. {hint}"
+        ),
+        "preview": serialized[:_MAX_PAYLOAD_CHARS],
+    }
 
 
 # ──────────────────────────── extract helpers ───────────────────────────
@@ -135,7 +165,11 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"dataflow/{df_ref(agency, flow_id, version)}"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path, params={"references": "all"})
-        return payload
+        return _cap_payload(
+            payload,
+            "Richiedi solo ciò che serve: usa istat_get_structure per la DSD o "
+            "istat_get_data per le osservazioni.",
+        )
 
     @mcp.tool()
     async def istat_get_structure(
@@ -155,7 +189,12 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"datastructure/{df_ref(agency, structure_id, version)}"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path, params={"references": "children"})
-        return payload
+        return _cap_payload(
+            payload,
+            "La DSD include le codelist referenziate (es. CL_ITTER107 è enorme). "
+            "Per i codici di una dimensione usa istat_get_codelist sul singolo "
+            "codelist_id, o istat_get_constraints per i soli valori disponibili.",
+        )
 
     @mcp.tool()
     async def istat_get_constraints(
@@ -173,7 +212,11 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"availableconstraint/{dataflow_id}/all/all"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path, params={"mode": "available"})
-        return payload
+        return _cap_payload(
+            payload,
+            "Troppi valori disponibili. Restringi la query a una sola dimensione "
+            "o usa istat_get_data con un key specifico.",
+        )
 
     @mcp.tool()
     async def istat_get_codelist(
@@ -193,7 +236,13 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"codelist/{df_ref(agency, codelist_id, version)}"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path)
-        return payload
+        return _cap_payload(
+            payload,
+            f"Codelist '{codelist_id}' troppo grande (es. CL_ITTER107 = tutti i "
+            "comuni). Per i livelli territoriali principali usa "
+            "istat_territorial_codes; altrimenti filtra il dato direttamente con "
+            "istat_get_data passando il key.",
+        )
 
     @mcp.tool()
     async def istat_get_concept(
@@ -213,7 +262,7 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"conceptscheme/{df_ref(agency, scheme_id, version)}"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path)
-        return payload
+        return _cap_payload(payload, "Concept scheme troppo grande; richiedi un singolo concetto.")
 
     @mcp.tool()
     async def istat_get_data(
@@ -311,7 +360,12 @@ def register_tools(mcp: FastMCP) -> None:
         path = f"codelist/{df_ref('IT1', 'CL_ITTER107', 'latest')}"
         async with SdmxClient(base_url=base_url) as c:
             payload = await c.get_json(path)
-        return {"source": "CL_ITTER107", "payload": payload}
+        return _cap_payload(
+            {"source": "CL_ITTER107", "payload": payload},
+            "CL_ITTER107 contiene tutti i comuni italiani. Cerca il codice del "
+            "territorio che ti serve nel preview, oppure passa direttamente il "
+            "key a istat_get_data.",
+        )
 
     @mcp.tool()
     async def istat_cache_stats() -> dict[str, Any]:
