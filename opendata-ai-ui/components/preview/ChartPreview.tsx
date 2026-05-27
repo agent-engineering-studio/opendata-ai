@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Papa from "papaparse";
 import {
   CartesianGrid,
@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { useProxyFetch } from "@/lib/useProxyFetch";
 
-const MAX_POINTS = 300;
+const MAX_CATEGORIES = 30; // cap bars after aggregation
 const MAX_SERIES = 6;
 const SERIES_COLORS = [
   "#2563eb", "#dc2626", "#059669", "#d97706",
@@ -24,6 +24,8 @@ const SERIES_COLORS = [
 ];
 
 const TIME_RE = /^(time_period|time|date|anno|year|periodo|ref_period)$/i;
+// Numeric columns whose header looks like an identifier are dimensions, not measures.
+const IDENTIFIER_RE = /(^|[\s_(\-])(id|codice|cod|istat|cap|zip|pk|uuid|anno|year|nuts|geo)([\s_)\-]|$)/i;
 
 type Row = Record<string, string>;
 
@@ -32,188 +34,227 @@ function toNumber(raw: string | undefined): number | null {
   if (raw == null) return null;
   let s = raw.trim();
   if (!s) return null;
-  // 1.234,56 (it) → 1234.56 ; 1,234.56 (en) → 1234.56
   if (/,\d{1,3}$/.test(s) && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
   else if (/,/.test(s) && !/\./.test(s)) s = s.replace(",", ".");
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
 
-function isNumericColumn(rows: Row[], field: string): boolean {
-  let seen = 0;
-  let numeric = 0;
-  for (const r of rows.slice(0, 50)) {
+function sample(rows: Row[], field: string): string[] {
+  const out: string[] = [];
+  for (const r of rows.slice(0, 80)) {
     const v = r[field];
-    if (v == null || v === "") continue;
-    seen++;
-    if (toNumber(v) !== null) numeric++;
+    if (v != null && v !== "") out.push(v.trim());
   }
-  return seen > 0 && numeric / seen > 0.8;
+  return out;
 }
 
-type ChartSpec =
-  | {
-      kind: "line" | "bar";
-      xField: string;
-      series: { key: string; label: string }[];
-      data: Record<string, number | string>[];
-      truncated: boolean;
-      tooManySeries: boolean;
-    }
-  | { kind: "none" };
+function isNumericColumn(rows: Row[], field: string): boolean {
+  const s = sample(rows, field);
+  if (s.length === 0) return false;
+  return s.filter((v) => toNumber(v) !== null).length / s.length > 0.8;
+}
 
-function buildChartSpec(fields: string[], rows: Row[]): ChartSpec {
-  if (fields.length === 0 || rows.length < 2) return { kind: "none" };
+/** A numeric column is a *measure* (a quantity to chart) unless it's an identifier
+ *  (year, ISTAT code, leading-zero code, id). Those are dimensions. */
+function isMeasureColumn(rows: Row[], field: string): boolean {
+  if (!isNumericColumn(rows, field)) return false;
+  if (IDENTIFIER_RE.test(field)) return false;
+  const s = sample(rows, field);
+  // leading-zero codes (e.g. "045") → identifier
+  if (s.some((v) => /^0\d+$/.test(v))) return false;
+  // year-like (1900–2100), mostly → identifier
+  const yearish = s.filter((v) => /^(19|20)\d{2}$/.test(v)).length;
+  if (yearish / s.length > 0.8) return false;
+  return true;
+}
 
-  const timeField = fields.find((f) => TIME_RE.test(f));
-  const hasObsValue = fields.includes("OBS_VALUE");
+function distinct(rows: Row[], field: string): number {
+  return new Set(rows.map((r) => r[field]).filter((v) => v != null && v !== "")).size;
+}
 
-  // ── SDMX-CSV: x=TIME_PERIOD, y=OBS_VALUE, one grouping dimension → series ──
-  if (hasObsValue && timeField) {
-    const exclude = new Set([timeField, "OBS_VALUE"]);
-    // Candidate grouping dims: code-like columns (not labels/notes) with >1 value.
-    const dimCandidates = fields.filter((f) => {
-      if (exclude.has(f)) return false;
-      if (/label|note|flag|obs_status|unit_meas/i.test(f)) return false;
-      const distinct = new Set(rows.map((r) => r[f]).filter(Boolean));
-      return distinct.size > 1 && distinct.size <= MAX_SERIES * 2;
-    });
-    // Pick the dimension with the fewest (≥2) distinct values as the series splitter.
-    let groupField: string | null = null;
-    let best = Infinity;
-    for (const f of dimCandidates) {
-      const distinct = new Set(rows.map((r) => r[f]).filter(Boolean)).size;
-      if (distinct >= 2 && distinct < best) {
-        best = distinct;
-        groupField = f;
-      }
-    }
+type Classified = {
+  fields: string[];
+  rows: Row[];
+  measures: string[];
+  dimensions: string[];
+};
 
-    const xs = Array.from(new Set(rows.map((r) => r[timeField]).filter(Boolean))).sort();
-    const byX = new Map<string, Record<string, number | string>>();
-    for (const x of xs) byX.set(x, { [timeField]: x });
-
-    const seriesKeys = new Set<string>();
-    for (const r of rows) {
-      const x = r[timeField];
-      const y = toNumber(r["OBS_VALUE"]);
-      if (!x || y === null) continue;
-      const key = groupField ? r[groupField] || "—" : "OBS_VALUE";
-      seriesKeys.add(key);
-      const point = byX.get(x);
-      if (point) point[key] = y;
-    }
-
-    let series = Array.from(seriesKeys).map((k) => ({ key: k, label: k }));
-    const tooManySeries = series.length > MAX_SERIES;
-    if (tooManySeries) series = series.slice(0, MAX_SERIES);
-
-    return {
-      kind: "line",
-      xField: timeField,
-      series,
-      data: Array.from(byX.values()),
-      truncated: false,
-      tooManySeries,
-    };
-  }
-
-  // ── Generic CSV: x = first non-numeric column, y = numeric columns ──
-  const numericFields = fields.filter((f) => isNumericColumn(rows, f));
-  if (numericFields.length === 0) return { kind: "none" };
-  const xField = fields.find((f) => !numericFields.includes(f)) ?? fields[0];
-  const ys = numericFields.filter((f) => f !== xField).slice(0, MAX_SERIES);
-  if (ys.length === 0) return { kind: "none" };
-
-  const sliced = rows.slice(0, MAX_POINTS);
-  const data = sliced.map((r) => {
-    const point: Record<string, number | string> = { [xField]: r[xField] ?? "" };
-    for (const y of ys) {
-      const n = toNumber(r[y]);
-      if (n !== null) point[y] = n;
-    }
-    return point;
+function classify(content: string): Classified {
+  const parsed = Papa.parse<Row>(content, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
   });
+  const fields = (parsed.meta.fields ?? []).filter(
+    (f): f is string => typeof f === "string" && f.length > 0,
+  );
+  const rows = (parsed.data ?? []).filter(
+    (r): r is Row => r != null && typeof r === "object",
+  );
+  const measures = fields.filter((f) => isMeasureColumn(rows, f));
+  const dimensions = fields.filter((f) => !measures.includes(f));
+  return { fields, rows, measures, dimensions };
+}
 
-  // Time-ish x → line, otherwise bar.
-  const xLooksOrdered = TIME_RE.test(xField) || /year|anno|date|period/i.test(xField);
-  return {
-    kind: xLooksOrdered ? "line" : "bar",
-    xField,
-    series: ys.map((y) => ({ key: y, label: y })),
-    data,
-    truncated: rows.length > MAX_POINTS,
-    tooManySeries: numericFields.length - 1 > MAX_SERIES,
-  };
+/** Default dimension to group by: a categorical column with a sensible number of
+ *  distinct values (2..MAX_CATEGORIES), preferring non-identifier text columns. */
+function pickDefaultDimension(rows: Row[], dimensions: string[]): string | null {
+  const scored = dimensions
+    .map((f) => ({ f, d: distinct(rows, f), id: IDENTIFIER_RE.test(f) }))
+    .filter((x) => x.d >= 2 && x.d <= MAX_CATEGORIES);
+  if (scored.length === 0) return dimensions[0] ?? null;
+  // prefer non-identifier dimensions; among them the most granular (max distinct)
+  const textDims = scored.filter((x) => !x.id);
+  const pool = textDims.length ? textDims : scored;
+  pool.sort((a, b) => b.d - a.d);
+  return pool[0].f;
+}
+
+type Aggregated = {
+  data: Record<string, number | string>[];
+  truncated: boolean;
+};
+
+/** Group rows by `dim` and SUM each selected measure. Sort categories by the
+ *  total of the first measure (desc) and cap at MAX_CATEGORIES. */
+function aggregate(rows: Row[], dim: string, measures: string[]): Aggregated {
+  const byCat = new Map<string, Record<string, number>>();
+  for (const r of rows) {
+    const cat = (r[dim] ?? "").trim() || "(vuoto)";
+    let acc = byCat.get(cat);
+    if (!acc) {
+      acc = {};
+      for (const m of measures) acc[m] = 0;
+      byCat.set(cat, acc);
+    }
+    for (const m of measures) {
+      const n = toNumber(r[m]);
+      if (n !== null) acc[m] += n;
+    }
+  }
+  let entries = Array.from(byCat.entries());
+  const first = measures[0];
+  if (first) entries.sort((a, b) => (b[1][first] ?? 0) - (a[1][first] ?? 0));
+  const truncated = entries.length > MAX_CATEGORIES;
+  entries = entries.slice(0, MAX_CATEGORIES);
+  const data = entries.map(([cat, sums]) => ({ [dim]: cat, ...sums }));
+  return { data, truncated };
 }
 
 function ChartFromContent({ content }: { content: string }) {
-  const spec = useMemo(() => {
-    const parsed = Papa.parse<Row>(content, {
-      header: true,
-      skipEmptyLines: true,
-      dynamicTyping: false,
-    });
-    const fields = (parsed.meta.fields ?? []).filter(
-      (f): f is string => typeof f === "string" && f.length > 0,
-    );
-    const rows = (parsed.data ?? []).filter(
-      (r): r is Row => r != null && typeof r === "object",
-    );
-    return buildChartSpec(fields, rows);
-  }, [content]);
+  const { rows, measures, dimensions } = useMemo(() => classify(content), [content]);
+  const defaultDim = useMemo(
+    () => pickDefaultDimension(rows, dimensions),
+    [rows, dimensions],
+  );
+  const [dim, setDim] = useState<string | null>(defaultDim);
+  const [activeMeasures, setActiveMeasures] = useState<string[]>(
+    measures.slice(0, MAX_SERIES),
+  );
 
-  if (spec.kind === "none") {
+  const effectiveDim = dim ?? defaultDim;
+  const series = activeMeasures.length ? activeMeasures : measures.slice(0, 1);
+
+  const agg = useMemo(() => {
+    if (!effectiveDim || series.length === 0) return null;
+    return aggregate(rows, effectiveDim, series);
+  }, [rows, effectiveDim, series]);
+
+  if (measures.length === 0 || !effectiveDim || !agg) {
     return (
       <div className="text-xs text-slate-500">
-        Questo CSV non sembra contenere una serie numerica rappresentabile come
-        grafico. Usa la vista tabella.
+        Questo CSV non contiene misure numeriche aggregabili. Usa la vista tabella.
       </div>
     );
   }
 
-  const Chart = spec.kind === "line" ? LineChart : BarChart;
+  // Time-ordered dimension → line; otherwise bar (aggregated categories).
+  const isTime = TIME_RE.test(effectiveDim);
+  const Chart = isTime ? LineChart : BarChart;
+  // Sort time categories chronologically.
+  const data = isTime
+    ? [...agg.data].sort((a, b) => String(a[effectiveDim]).localeCompare(String(b[effectiveDim])))
+    : agg.data;
+
+  function toggleMeasure(m: string) {
+    setActiveMeasures((prev) =>
+      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].slice(0, MAX_SERIES),
+    );
+  }
 
   return (
     <div className="space-y-2">
-      {(spec.truncated || spec.tooManySeries) && (
+      {/* Controls: group-by dimension + measures */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <label className="flex items-center gap-1">
+          <span className="text-slate-500">Raggruppa per</span>
+          <select
+            value={effectiveDim}
+            onChange={(e) => setDim(e.target.value)}
+            className="rounded border border-slate-300 bg-white px-1.5 py-0.5"
+          >
+            {dimensions.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="text-slate-500">Misure:</span>
+        {measures.map((m) => (
+          <label key={m} className="flex items-center gap-1 text-slate-700">
+            <input
+              type="checkbox"
+              checked={series.includes(m)}
+              onChange={() => toggleMeasure(m)}
+            />
+            {m}
+          </label>
+        ))}
+      </div>
+
+      {agg.truncated ? (
         <div className="rounded border border-yellow-300 bg-yellow-50 px-3 py-1 text-xs text-yellow-800">
-          {spec.truncated && `Mostrati i primi ${MAX_POINTS} punti. `}
-          {spec.tooManySeries && `Mostrate le prime ${MAX_SERIES} serie.`}
+          Mostrate le prime {MAX_CATEGORIES} categorie (per somma decrescente).
         </div>
-      )}
+      ) : null}
+
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <Chart data={spec.data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+          <Chart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey={spec.xField} tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} width={48} />
+            <XAxis
+              dataKey={effectiveDim}
+              tick={{ fontSize: 10 }}
+              angle={isTime ? 0 : -25}
+              textAnchor={isTime ? "middle" : "end"}
+              height={isTime ? 24 : 64}
+              interval={0}
+            />
+            <YAxis tick={{ fontSize: 11 }} width={52} />
             <Tooltip contentStyle={{ fontSize: 12 }} />
-            {spec.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            {spec.series.map((s, i) =>
-              spec.kind === "line" ? (
+            {series.length > 1 ? <Legend wrapperStyle={{ fontSize: 11 }} /> : null}
+            {series.map((s, i) =>
+              isTime ? (
                 <Line
-                  key={s.key}
+                  key={s}
                   type="monotone"
-                  dataKey={s.key}
-                  name={s.label}
+                  dataKey={s}
                   stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
                   dot={false}
                   strokeWidth={2}
-                  connectNulls
                 />
               ) : (
-                <Bar
-                  key={s.key}
-                  dataKey={s.key}
-                  name={s.label}
-                  fill={SERIES_COLORS[i % SERIES_COLORS.length]}
-                />
+                <Bar key={s} dataKey={s} fill={SERIES_COLORS[i % SERIES_COLORS.length]} />
               ),
             )}
           </Chart>
         </ResponsiveContainer>
       </div>
+      <p className="text-xs text-slate-400">
+        Valori = somma di {series.join(", ")} per {effectiveDim}.
+      </p>
     </div>
   );
 }
@@ -238,18 +279,12 @@ function LazyChart({ url }: { url: string }) {
   return <ChartFromContent content={state.data} />;
 }
 
-/** Heuristic used by the parent to decide whether to offer the chart toggle. */
+/** Heuristic used by the parent to decide whether to offer the chart toggle:
+ *  at least one numeric measure and at least one dimension to group by. */
 export function isChartable(content: string | null | undefined): boolean {
-  if (!content) return false; // lazy-fetch path still offers it via URL separately
-  const head = content.slice(0, 4096);
-  const parsed = Papa.parse<Row>(head, { header: true, skipEmptyLines: true });
-  const fields = (parsed.meta.fields ?? []).filter(
-    (f): f is string => typeof f === "string" && f.length > 0,
-  );
-  const rows = (parsed.data ?? []).filter(
-    (r): r is Row => r != null && typeof r === "object",
-  );
-  return buildChartSpec(fields, rows).kind !== "none";
+  if (!content) return false;
+  const { measures, dimensions, rows } = classify(content.slice(0, 8192));
+  return measures.length > 0 && dimensions.length > 0 && rows.length >= 2;
 }
 
 export function ChartPreview({
