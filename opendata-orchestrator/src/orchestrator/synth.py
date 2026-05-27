@@ -182,10 +182,76 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
                 captured.append(
                     Resource(name=name, url=dl_url, format=fmt, content=dl_content, source=source)  # type: ignore[arg-type]
                 )
+                continue
+
+            # ── ckan_package_search / ckan_package_show: real dataset resources ──
+            # Small local models invent placeholder URLs (e.g. .../uuid/...) in
+            # the RESOURCES_JSON; the search result carries the REAL urls/formats.
+            if source == "ckan":
+                captured.extend(_ckan_resources_from_payload(payload))
 
     if captured:
         log.info("captured %d tool-output resources from %s", len(captured), source)
     return captured
+
+
+# Resource formats worth surfacing from a CKAN search (skip license/UNKNOWN noise).
+_CKAN_KEEP_FORMATS = {
+    "CSV", "JSON", "GEOJSON", "TOPOJSON", "SHP", "KML", "KMZ", "GPKG", "GML",
+    "XLSX", "XLS", "XML", "TXT", "PDF", "ZIP", "WMS", "WFS", "RDF",
+}
+_MAX_CKAN_CAPTURED = 15
+
+
+def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
+    """Extract real resources from a ckan_package_search / package_show result."""
+    pkgs: list[dict[str, Any]]
+    if isinstance(payload.get("results"), list):
+        pkgs = [p for p in payload["results"] if isinstance(p, dict)]
+    elif isinstance(payload.get("resources"), list):
+        pkgs = [payload]
+    else:
+        return []
+
+    out: list[Resource] = []
+    seen: set[str] = set()
+    for pkg in pkgs:
+        title = pkg.get("title") or pkg.get("name") or ""
+        for r in (pkg.get("resources") or []):
+            if not isinstance(r, dict):
+                continue
+            url = r.get("url")
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            if _is_placeholder_url(url):
+                continue
+            key = url.strip().lower()
+            if key in seen:
+                continue
+            fmt = (r.get("format") or "").upper().strip()
+            if fmt and fmt not in _CKAN_KEEP_FORMATS:
+                continue
+            seen.add(key)
+            name = r.get("name") or (f"{title} — {url.split('/')[-1]}" if title else url.split("/")[-1])
+            out.append(
+                Resource(name=name[:120], url=url, format=fmt or "UNKNOWN", source="ckan")
+            )
+            if len(out) >= _MAX_CKAN_CAPTURED:
+                return out
+    return out
+
+
+_PLACEHOLDER_SEGMENTS = ("uuid", "example", "your-", "path", "<", "{", "...")
+
+
+def _is_placeholder_url(url: str) -> bool:
+    """Detect templated/hallucinated URLs (e.g. .../dataset/uuid/resource/uuid/x)."""
+    low = url.lower()
+    if "<" in low or "{" in low or "..." in low or "example.com" in low:
+        return True
+    # The literal path segment "uuid" is a placeholder (real CKAN ids are 36-char hex).
+    segs = low.split("/")
+    return "uuid" in segs
 
 
 def _normalise_source_tag(executor_id: str) -> str | None:
@@ -268,8 +334,11 @@ def build_aggregator(
                 parts.append((source, []))
                 continue
             narrative, resources = parse_agent_reply(raw_text)
-            # Deterministically capture tool outputs (CSV observations, downloaded
-            # files) so the data surfaces even when the LLM omits it from the block.
+            # Drop hallucinated placeholder URLs (small models emit .../uuid/... links).
+            resources = [r for r in resources if not _is_placeholder_url(r.url)]
+            # Deterministically capture tool outputs (real CKAN resource URLs, CSV
+            # observations, downloaded files) so data surfaces even when the LLM
+            # omits or fabricates it in the block.
             resources = resources + _capture_tool_resources(result, source)
             parts.append((source, resources))
             if source:
