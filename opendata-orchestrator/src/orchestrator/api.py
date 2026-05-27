@@ -23,7 +23,12 @@ from pydantic import BaseModel
 from .config import Settings, get_settings
 from .factory import OrchestratorSession
 from .osm_map import attach_maps
-from .parsing import Resource, fill_missing_content, parse_agent_reply
+from .parsing import (
+    Resource,
+    fill_missing_content,
+    parse_agent_reply,
+    upgrade_sdmx_resources,
+)
 
 log = logging.getLogger("opendata-orchestrator-api")
 
@@ -117,6 +122,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
     log.info("orchestrator reply ready in %.0fms, length=%d chars", elapsed, len(raw))
     text, resources = parse_agent_reply(raw)
     await fill_missing_content(resources)
+    # Upgrade SDMX data resources from the LLM sample to the full series (for the UI).
+    try:
+        await upgrade_sdmx_resources(resources)
+    except Exception:
+        log.warning("upgrade_sdmx_resources failed", exc_info=True)
     # Render OSM maps for any GeoJSON resources (best-effort, no LLM).
     if _settings is not None and _settings.enable_osm_maps:
         try:

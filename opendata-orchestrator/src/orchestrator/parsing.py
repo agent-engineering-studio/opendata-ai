@@ -47,6 +47,20 @@ _MAX_CONTENT_BYTES = 200_000
 _DOWNLOAD_TIMEOUT_SECONDS = 20.0
 _DOWNLOAD_CONCURRENCY = 4
 
+# Full SDMX cubes are sent to the LLM only as a 120 KB sample (istat_get_data
+# caps them) — but the UI needs the full series so charts aggregate correctly.
+# We re-fetch the full CSV server-side (SDMX content negotiation + ISTAT's broken
+# TLS), capped higher for the response payload.
+_MAX_SDMX_BYTES = 2_000_000
+_SDMX_TIMEOUT_SECONDS = 90.0
+_SDMX_HOSTS = ("esploradati.istat.it", "ec.europa.eu", "sdmx.oecd.org")
+_SDMX_CSV_ACCEPT = "application/vnd.sdmx.data+csv;version=1.0.0;labels=both"
+
+
+def _is_sdmx_data_url(url: str) -> bool:
+    low = (url or "").lower()
+    return "/data/" in low and any(h in low for h in _SDMX_HOSTS)
+
 _BINARY_MAGIC = (
     b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08",
     b"\x1f\x8b", b"%PDF", b"\xd0\xcf\x11\xe0",
@@ -152,14 +166,21 @@ def parse_agent_reply(raw: str) -> tuple[str, list[Resource]]:
     return text, resources
 
 
-async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
+async def _fetch_text(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    max_bytes: int = _MAX_CONTENT_BYTES,
+    timeout: float = _DOWNLOAD_TIMEOUT_SECONDS,
+) -> str | None:
     try:
-        resp = await client.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, follow_redirects=True)
+        resp = await client.get(url, timeout=timeout, follow_redirects=True, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         log.warning("download failed for %s: %s", url, exc)
         return None
-    raw = resp.content[:_MAX_CONTENT_BYTES]
+    raw = resp.content[:max_bytes]
     if _is_binary(raw):
         log.info("skip binary content for %s", url)
         return None
@@ -168,12 +189,39 @@ async def _fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
         text = raw.decode(encoding, errors="replace")
     except LookupError:
         text = raw.decode("utf-8", errors="replace")
-    if len(resp.content) > _MAX_CONTENT_BYTES:
+    if len(resp.content) > max_bytes:
         text += (
-            f"\n\n[…truncated at {_MAX_CONTENT_BYTES} bytes; "
-            f"original size {len(resp.content)} bytes]"
+            f"\n\n[…troncato a {max_bytes} byte; dimensione originale {len(resp.content)} byte]"
         )
     return text
+
+
+async def upgrade_sdmx_resources(resources: list[Resource]) -> None:
+    """Replace the LLM-sized sample of SDMX data resources with the FULL series.
+
+    The agent only saw a 120 KB sample (so the prompt stays small); here we
+    re-fetch the whole CSV with SDMX content negotiation (and verify=False for
+    ISTAT's broken cert), capped at 2 MB, so the UI's table/chart/map aggregate
+    over all rows. On failure the existing sample content is kept.
+    """
+    targets = [r for r in resources if _is_sdmx_data_url(r.url)]
+    if not targets:
+        return
+    log.info("Upgrading %d SDMX resource(s) to full content", len(targets))
+    sem = asyncio.Semaphore(_DOWNLOAD_CONCURRENCY)
+    async with httpx.AsyncClient(verify=False) as client:
+        async def one(resource: Resource) -> None:
+            async with sem:
+                full = await _fetch_text(
+                    client,
+                    resource.url,
+                    headers={"Accept": _SDMX_CSV_ACCEPT},
+                    max_bytes=_MAX_SDMX_BYTES,
+                    timeout=_SDMX_TIMEOUT_SECONDS,
+                )
+                if full and full.strip():
+                    resource.content = full
+        await asyncio.gather(*(one(r) for r in targets), return_exceptions=False)
 
 
 async def fill_missing_content(resources: list[Resource]) -> None:
