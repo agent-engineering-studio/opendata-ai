@@ -88,10 +88,11 @@ services:
     ports:
       - "${CKAN_AGENT_PORT:-8002}:8002"
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       MCP_SERVER_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -120,10 +121,11 @@ services:
     ports:
       - "${ISTAT_AGENT_PORT:-8003}:8003"
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       MCP_SERVER_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -152,10 +154,11 @@ services:
     ports:
       - "${ORCHESTRATOR_PORT:-8000}:8000"
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
       OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       CKAN_MCP_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
       ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}

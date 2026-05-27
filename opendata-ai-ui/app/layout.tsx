@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CKAN MCP Agent — Demo",
+  title: "OpenData AI",
   description:
-    "Chat UI demo for the CKAN MCP server + Microsoft Agent Framework agent",
+    "Il tuo agente di intelligenza artificiale per gli open data — portali CKAN e statistiche ufficiali (ISTAT, Eurostat, OCSE)",
 };
 
 export default function RootLayout({

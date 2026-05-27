@@ -14,15 +14,15 @@ from typing import Any
 
 from agent_framework import Agent, MCPStreamableHTTPTool
 
-from .config import AGENT_INSTRUCTIONS, Settings
+from .config import AGENT_INSTRUCTIONS, Settings, resolve_provider
 
 log = logging.getLogger("istat-agent.factory")
 
 
 def build_chat_client(settings: Settings) -> Any:
     """Return a Microsoft Agent Framework chat client for the configured provider."""
-    provider = settings.llm_provider
-    log.info("Building chat client for provider=%s", provider)
+    provider = resolve_provider(settings)
+    log.info("Building chat client for provider=%s (configured=%s)", provider, settings.llm_provider)
 
     if provider == "ollama":
         from agent_framework_ollama import OllamaChatClient
@@ -100,8 +100,9 @@ class AgentSession:
 
         chat_client = build_chat_client(self._settings)
         default_options: dict[str, object] = {}
-        if self._settings.llm_provider == "ollama":
+        if resolve_provider(self._settings) == "ollama":
             default_options["num_ctx"] = self._settings.ollama_num_ctx
+            default_options["temperature"] = self._settings.ollama_temperature
 
         agent = Agent(
             chat_client,

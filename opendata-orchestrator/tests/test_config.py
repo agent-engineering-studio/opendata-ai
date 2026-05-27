@@ -24,10 +24,44 @@ def test_defaults(monkeypatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     s = Settings()  # type: ignore[call-arg]
-    assert s.llm_provider == "ollama"
+    assert s.llm_provider == "auto"
     assert s.ckan_mcp_url.endswith("/mcp")
     assert s.istat_mcp_url.endswith("/mcp")
     assert s.api_port == 8000
+    assert s.ollama_temperature == 0.0
+
+
+def test_resolve_provider_priority(monkeypatch) -> None:
+    from orchestrator.config import resolve_provider
+
+    for var in ("ANTHROPIC_API_KEY", "AZURE_AI_PROJECT_ENDPOINT", "AZURE_AI_MODEL_DEPLOYMENT_NAME"):
+        monkeypatch.delenv(var, raising=False)
+
+    # auto + no creds → ollama
+    assert resolve_provider(Settings(llm_provider="auto")) == "ollama"  # type: ignore[call-arg]
+    # auto + anthropic key → claude (highest priority)
+    assert resolve_provider(
+        Settings(llm_provider="auto", anthropic_api_key="sk-x")  # type: ignore[call-arg]
+    ) == "claude"
+    # auto + azure (no claude) → azure_foundry
+    assert resolve_provider(
+        Settings(  # type: ignore[call-arg]
+            llm_provider="auto",
+            azure_ai_project_endpoint="https://h.services.ai.azure.com/api/projects/p",
+            azure_ai_model_deployment_name="gpt-5",
+        )
+    ) == "azure_foundry"
+    # claude key beats azure when both present
+    assert resolve_provider(
+        Settings(  # type: ignore[call-arg]
+            llm_provider="auto",
+            anthropic_api_key="sk-x",
+            azure_ai_project_endpoint="https://h.services.ai.azure.com/api/projects/p",
+            azure_ai_model_deployment_name="gpt-5",
+        )
+    ) == "claude"
+    # explicit provider is honoured verbatim
+    assert resolve_provider(Settings(llm_provider="ollama", anthropic_api_key="sk-x")) == "ollama"  # type: ignore[call-arg]
 
 
 def test_overrides(monkeypatch) -> None:

@@ -11,10 +11,21 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from .config import Settings, get_settings
+from .config import Settings, get_settings, resolve_provider
 from .factory import AgentSession
 
 console = Console()
+
+
+def _active_model(settings: Settings) -> str:
+    provider = resolve_provider(settings)
+    if provider == "ollama":
+        return settings.ollama_llm_model
+    if provider == "claude":
+        return settings.claude_model
+    if provider == "azure_foundry":
+        return settings.azure_ai_model_deployment_name or "(not set)"
+    return "(unknown)"
 
 
 async def _interactive(settings: Settings) -> int:
@@ -22,8 +33,8 @@ async def _interactive(settings: Settings) -> int:
         console.print(
             Panel.fit(
                 f"[bold]CKAN Agent[/] ready\n"
-                f"Provider: [cyan]{settings.llm_provider}[/]  "
-                f"Model: [cyan]{settings.ollama_llm_model if settings.llm_provider == 'ollama' else settings.claude_model if settings.llm_provider == 'claude' else settings.azure_ai_model_deployment_name}[/]\n"
+                f"Provider: [cyan]{resolve_provider(settings)}[/] (cfg={settings.llm_provider})  "
+                f"Model: [cyan]{_active_model(settings)}[/]\n"
                 f"MCP: [cyan]{settings.mcp_server_url}[/]\n"
                 f"Default portal: [cyan]{settings.ckan_default_base_url}[/]\n"
                 "Type your question, or /quit to exit.",
@@ -61,7 +72,7 @@ def cli() -> None:
         description="Microsoft Agent Framework CLI on top of the CKAN MCP server",
     )
     parser.add_argument("query", nargs="?", help="Run a single question and exit (non-interactive).")
-    parser.add_argument("--provider", choices=["ollama", "azure_foundry", "claude"], default=None)
+    parser.add_argument("--provider", choices=["auto", "ollama", "azure_foundry", "claude"], default=None)
     parser.add_argument("--mcp-url", default=None)
     args = parser.parse_args()
 

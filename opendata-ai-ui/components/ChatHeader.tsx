@@ -10,10 +10,11 @@ export function ChatHeader({ onReset, canReset }: Props) {
     <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 className="text-base font-semibold text-slate-900">
-          CKAN MCP Agent — Demo
+          OpenData AI
         </h1>
         <p className="text-xs text-slate-500">
-          Chat stateless su tutti i portali CKAN configurati.
+          Il tuo agente di intelligenza artificiale per gli open data — portali
+          CKAN e statistiche ufficiali (ISTAT, Eurostat, OCSE).
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

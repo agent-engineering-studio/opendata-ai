@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Provider = Literal["ollama", "azure_foundry", "claude"]
+Provider = Literal["auto", "ollama", "azure_foundry", "claude"]
 
 
 # Verbatim copy of ckan_agent.config.AGENT_INSTRUCTIONS — keep in sync.
@@ -199,7 +199,9 @@ class Settings(BaseSettings):
     )
 
     # LLM provider selection
-    llm_provider: Provider = Field(default="ollama")
+    # "auto" (default) resolves at runtime: claude if ANTHROPIC_API_KEY is set,
+    # else azure_foundry if the Azure AI project is configured, else ollama.
+    llm_provider: Provider = Field(default="auto")
 
     # MCP server URLs. The CKAN agent uses ckan-mcp; the three SDMX-based stats
     # specialists (istat / eurostat / oecd) all share the istat-mcp instance —
@@ -222,6 +224,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_llm_model: str = Field(default="qwen2.5:16k")
     ollama_num_ctx: int = Field(default=16384)
+    # temperature 0 = greedy decoding: maximises faithfulness to tool results
+    # (less dataflow-id / number hallucination) on small local models.
+    ollama_temperature: float = Field(default=0.0)
 
     # Azure AI Foundry
     azure_ai_project_endpoint: str | None = Field(default=None)
@@ -253,6 +258,24 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000)
 
     log_level: str = Field(default="INFO")
+
+
+def resolve_provider(settings: Settings) -> Provider:
+    """Resolve the effective LLM provider.
+
+    Priority when llm_provider == "auto":
+      1. claude         — if ANTHROPIC_API_KEY is set
+      2. azure_foundry  — if AZURE_AI_PROJECT_ENDPOINT + deployment name are set
+      3. ollama         — fallback (local inference; OLLAMA_BASE_URL may point at
+                          a remote inference container in production)
+    """
+    if settings.llm_provider != "auto":
+        return settings.llm_provider
+    if settings.anthropic_api_key:
+        return "claude"
+    if settings.azure_ai_project_endpoint and settings.azure_ai_model_deployment_name:
+        return "azure_foundry"
+    return "ollama"
 
 
 def get_settings() -> Settings:

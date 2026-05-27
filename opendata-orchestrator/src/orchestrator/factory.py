@@ -30,6 +30,7 @@ from .config import (
     OECD_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
+    resolve_provider,
 )
 from .synth import build_aggregator
 from .workflow import build_workflow
@@ -39,8 +40,8 @@ log = logging.getLogger("orchestrator.factory")
 
 def build_chat_client(settings: Settings) -> Any:
     """Return a Microsoft Agent Framework chat client for the configured provider."""
-    provider = settings.llm_provider
-    log.info("Building chat client for provider=%s", provider)
+    provider = resolve_provider(settings)
+    log.info("Building chat client for provider=%s (configured=%s)", provider, settings.llm_provider)
 
     if provider == "ollama":
         from agent_framework_ollama import OllamaChatClient
@@ -156,8 +157,9 @@ class OrchestratorSession:
 
         chat_client = build_chat_client(s)
         default_options: dict[str, object] = {}
-        if s.llm_provider == "ollama":
+        if resolve_provider(s) == "ollama":
             default_options["num_ctx"] = s.ollama_num_ctx
+            default_options["temperature"] = s.ollama_temperature
 
         participants: list[Agent] = []
 

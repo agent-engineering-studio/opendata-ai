@@ -11,18 +11,19 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from .config import Settings, get_settings
+from .config import Settings, get_settings, resolve_provider
 from .factory import OrchestratorSession
 
 console = Console()
 
 
 def _active_model(settings: Settings) -> str:
-    if settings.llm_provider == "ollama":
+    provider = resolve_provider(settings)
+    if provider == "ollama":
         return settings.ollama_llm_model
-    if settings.llm_provider == "azure_foundry":
+    if provider == "azure_foundry":
         return settings.azure_ai_model_deployment_name or "(not set)"
-    if settings.llm_provider == "claude":
+    if provider == "claude":
         return settings.claude_model
     return "(unknown)"
 
@@ -77,7 +78,7 @@ def cli() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=["ollama", "azure_foundry", "claude"],
+        choices=["auto", "ollama", "azure_foundry", "claude"],
         default=None,
     )
     parser.add_argument("--ckan-mcp-url", default=None)
