@@ -29,9 +29,6 @@ ENV TRANSPORT=streamable-http \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS -X POST "http://127.0.0.1:${PORT}${MCP_PATH}" \
-        -H 'Accept: application/json, text/event-stream' \
-        -H 'Content-Type: application/json' \
-        -d '{"jsonrpc":"2.0","id":"hc","method":"tools/list"}' > /dev/null || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT}/healthz" > /dev/null || exit 1
 
 CMD ["istat-mcp-server"]
