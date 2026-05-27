@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import type { ChatMessage, ChatRequest, ChatResponse, Resource } from "@/lib/types";
+import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
+import { resourceToGeo } from "@/lib/geoConvert";
 import { ChatInput } from "@/components/ChatInput";
 
 // Leaflet touches `window`; load the map only on the client.
@@ -22,28 +23,11 @@ const LAYER_COLORS = [
   "#7c3aed", "#0891b2", "#db2777", "#65a30d",
 ];
 
-function parseGeoJson(resource: Resource): unknown | null {
-  const fmt = (resource.format || "").toUpperCase();
-  if (!resource.content) return null;
-  if (fmt !== "GEOJSON" && fmt !== "JSON" && fmt !== "TOPOJSON") return null;
-  try {
-    const obj = JSON.parse(resource.content) as { type?: string };
-    const t = obj?.type;
-    if (t === "FeatureCollection" || t === "Feature" || t === "GeometryCollection")
-      return obj;
-    // bare geometry
-    if (t && ["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"].includes(t))
-      return obj;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export default function MapPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [layers, setLayers] = useState<GeoLayer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [converting, setConverting] = useState(false);
 
   function toggleLayer(id: string) {
     setLayers((prev) =>
@@ -79,23 +63,32 @@ export default function MapPage() {
           ...prev,
           { role: "assistant", text: parsed.text, resources, durationMs },
         ]);
-        // Accumulate any GeoJSON resources as new map layers.
-        setLayers((prev) => {
-          const next = [...prev];
-          for (const r of resources) {
-            const gj = parseGeoJson(r);
-            if (!gj) continue;
-            const id = `${r.url || r.name}-${next.length}`;
-            next.push({
-              id,
-              name: r.name || `Layer ${next.length + 1}`,
-              geojson: gj,
-              color: LAYER_COLORS[next.length % LAYER_COLORS.length],
-              visible: true,
-            });
-          }
-          return next;
-        });
+        // Convert every geographic resource (GeoJSON/KML/GPX/SHP, fetched +
+        // reprojected as needed) and accumulate them as map layers.
+        setConverting(true);
+        try {
+          const results = await Promise.all(
+            resources.map(async (r) => ({ r, geo: await resourceToGeo(r) })),
+          );
+          setLayers((prev) => {
+            const next = [...prev];
+            for (const { r, geo } of results) {
+              if (!geo) continue; // not a geographic resource → skip silently
+              const idx = next.length;
+              next.push({
+                id: `${r.url || r.name}-${idx}`,
+                name: r.name || `Layer ${idx + 1}`,
+                geojson: geo.status === "ok" ? geo.geojson : null,
+                color: LAYER_COLORS[idx % LAYER_COLORS.length],
+                visible: geo.status === "ok",
+                error: geo.status === "ok" ? undefined : geo.reason,
+              });
+            }
+            return next;
+          });
+        } finally {
+          setConverting(false);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -136,23 +129,33 @@ export default function MapPage() {
                 Layer ({geoCount})
               </p>
               <ul className="space-y-1">
-                {layers.map((l) => (
-                  <li key={l.id} className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={l.visible}
-                      onChange={() => toggleLayer(l.id)}
-                    />
-                    <span
-                      className="inline-block h-3 w-3 shrink-0 rounded-sm"
-                      style={{ backgroundColor: l.color }}
-                    />
-                    <span className="truncate text-slate-700" title={l.name}>
-                      {l.name}
-                    </span>
-                  </li>
-                ))}
+                {layers.map((l) => {
+                  const mappable = l.geojson != null;
+                  return (
+                    <li key={l.id} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={l.visible}
+                        disabled={!mappable}
+                        onChange={() => toggleLayer(l.id)}
+                      />
+                      <span
+                        className="inline-block h-3 w-3 shrink-0 rounded-sm"
+                        style={{ backgroundColor: mappable ? l.color : "#cbd5e1" }}
+                      />
+                      <span
+                        className={`truncate ${mappable ? "text-slate-700" : "text-slate-400 line-through"}`}
+                        title={mappable ? l.name : `${l.name} — ${l.error ?? "non mappabile"}`}
+                      >
+                        {l.name}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
+              {converting ? (
+                <p className="mt-1 text-[10px] text-slate-400">Conversione mappe…</p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -184,6 +187,8 @@ export default function MapPage() {
             )}
             {loading ? (
               <div className="text-xs text-slate-400">L&apos;agente sta cercando…</div>
+            ) : converting ? (
+              <div className="text-xs text-slate-400">Conversione dati geografici per la mappa…</div>
             ) : null}
           </div>
           <div className="border-t border-slate-200 p-3">

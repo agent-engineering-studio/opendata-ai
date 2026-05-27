@@ -11,9 +11,10 @@ import { toWgs84 } from "@/lib/geoReproject";
 export type GeoLayer = {
   id: string;
   name: string;
-  geojson: unknown; // GeoJSON FeatureCollection / Feature / Geometry
+  geojson: unknown | null; // null when the resource is geographic but not mappable
   color: string;
   visible: boolean;
+  error?: string; // reason the layer can't be drawn (GML/TopoJSON, fetch failure…)
 };
 
 /**
@@ -61,7 +62,9 @@ export function GeoMap({ layers }: { layers: GeoLayer[] }) {
       if (cancelled || !map) return;
 
       const objs = layerObjsRef.current;
-      const wanted = new Set(layers.filter((l) => l.visible).map((l) => l.id));
+      const wanted = new Set(
+        layers.filter((l) => l.visible && l.geojson != null).map((l) => l.id),
+      );
 
       // Remove layers no longer present or hidden.
       for (const [id, obj] of objs) {
@@ -73,7 +76,7 @@ export function GeoMap({ layers }: { layers: GeoLayer[] }) {
 
       // Add new visible layers.
       for (const layer of layers) {
-        if (!layer.visible || objs.has(layer.id)) continue;
+        if (!layer.visible || layer.geojson == null || objs.has(layer.id)) continue;
         try {
           const wgs84 = toWgs84(layer.geojson as Record<string, unknown>);
           const gj = L.geoJSON(wgs84 as never, {
