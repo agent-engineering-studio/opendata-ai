@@ -101,9 +101,18 @@ function MapView({ geojson }: { geojson: GeoJsonObject }) {
   );
 }
 
-function MapFromContent({ content, format }: { content: string; format: string }) {
+function MapFromContent({
+  content,
+  format,
+  fallbackUrl,
+}: {
+  content: string;
+  format: string;
+  fallbackUrl?: string;
+}) {
   const [geojson, setGeojson] = useState<GeoJsonObject | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,22 +132,31 @@ function MapFromContent({ content, format }: { content: string; format: string }
           if (!cancelled) setGeojson(gj as unknown as GeoJsonObject);
           return;
         } catch {
-          if (!cancelled) setError("conversione non riuscita");
+          if (!cancelled) {
+            if (fallbackUrl) setUseFallback(true);
+            else setError("conversione non riuscita");
+          }
           return;
         }
       }
-      if (!cancelled)
-        setError(
-          fmt === "GML" || fmt === "TOPOJSON"
-            ? `anteprima mappa non supportata per ${fmt} (apri il file)`
-            : "formato non riconosciuto",
-        );
+      // GeoJSON content that didn't parse (often truncated inline) → fetch the
+      // full file from the URL if we have one.
+      if (!cancelled) {
+        if (fallbackUrl) setUseFallback(true);
+        else
+          setError(
+            fmt === "GML" || fmt === "TOPOJSON"
+              ? `anteprima mappa non supportata per ${fmt} (apri il file)`
+              : "formato non riconosciuto",
+          );
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [content, format]);
+  }, [content, format, fallbackUrl]);
 
+  if (useFallback && fallbackUrl) return <LazyMap url={fallbackUrl} format={format} />;
   if (error) return <div className="text-xs text-slate-500">Mappa: {error}.</div>;
   if (!geojson) return <div className="text-xs text-slate-500">Preparazione mappa…</div>;
   return <MapView geojson={geojson} />;
@@ -168,8 +186,15 @@ export function GeoResourceMap({
   url?: string;
   format: string;
 }) {
-  if (content && content.trim().length > 0)
-    return <MapFromContent content={content} format={format} />;
+  const inline = (content || "").trim();
+  // The orchestrator caps embedded content; a truncated GeoJSON is invalid JSON,
+  // so prefer the full file from the URL and only use inline content when it's complete.
+  const truncated = /(troncato a \d+ byte|truncated at \d+ bytes|\[…|…\[)/.test(
+    inline.slice(-300),
+  );
+  if (inline && !truncated)
+    return <MapFromContent content={inline} format={format} fallbackUrl={url} />;
   if (url) return <LazyMap url={url} format={format} />;
+  if (inline) return <MapFromContent content={inline} format={format} />;
   return null;
 }

@@ -92,9 +92,12 @@ function describe(resource: Resource): Described | null {
   const fmt = (resource.format || "").toUpperCase();
 
   if (GEO_FORMATS.has(fmt)) {
+    const mapped = new Set(["GEOJSON", "KML", "GPX", "GML", "TOPOJSON"]).has(fmt);
     return {
       kind: "Dati geografici",
-      summary: `formato ${fmt} — anteprima mappa in arrivo`,
+      summary: mapped
+        ? `formato ${fmt} — visualizzati sulla mappa qui sotto`
+        : `formato ${fmt} — apri il file per visualizzarlo`,
       geo: true,
     };
   }
