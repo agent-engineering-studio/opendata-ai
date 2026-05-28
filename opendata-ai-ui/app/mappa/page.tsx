@@ -7,6 +7,7 @@ import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
 import { resourceToGeo } from "@/lib/geoConvert";
 import { ChatInput } from "@/components/ChatInput";
+import { AssistantMarkdown } from "@/components/AssistantMarkdown";
 
 // Leaflet touches `window`; load the map only on the client.
 const GeoMap = dynamic(() => import("@/components/GeoMap").then((m) => m.GeoMap), {
@@ -181,7 +182,11 @@ export default function MapPage() {
                         : "border border-slate-200 bg-white text-slate-800"
                   }`}
                 >
-                  {m.text}
+                  {m.role === "assistant" ? (
+                    <AssistantMarkdown text={m.text} />
+                  ) : (
+                    m.text
+                  )}
                 </div>
               ))
             )}
