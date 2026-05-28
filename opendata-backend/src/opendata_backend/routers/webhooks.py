@@ -1,24 +1,70 @@
-"""Clerk webhook receiver — stub until svix signature verification lands (step 3)."""
+"""Clerk webhook receiver — verifies svix signature, logs + acks."""
 
 from __future__ import annotations
 
+import json
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from ..config import Settings, get_settings
+from ..shared.svix_verify import SvixSignatureError, verify_clerk_webhook
 
 log = logging.getLogger("opendata-backend.webhooks")
 router = APIRouter(tags=["webhooks"])
 
 
 @router.post("/webhooks/clerk")
-async def clerk(request: Request) -> dict[str, str]:
-    """Accept and log the payload only. Signature verification arrives in step 3."""
+async def clerk(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    """Validate svix signature, structured-log the event, return 200.
+
+    Persistence into `opendata.users` arrives in step 4 — for now we ack
+    every well-signed event so Clerk doesn't retry into our face.
+    """
+    body = await request.body()
+
+    if not settings.clerk_webhook_secret:
+        log.warning("clerk webhook hit but CLERK_WEBHOOK_SECRET is not set; rejecting")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="webhook receiver is not configured",
+        )
+
     try:
-        body = await request.json()
-    except Exception:
-        body = None
+        verify_clerk_webhook(
+            payload=body,
+            headers=request.headers,
+            secret=settings.clerk_webhook_secret,
+        )
+    except SvixSignatureError as exc:
+        log.info("clerk webhook signature rejected: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid svix signature",
+        ) from exc
+
+    try:
+        event = json.loads(body or b"{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="invalid JSON body") from exc
+
+    event_type = event.get("type")
+    data = event.get("data") or {}
     log.info(
-        "clerk webhook received (verification not yet enforced): event=%r",
-        (body or {}).get("type") if isinstance(body, dict) else None,
+        "clerk webhook event=%s user_id=%s primary_email=%s",
+        event_type,
+        data.get("id"),
+        _primary_email(data),
     )
-    return {"status": "accepted-noop"}
+    return {"status": "ok"}
+
+
+def _primary_email(data: dict) -> str | None:
+    primary_id = data.get("primary_email_address_id")
+    for addr in data.get("email_addresses") or []:
+        if addr.get("id") == primary_id:
+            return addr.get("email_address")
+    return None

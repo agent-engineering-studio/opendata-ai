@@ -273,6 +273,32 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO")
 
+    # ── Clerk auth ───────────────────────────────────────────────────
+    # When auth_enabled=False (local dev), `require_user` bypasses verification
+    # and returns a synthetic dev user so the UI can hit the backend without
+    # carrying a real JWT. Production envs MUST set auth_enabled=True.
+    auth_enabled: bool = Field(default=True)
+
+    # Frontend-facing key — surfaced to the UI bundle, not used by the backend
+    # to verify tokens. Kept here so the env layout is symmetrical with the
+    # frontend's expectations.
+    clerk_publishable_key: str | None = Field(default=None)
+    # Backend secret — needed to call Clerk's Backend API (e.g. fetching user
+    # profile data outside of webhook flows). Not required to verify JWTs
+    # (those are verified via JWKS).
+    clerk_secret_key: str | None = Field(default=None)
+    # Issuer baked into every Clerk JWT — looks like
+    #   https://<your-app>.clerk.accounts.dev   (dev instance)
+    #   https://clerk.<your-domain>            (production instance)
+    # Used to fetch JWKS at `${clerk_jwt_issuer}/.well-known/jwks.json` and as
+    # the expected `iss` claim.
+    clerk_jwt_issuer: str | None = Field(default=None)
+    # Webhook signing secret — issued by Clerk per endpoint, looks like
+    # `whsec_…`. Verified with svix-style HMAC-SHA256 on /webhooks/clerk.
+    clerk_webhook_secret: str | None = Field(default=None)
+    # JWKS cache TTL — how long we trust a downloaded JWKS before refetching.
+    clerk_jwks_cache_seconds: int = Field(default=600)
+
 
 def resolve_provider(settings: Settings) -> Provider:
     """Resolve the effective LLM provider.

@@ -9,11 +9,12 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from opendata_core.ckan import CkanClient
 
+from ..auth import ClerkUser, require_user
 from ..orchestrator.parsing import (
     Resource,
     fill_missing_content,
@@ -95,20 +96,32 @@ async def _run_orchestrator(query: str, base_url: str | None) -> ChatResponse:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest) -> ChatResponse:
+async def chat(
+    req: ChatRequest,
+    user: ClerkUser = Depends(require_user),
+) -> ChatResponse:
     """Back-compat alias of /datasets/search — used by the legacy frontend."""
+    log.info("/chat subject=%s", user.subject)
     return await _run_orchestrator(req.query, req.base_url)
 
 
 @router.post("/datasets/search", response_model=ChatResponse)
-async def search(req: ChatRequest) -> ChatResponse:
+async def search(
+    req: ChatRequest,
+    user: ClerkUser = Depends(require_user),
+) -> ChatResponse:
     """Multi-source fan-out (CKAN + ISTAT [+ Eurostat + OECD if enabled])."""
+    log.info("/datasets/search subject=%s", user.subject)
     return await _run_orchestrator(req.query, req.base_url)
 
 
 @router.post("/datasets/by-category", response_model=ChatResponse)
-async def by_category(req: ByCategoryRequest) -> ChatResponse:
+async def by_category(
+    req: ByCategoryRequest,
+    user: ClerkUser = Depends(require_user),
+) -> ChatResponse:
     """Search restricted to a category (and optional region)."""
+    log.info("/datasets/by-category subject=%s category=%r", user.subject, req.category)
     parts = [f"Find datasets about '{req.category}'"]
     if req.region:
         parts.append(f"in the region of {req.region}")
@@ -118,15 +131,22 @@ async def by_category(req: ByCategoryRequest) -> ChatResponse:
 
 
 @router.post("/datasets/fetch", response_model=FetchResponse)
-async def fetch(req: FetchRequest) -> FetchResponse:
+async def fetch(
+    req: FetchRequest,
+    user: ClerkUser = Depends(require_user),
+) -> FetchResponse:
     """Download a single resource via the shared CkanClient — no LLM involved."""
+    log.info("/datasets/fetch subject=%s url=%r", user.subject, req.url)
     async with CkanClient() as client:
         result = await client.download_resource(req.url)
     return FetchResponse(**result)
 
 
 @router.post("/datasets/classify")
-async def classify(req: ClassifyRequest) -> dict[str, str]:
+async def classify(
+    req: ClassifyRequest,
+    user: ClerkUser = Depends(require_user),
+) -> dict[str, str]:
     """Stub — implemented in step 6 (Claude Haiku 4.5)."""
     raise HTTPException(
         status_code=501,
