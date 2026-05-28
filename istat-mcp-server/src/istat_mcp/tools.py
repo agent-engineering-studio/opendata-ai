@@ -342,17 +342,18 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def istat_territorial_codes(
-        resolve_region: str | None = None,
+        resolve_region: bool | str | None = None,
         base_url: str | None = None,
     ) -> dict[str, Any]:
         """Return the Italian territorial hierarchy used by ISTAT dataflows (CL_ITTER107).
 
         Without arguments this returns the top-level (country + macro-regions).
-        Pass `resolve_region` to pull the full CL_ITTER107 codelist (and let
-        the caller filter) via `istat_get_codelist` under the hood.
+        Set `resolve_region` to true to pull the full CL_ITTER107 codelist (and
+        let the caller filter) via `istat_get_codelist` under the hood.
 
         Args:
-            resolve_region: If truthy, returns the full CL_ITTER107 codelist instead of the top-level snapshot.
+            resolve_region: Set to true (or any non-empty string) to return the
+                full CL_ITTER107 codelist instead of the top-level snapshot.
             base_url: SDMX endpoint root.
         """
         if not resolve_region:
