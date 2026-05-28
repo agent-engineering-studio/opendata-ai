@@ -8,6 +8,8 @@ import { ChartPreview, isChartable } from "./preview/ChartPreview";
 import { DataDescription } from "./preview/DataDescription";
 import { MapEmbed } from "./preview/MapEmbed";
 import { GeoResourceMap, detectGeoFormat } from "./preview/GeoResourceMap";
+import { ZipPreview } from "./preview/ZipPreview";
+import { isZip } from "@/lib/geoConvert";
 
 function formatBadgeColor(format: string): string {
   const f = format.toUpperCase();
@@ -48,8 +50,10 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   // mislabelled it (e.g. a GeoJSON served as TXT).
   const badge = geoFormat ?? (resource.format?.trim() ? resource.format.toUpperCase() : "—");
   const isGeo = !!geoFormat;
+  const isArchive = isZip(resource.format, resource.url || resource.name);
   const canPreview =
     hasMap ||
+    (isArchive && !!resource.url) ||
     (isGeo && (!!resource.content || !!resource.url)) ||
     isPreviewable(resource.format, resource.content, resource.url);
   const isCsv = resource.format?.toUpperCase() === "CSV";
@@ -103,6 +107,8 @@ export function ResourceCard({ resource }: { resource: Resource }) {
               <DataDescription resource={resource} />
               {hasMap ? (
                 <MapEmbed html={resource.preview_html as string} />
+              ) : isArchive ? (
+                <ZipPreview url={resource.url} name={resource.name} />
               ) : isGeo ? (
                 <GeoResourceMap
                   content={resource.content}
