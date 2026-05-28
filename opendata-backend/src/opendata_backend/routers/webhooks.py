@@ -8,6 +8,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..config import Settings, get_settings
+from ..db.repositories import users as users_repo
+from ..db.session import get_session_factory
 from ..shared.svix_verify import SvixSignatureError, verify_clerk_webhook
 
 log = logging.getLogger("opendata-backend.webhooks")
@@ -53,12 +55,35 @@ async def clerk(
 
     event_type = event.get("type")
     data = event.get("data") or {}
+    clerk_user_id = data.get("id")
+    email = _primary_email(data)
     log.info(
         "clerk webhook event=%s user_id=%s primary_email=%s",
-        event_type,
-        data.get("id"),
-        _primary_email(data),
+        event_type, clerk_user_id, email,
     )
+
+    # Best-effort persistence — if the DB isn't configured yet, just ack.
+    if clerk_user_id and event_type in {"user.created", "user.updated", "user.deleted"}:
+        try:
+            factory = get_session_factory()
+        except RuntimeError:
+            log.warning("DB not configured; skipping persistence for %s", event_type)
+            return {"status": "ok"}
+        async with factory() as session:
+            if event_type == "user.deleted":
+                await users_repo.soft_delete(session, clerk_user_id=clerk_user_id)
+            else:
+                display_name = " ".join(
+                    p for p in (data.get("first_name"), data.get("last_name")) if p
+                ) or None
+                await users_repo.get_or_create(
+                    session,
+                    clerk_user_id=clerk_user_id,
+                    email=email,
+                    display_name=display_name,
+                )
+            await session.commit()
+
     return {"status": "ok"}
 
 

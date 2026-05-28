@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
+from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
 from .routers import api_keys, datasets, me, webhooks
 from .state import session_holder
@@ -32,9 +33,22 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     session_holder.settings = settings
     log.info(
-        "Starting opendata-backend | provider=%s ckan_mcp=%s istat_mcp=%s",
-        settings.llm_provider, settings.ckan_mcp_url, settings.istat_mcp_url,
+        "Starting opendata-backend | provider=%s ckan_mcp=%s istat_mcp=%s db=%s",
+        settings.llm_provider,
+        settings.ckan_mcp_url,
+        settings.istat_mcp_url,
+        "configured" if settings.database_url else "off",
     )
+
+    # Database — optional at boot (endpoints that need it will return 503 when
+    # it's missing, see `db.session.get_session_factory`).
+    if settings.database_url:
+        db = create_database(settings.database_url)
+        set_session_factory(db.sessionmaker)
+        session_holder.database = db
+    else:
+        log.warning("DATABASE_URL not set — /me/*, /api-keys/* and /datasets/classify will 503")
+
     try:
         session_holder.session = OrchestratorSession(settings)
         await session_holder.session.__aenter__()
@@ -49,6 +63,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             log.info("Shutting down OrchestratorSession")
             await session_holder.session.__aexit__(None, None, None)
             session_holder.session = None
+        if session_holder.database is not None:
+            await session_holder.database.dispose()
+            set_session_factory(None)
+            session_holder.database = None
 
 
 app = FastAPI(title="opendata-backend", version="0.1.0", lifespan=lifespan)

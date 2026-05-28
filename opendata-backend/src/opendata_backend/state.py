@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .config import Settings
+from .db.session import Database
 from .factory import OrchestratorSession
 
 
@@ -16,6 +17,7 @@ from .factory import OrchestratorSession
 class _Holder:
     session: OrchestratorSession | None = None
     settings: Settings | None = None
+    database: Database | None = None
 
 
 session_holder = _Holder()

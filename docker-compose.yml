@@ -23,6 +23,26 @@ x-ollama-base: &ollama-base
     start_period: 30s
 
 services:
+  # ───── Postgres 16 — shared state for users / favorites / history / api-keys / classifications ─────
+  postgres:
+    image: postgres:16-alpine
+    container_name: opendata-ai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opendata}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opendata}
+      POSTGRES_DB: ${POSTGRES_DB:-opendata}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-opendata} -d $${POSTGRES_DB:-opendata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   # ───── Ollama — GPU profile ─────
   ollama-gpu:
     <<: *ollama-base
@@ -132,10 +152,13 @@ services:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER:-}
       CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://opendata:opendata@postgres:5432/opendata}
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
+      postgres:
+        condition: service_healthy
       ckan-mcp:
         condition: service_started
       istat-mcp:
@@ -171,3 +194,5 @@ services:
 volumes:
   ollama_data:
     name: opendata-ai-ollama-data
+  postgres_data:
+    name: opendata-ai-postgres-data

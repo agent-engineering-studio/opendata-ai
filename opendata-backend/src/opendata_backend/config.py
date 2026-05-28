@@ -299,6 +299,12 @@ class Settings(BaseSettings):
     # JWKS cache TTL — how long we trust a downloaded JWKS before refetching.
     clerk_jwks_cache_seconds: int = Field(default=600)
 
+    # ── Database ─────────────────────────────────────────────────────
+    # Required at runtime when any /me/* or /api-keys/* or /datasets/classify
+    # endpoint is hit. Format: postgresql+asyncpg://user:pass@host:5432/db
+    # The schema `opendata` is created by Alembic migration 0001_initial.
+    database_url: str | None = Field(default=None)
+
 
 def resolve_provider(settings: Settings) -> Provider:
     """Resolve the effective LLM provider.

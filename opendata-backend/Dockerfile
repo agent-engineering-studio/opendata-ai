@@ -16,8 +16,9 @@ COPY opendata_core/pyproject.toml opendata_core/README.md /opendata_core/
 COPY opendata_core/src /opendata_core/src
 RUN pip install --upgrade pip && pip install /opendata_core
 
-COPY opendata-backend/pyproject.toml opendata-backend/README.md ./
+COPY opendata-backend/pyproject.toml opendata-backend/README.md opendata-backend/alembic.ini ./
 COPY opendata-backend/src ./src
+COPY opendata-backend/migrations ./migrations
 RUN pip install --pre ".[azure,claude]"
 
 RUN useradd --system --create-home --uid 1000 app \
