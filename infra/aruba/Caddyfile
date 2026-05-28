@@ -1,0 +1,43 @@
+# Aruba VPS reverse proxy — terminates TLS via Let's Encrypt automatically.
+#
+# Replace `api.opendata.example.com` with your real FQDN before deploying.
+# Caddy stores ACME state in the `caddy_data` volume so certs survive
+# container restarts.
+
+{
+	email admin@example.com
+}
+
+api.opendata.example.com {
+	encode zstd gzip
+
+	# Forward to the backend container. Caddy preserves the original
+	# Host header so the FastAPI CORS middleware sees the right origin.
+	reverse_proxy opendata-backend:8000 {
+		# Backend itself is plain HTTP inside the docker network.
+		transport http {
+			read_timeout 600s
+			write_timeout 600s
+		}
+	}
+
+	# Backend security headers.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Backend uses fixed-window rate limit; surface its Retry-After header.
+	@retry header_regexp Retry-After .+
+	handle @retry {
+		respond {http.reverse_proxy.status_code}
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}

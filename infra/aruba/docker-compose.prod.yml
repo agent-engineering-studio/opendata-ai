@@ -1,0 +1,148 @@
+name: opendata-ai-prod
+
+# Production stack for a single-host Aruba VPS.
+#
+# Pulls images from GHCR (built by `.github/workflows/docker-publish.yml`) and
+# exposes the backend through Caddy, which terminates TLS via Let's Encrypt.
+# Postgres + Redis live next to the backend on the same host with named
+# volumes for durability.
+#
+# Frontend is NOT in this file — it is hosted on GitHub Pages and consumes
+# `https://api.opendata.<your-domain>` from the browser.
+
+x-image-owner: &image-owner ghcr.io/agent-engineering-studio
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: opendata-ai-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      opendata-backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: opendata-ai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: opendata-ai-redis
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes",
+              "--requirepass", "${REDIS_PASSWORD:-}"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-}\" ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  ckan-mcp:
+    image: *image-owner/ckan-mcp-server:latest
+    container_name: ckan-mcp
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL}
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+
+  istat-mcp:
+    image: *image-owner/istat-mcp-server:latest
+    container_name: istat-mcp
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8081"
+      MCP_PATH: /mcp
+      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL}
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+
+  osm-mcp:
+    image: *image-owner/osm-mcp:latest
+    container_name: osm-mcp
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8080"
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+
+  opendata-backend:
+    image: *image-owner/opendata-backend:latest
+    container_name: opendata-backend
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}
+      CKAN_MCP_URL: http://ckan-mcp:8080/mcp
+      ISTAT_MCP_URL: http://istat-mcp:8081/mcp
+      OSM_MCP_URL: http://osm-mcp:8080/mcp
+      ENABLE_CKAN: "true"
+      ENABLE_ISTAT: "true"
+      ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-true}
+      ENABLE_OECD: ${ENABLE_OECD:-true}
+      ENABLE_OSM_MAPS: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      AUTH_ENABLED: "true"
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ckan-mcp:
+        condition: service_started
+      istat-mcp:
+        condition: service_started
+      osm-mcp:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  caddy_data: { name: opendata-ai-caddy-data }
+  caddy_config: { name: opendata-ai-caddy-config }
+  postgres_data: { name: opendata-ai-postgres-data }
+  redis_data: { name: opendata-ai-redis-data }

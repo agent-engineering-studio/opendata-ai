@@ -1,0 +1,61 @@
+name: deploy-aruba
+
+# Triggered on semver tags. SSHs into the Aruba VPS, pulls the new tag and
+# runs `docker compose up -d` against the production compose file. Skips
+# gracefully if the SSH secrets are not configured (initial bootstrap is
+# manual — see infra/aruba/README.md).
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to deploy (default: HEAD)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bail out if SSH not configured
+        id: have_secret
+        run: |
+          if [[ -z "${{ secrets.ARUBA_SSH_KEY }}" || -z "${{ vars.ARUBA_HOST }}" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "ARUBA_SSH_KEY secret or ARUBA_HOST variable not set; skipping deploy."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure SSH
+        if: steps.have_secret.outputs.configured == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ARUBA_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 "${{ vars.ARUBA_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Pull + redeploy on Aruba
+        if: steps.have_secret.outputs.configured == 'true'
+        env:
+          REF: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || github.ref }}
+        run: |
+          ssh "${{ vars.ARUBA_USER }}@${{ vars.ARUBA_HOST }}" bash -s <<EOF
+            set -euo pipefail
+            cd "${{ vars.ARUBA_REPO_PATH }}"
+            git fetch --tags --prune
+            git checkout "$REF"
+            git submodule update --init --depth=1
+            cd infra/aruba
+            docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+            docker compose --env-file .env.prod -f docker-compose.prod.yml \
+              exec -T opendata-backend alembic upgrade head
+            sleep 5
+            curl -fsS http://127.0.0.1:8000/health
+          EOF

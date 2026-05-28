@@ -19,7 +19,8 @@ RUN pip install --upgrade pip && pip install /opendata_core
 COPY opendata-backend/pyproject.toml opendata-backend/README.md opendata-backend/alembic.ini ./
 COPY opendata-backend/src ./src
 COPY opendata-backend/migrations ./migrations
-RUN pip install --pre ".[azure,claude]"
+COPY opendata-backend/scripts ./scripts
+RUN pip install --pre ".[azure,claude]" && chmod +x ./scripts/migrate.sh
 
 RUN useradd --system --create-home --uid 1000 app \
     && chown -R app:app /app
@@ -34,4 +35,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${API_PORT}/health" || exit 1
 
-CMD ["opendata-backend-api"]
+CMD ["./scripts/migrate.sh"]
