@@ -82,6 +82,11 @@ export function GeoResourceMap({
       if (cancelled) return;
       if (!res) setState({ status: "message", text: "formato non riconosciuto" });
       else if (res.status === "ok") setState({ status: "ok", geojson: res.geojson });
+      else if (res.status === "wms")
+        setState({
+          status: "message",
+          text: "WMS — disponibile come layer nella pagina /mappa",
+        });
       else setState({ status: "message", text: res.reason });
     });
     return () => {

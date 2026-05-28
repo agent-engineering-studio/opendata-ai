@@ -74,15 +74,40 @@ export default function MapPage() {
           setLayers((prev) => {
             const next = [...prev];
             for (const { r, geo } of results) {
-              if (!geo) continue; // not a geographic resource → skip silently
+              // WMS: one entry per layer published by the GetCapabilities.
+              if (geo && geo.status === "wms") {
+                for (const wmsLayer of geo.layers) {
+                  const idx = next.length;
+                  next.push({
+                    id: `${r.url || r.name}-${wmsLayer.name}-${idx}`,
+                    name: `${r.name || "WMS"} — ${wmsLayer.title || wmsLayer.name}`,
+                    geojson: null,
+                    wms: {
+                      baseUrl: geo.baseUrl,
+                      layerName: wmsLayer.name,
+                      bbox: wmsLayer.bbox,
+                    },
+                    color: LAYER_COLORS[idx % LAYER_COLORS.length],
+                    visible: true,
+                  });
+                }
+                continue;
+              }
               const idx = next.length;
+              const geojson = geo && geo.status === "ok" ? geo.geojson : null;
+              const error =
+                geo == null
+                  ? `formato non geografico${r.format ? ` (${r.format})` : ""}`
+                  : geo.status === "ok"
+                    ? undefined
+                    : geo.reason;
               next.push({
                 id: `${r.url || r.name}-${idx}`,
-                name: r.name || `Layer ${idx + 1}`,
-                geojson: geo.status === "ok" ? geo.geojson : null,
+                name: r.name || `Risorsa ${idx + 1}`,
+                geojson,
                 color: LAYER_COLORS[idx % LAYER_COLORS.length],
-                visible: geo.status === "ok",
-                error: geo.status === "ok" ? undefined : geo.reason,
+                visible: geojson != null,
+                error,
               });
             }
             return next;
@@ -131,7 +156,7 @@ export default function MapPage() {
               </p>
               <ul className="space-y-1">
                 {layers.map((l) => {
-                  const mappable = l.geojson != null;
+                  const mappable = l.geojson != null || l.wms != null;
                   return (
                     <li key={l.id} className="flex items-center gap-2 text-xs">
                       <input
