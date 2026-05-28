@@ -205,9 +205,12 @@ services:
     ports:
       - "${UI_PORT:-3000}:3000"
     environment:
-      AGENT_API_URL: ${AGENT_API_URL:-http://opendata-backend:8000}
-      # Slow local models (qwen2.5:32b fan-out) can take minutes; default 10 min.
-      AGENT_API_TIMEOUT_MS: ${AGENT_API_TIMEOUT_MS:-600000}
+      # `next dev` is what runs inside this container; the static export
+      # bakes these vars at build time. Keep them in sync.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
     depends_on:
       opendata-backend:
         condition: service_started

@@ -277,6 +277,11 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO")
 
+    # CORS — comma-separated list of origins allowed to call the backend.
+    # In production this is the GitHub Pages domain hosting the frontend
+    # (e.g. https://opendata.<your-domain>). In local dev keep localhost:3000.
+    cors_allow_origins: str = Field(default="http://localhost:3000")
+
     # ── Clerk auth ───────────────────────────────────────────────────
     # When auth_enabled=False (local dev), `require_user` bypasses verification
     # and returns a synthetic dev user so the UI can hit the backend without

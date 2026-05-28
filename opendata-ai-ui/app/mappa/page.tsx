@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useAuth } from "@clerk/nextjs";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
+import { apiFetch } from "@/lib/api";
 import { resourceToGeo } from "@/lib/geoConvert";
 import { ChatInput } from "@/components/ChatInput";
 import { AssistantMarkdown } from "@/components/AssistantMarkdown";
@@ -25,6 +27,7 @@ const LAYER_COLORS = [
 ];
 
 export default function MapPage() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [layers, setLayers] = useState<GeoLayer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,9 +45,10 @@ export default function MapPage() {
     const t0 = performance.now();
     try {
       const body: ChatRequest = { query };
-      const res = await fetch("/api/chat", {
+      const token = await getToken();
+      const res = await apiFetch("/datasets/search", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        token,
         body: JSON.stringify(body),
       });
       const raw = await res.text();

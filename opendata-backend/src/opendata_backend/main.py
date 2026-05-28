@@ -17,6 +17,7 @@ from typing import AsyncIterator
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import redis.asyncio as redis
@@ -92,6 +93,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="opendata-backend", version="0.1.0", lifespan=lifespan)
+
+_allowed_origins = [
+    o.strip() for o in get_settings().cors_allow_origins.split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Retry-After"],
+)
 
 
 @app.middleware("http")
