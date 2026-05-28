@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo, useState } from "react";
 import { useProxyFetch } from "@/lib/useProxyFetch";
 
 type Sheet = {
@@ -31,85 +30,55 @@ async function decodeXlsx(resp: Response): Promise<Workbook> {
   return { sheets };
 }
 
-const ROW_HEIGHT = 32;
+const MAX_ROWS = 500;
 
 function SheetTable({ sheet }: { sheet: Sheet }) {
-  const header = sheet.rows[0] ?? [];
-  const body = sheet.rows.slice(1);
-
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const virtualizer = useVirtualizer({
-    count: body.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
-  });
-
   if (sheet.rows.length === 0) {
     return <div className="text-xs text-slate-500">Foglio vuoto.</div>;
   }
 
+  const header = sheet.rows[0] ?? [];
+  const body = sheet.rows.slice(1);
+  const shown = body.slice(0, MAX_ROWS);
+
   return (
     <div className="space-y-2">
       <div className="text-xs text-slate-500">
-        {body.length} righ{body.length === 1 ? "a" : "e"} · {header.length}{" "}
-        colonn{header.length === 1 ? "a" : "e"}
+        {body.length.toLocaleString("it-IT")} righ{body.length === 1 ? "a" : "e"} ·{" "}
+        {header.length} colonn{header.length === 1 ? "a" : "e"}
+        {body.length > MAX_ROWS ? ` · mostrate le prime ${MAX_ROWS}` : ""}
       </div>
-      <div
-        ref={scrollRef}
-        className="max-h-96 overflow-auto rounded border border-slate-200"
-      >
-        <table className="w-full border-collapse text-xs">
-          <thead className="sticky top-0 bg-slate-100">
-            <tr>
+      <div className="max-h-96 overflow-auto rounded border border-slate-200">
+        <table className="min-w-full border-collapse text-xs">
+          <thead>
+            <tr className="sticky top-0 z-10">
               {header.map((h, i) => (
                 <th
                   key={i}
-                  className="border-b border-slate-200 px-2 py-1 text-left font-semibold text-slate-700"
+                  className="whitespace-nowrap border-b border-slate-200 bg-slate-100 px-2.5 py-1.5 text-left font-semibold text-slate-700"
                 >
                   {String(h ?? "")}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody
-            style={{
-              position: "relative",
-              height: virtualizer.getTotalSize(),
-              display: "block",
-            }}
-          >
-            {virtualizer.getVirtualItems().map((vi) => {
-              const row = body[vi.index] ?? [];
-              return (
-                <tr
-                  key={vi.key}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: vi.size,
-                    transform: `translateY(${vi.start}px)`,
-                    display: "table",
-                    tableLayout: "fixed",
-                  }}
-                >
-                  {header.map((_, i) => {
-                    const value = String(row[i] ?? "");
-                    return (
-                      <td
-                        key={i}
-                        title={value}
-                        className="overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-2 py-1"
-                      >
-                        {value}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
+          <tbody>
+            {shown.map((row, ri) => (
+              <tr key={ri} className={ri % 2 === 1 ? "bg-slate-50/60" : "bg-white"}>
+                {header.map((_, i) => {
+                  const value = String(row[i] ?? "");
+                  return (
+                    <td
+                      key={i}
+                      title={value}
+                      className="max-w-[22rem] truncate border-b border-slate-100 px-2.5 py-1 text-slate-800"
+                    >
+                      {value}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

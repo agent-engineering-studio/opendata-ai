@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [ ckan-mcp-server, ckan-mcp-agent ]
+        package: [ ckan-mcp-server, ckan-mcp-agent, istat-mcp-server, istat-mcp-agent, osm-mcp, opendata-orchestrator ]
     defaults:
       run:
         working-directory: ${{ matrix.package }}
@@ -45,8 +45,12 @@ jobs:
     strategy:
       matrix:
         service:
-          - { name: ckan-mcp-server, context: ckan-mcp-server }
-          - { name: ckan-mcp-agent,  context: ckan-mcp-agent  }
+          - { name: ckan-mcp-server,       context: ckan-mcp-server }
+          - { name: ckan-mcp-agent,        context: ckan-mcp-agent  }
+          - { name: istat-mcp-server,      context: istat-mcp-server }
+          - { name: istat-mcp-agent,       context: istat-mcp-agent  }
+          - { name: osm-mcp,               context: osm-mcp }
+          - { name: opendata-orchestrator, context: opendata-orchestrator }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

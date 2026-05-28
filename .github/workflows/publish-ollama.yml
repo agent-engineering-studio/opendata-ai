@@ -8,7 +8,7 @@ on:
       base_model:
         description: 'Base Ollama model to bake in'
         required: false
-        default: 'llama3.1:8b'
+        default: 'qwen2.5:32b'
       num_ctx:
         description: 'Context window size (num_ctx)'
         required: false
@@ -16,7 +16,11 @@ on:
       model_tag:
         description: 'Name of the custom model created inside the image'
         required: false
-        default: 'llama3.1:16k'
+        default: 'qwen2.5:32k'
+      temperature:
+        description: 'Sampling temperature baked into the model (0 = greedy)'
+        required: false
+        default: '0'
       push_latest:
         description: 'Also tag as :latest'
         required: false
@@ -30,7 +34,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ckan-mcp-ollama
+  IMAGE_NAME: opendata-ai-ollama
   IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -48,9 +52,10 @@ jobs:
       - name: Resolve build args
         id: args
         run: |
-          echo "base_model=${{ github.event.inputs.base_model || 'llama3.1:8b' }}"    >> "$GITHUB_OUTPUT"
+          echo "base_model=${{ github.event.inputs.base_model || 'qwen2.5:32b' }}"   >> "$GITHUB_OUTPUT"
           echo "num_ctx=${{ github.event.inputs.num_ctx || '16384' }}"                >> "$GITHUB_OUTPUT"
-          echo "model_tag=${{ github.event.inputs.model_tag || 'llama3.1:16k' }}"    >> "$GITHUB_OUTPUT"
+          echo "model_tag=${{ github.event.inputs.model_tag || 'qwen2.5:32k' }}"     >> "$GITHUB_OUTPUT"
+          echo "temperature=${{ github.event.inputs.temperature || '0' }}"           >> "$GITHUB_OUTPUT"
 
       - name: Free disk space
         run: |
@@ -79,8 +84,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' || github.event.inputs.push_latest == 'true' }}
             type=raw,value=${{ steps.args.outputs.model_tag }}
           labels: |
-            org.opencontainers.image.title=ckan-mcp-ollama
-            org.opencontainers.image.description=Ollama with ${{ steps.args.outputs.model_tag }} (num_ctx=${{ steps.args.outputs.num_ctx }}) pre-loaded for mcp-ckan
+            org.opencontainers.image.title=opendata-ai-ollama
+            org.opencontainers.image.description=Ollama with ${{ steps.args.outputs.model_tag }} (num_ctx=${{ steps.args.outputs.num_ctx }}) pre-loaded for opendata-ai (CKAN + ISTAT + Eurostat + OECD)
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
 
@@ -99,6 +104,7 @@ jobs:
             BASE_MODEL=${{ steps.args.outputs.base_model }}
             NUM_CTX=${{ steps.args.outputs.num_ctx }}
             MODEL_TAG=${{ steps.args.outputs.model_tag }}
+            TEMPERATURE=${{ steps.args.outputs.temperature }}
           # No GHA layer cache — the 4.9 GB model layer must be stored in the
           # registry, not the ephemeral GHA cache (10 GB cap).
           provenance: false

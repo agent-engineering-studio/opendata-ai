@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Provider = Literal["ollama", "azure_foundry", "claude"]
+Provider = Literal["auto", "ollama", "azure_foundry", "claude"]
 
 
 AGENT_INSTRUCTIONS = (
@@ -36,8 +36,19 @@ AGENT_INSTRUCTIONS = (
     "First, USE the ckan_package_search tool with q=<keywords from the user query> "
     "and base_url=<the portal URL you picked above>. "
     "If you get 0 results, USE the tool one more time with shorter keywords.\n\n"
-    "Then, for each result that has resources of format CSV / JSON / GeoJSON / TXT, "
-    "USE the ckan_resource_download tool on each such resource URL.\n\n"
+    "Then call the ckan_resource_download tool on selected resource URLs.\n"
+    "=== DOWNLOAD PRIORITY (apply per package) ===\n"
+    "If the query mentions geographic terms (confini, limiti, mappa, comuni, "
+    "regioni, province, cartografia, territorio, GIS, boundaries, administrative, "
+    "map, geo, shapefile, geojson), pick at most ONE resource per package in this "
+    "priority order:\n"
+    "  1. GEOJSON\n"
+    "  2. KML\n"
+    "  3. CSV / JSON / TXT (only if no geo format above is available)\n"
+    "For non-geographic queries (statistics, demographics, prices), prefer "
+    "CSV / JSON / TXT directly. Do NOT call ckan_resource_download on WMS, WFS, "
+    "SHP, KMZ, GPKG, PDF, ZIP, XLS, XLSX — those are surfaced automatically by "
+    "the system from the search result.\n\n"
     "Finally, write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
     "<a short paragraph (in the same language as the user query) describing the "
     "datasets you found and naming the portal you used, or explaining that nothing "
@@ -47,7 +58,7 @@ AGENT_INSTRUCTIONS = (
     "<!--/RESOURCES_JSON-->\n\n"
     "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":<UPPERCASE str>,"
     "\"content\":<str or null>}.\n"
-    "Set 'content' to the downloaded file text for CSV/JSON/GeoJSON/TXT (escape \\n and \\\"); "
+    "Set 'content' to the downloaded file text for CSV/JSON/GEOJSON/KML/TXT (escape \\n and \\\"); "
     "set 'content' to null for every other format. Skip resources with format=UNKNOWN.\n\n"
     "=== HARD RULES ===\n"
     "- NEVER output the literal text 'ckan_package_search' or 'ckan_resource_download' "
@@ -70,7 +81,9 @@ class Settings(BaseSettings):
     )
 
     # LLM provider selection
-    llm_provider: Provider = Field(default="ollama")
+    # "auto" (default) resolves at runtime: claude if ANTHROPIC_API_KEY is set,
+    # else azure_foundry if the Azure AI project is configured, else ollama.
+    llm_provider: Provider = Field(default="auto")
 
     # MCP server
     mcp_server_url: str = Field(default="http://localhost:8080/mcp")
@@ -81,6 +94,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_llm_model: str = Field(default="qwen2.5:16k")
     ollama_num_ctx: int = Field(default=16384)
+    # temperature 0 = greedy decoding: maximises faithfulness to tool results
+    # (less id/number hallucination), which matters for small local models.
+    ollama_temperature: float = Field(default=0.0)
 
     # Azure AI Foundry
     azure_ai_project_endpoint: str | None = Field(default=None)
@@ -98,6 +114,24 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8002)
 
     log_level: str = Field(default="INFO")
+
+
+def resolve_provider(settings: Settings) -> Provider:
+    """Resolve the effective LLM provider.
+
+    Priority when llm_provider == "auto":
+      1. claude         — if ANTHROPIC_API_KEY is set
+      2. azure_foundry  — if AZURE_AI_PROJECT_ENDPOINT + deployment name are set
+      3. ollama         — fallback (local inference; OLLAMA_BASE_URL may point at
+                          a remote inference container in production)
+    """
+    if settings.llm_provider != "auto":
+        return settings.llm_provider
+    if settings.anthropic_api_key:
+        return "claude"
+    if settings.azure_ai_project_endpoint and settings.azure_ai_model_deployment_name:
+        return "azure_foundry"
+    return "ollama"
 
 
 def get_settings() -> Settings:

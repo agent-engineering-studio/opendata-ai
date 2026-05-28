@@ -1,12 +1,15 @@
-name: ckan-mcp
+name: opendata-ai
 
 x-ollama-base: &ollama-base
-  # Pre-built image with qwen2.5:16k (num_ctx=16384) already baked in.
+  # Pre-built image with qwen2.5:32k (num_ctx=16384, temperature 0) already baked in.
   # Published via .github/workflows/publish-ollama.yml.
   # Fallback: set OLLAMA_IMAGE=ollama/ollama:latest and run `make pull-models`.
-  image: ${OLLAMA_IMAGE:-ghcr.io/agent-engineering-studio/ckan-mcp-ollama:latest}
-  pull_policy: ${OLLAMA_PULL_POLICY:-always}
-  container_name: ckan-ollama
+  image: ${OLLAMA_IMAGE:-ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest}
+  # Default to `if_not_present` so a locally-built image (via `make build-ollama`)
+  # isn't silently overwritten by the registry. Override to `always` only when you
+  # explicitly want the GHCR tag to win.
+  pull_policy: ${OLLAMA_PULL_POLICY:-if_not_present}
+  container_name: opendata-ai-ollama
   ports:
     - "${OLLAMA_PORT:-11434}:11434"
   volumes:
@@ -45,7 +48,7 @@ services:
     image: ckan-mcp-server:local
     container_name: ckan-mcp
     ports:
-      - "${MCP_PORT:-8080}:8080"
+      - "${CKAN_MCP_PORT:-8080}:8080"
     environment:
       TRANSPORT: streamable-http
       HOST: 0.0.0.0
@@ -56,7 +59,44 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
-  # ───── Agent (Microsoft Agent Framework) ─────
+  # ───── ISTAT MCP server (Streamable HTTP) ─────
+  istat-mcp:
+    build:
+      context: ./istat-mcp-server
+      dockerfile: Dockerfile
+    image: istat-mcp-server:local
+    container_name: istat-mcp
+    ports:
+      - "${ISTAT_MCP_PORT:-8081}:8081"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8081"
+      MCP_PATH: /mcp
+      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
+      ISTAT_HTTP_TIMEOUT: "60"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
+  osm-mcp:
+    build:
+      context: ./osm-mcp
+      dockerfile: Dockerfile
+    image: osm-mcp:local
+    container_name: osm-mcp
+    # Container listens on 8080 (its Dockerfile healthcheck is hardcoded to 8080);
+    # exposed on the host as 8085 to avoid clashing with ckan-mcp.
+    ports:
+      - "${OSM_MCP_PORT:-8085}:8080"
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8080"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── CKAN specialist agent (standalone debug entry on :8002) ─────
   ckan-agent:
     build:
       context: ./ckan-mcp-agent
@@ -64,13 +104,14 @@ services:
     image: ckan-mcp-agent:local
     container_name: ckan-agent
     ports:
-      - "${AGENT_PORT:-8002}:8002"
+      - "${CKAN_AGENT_PORT:-8002}:8002"
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ckan-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:16k}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
       OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
-      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://ckan-mcp:8080/mcp}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
+      MCP_SERVER_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
@@ -88,7 +129,89 @@ services:
         required: false
     restart: unless-stopped
 
-  # ───── Web UI (Next.js) ─────
+  # ───── ISTAT specialist agent (standalone debug entry on :8003) ─────
+  istat-agent:
+    build:
+      context: ./istat-mcp-agent
+      dockerfile: Dockerfile
+    image: istat-mcp-agent:local
+    container_name: istat-agent
+    ports:
+      - "${ISTAT_AGENT_PORT:-8003}:8003"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
+      MCP_SERVER_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
+      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      API_HOST: 0.0.0.0
+      API_PORT: "8003"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      istat-mcp:
+        condition: service_started
+      ollama-cpu:
+        condition: service_healthy
+        required: false
+      ollama-gpu:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # ───── Orchestrator (fan-out CKAN + ISTAT, synthesise) — main UI entry on :8000 ─────
+  opendata-orchestrator:
+    build:
+      context: ./opendata-orchestrator
+      dockerfile: Dockerfile
+    image: opendata-orchestrator:local
+    container_name: opendata-orchestrator
+    ports:
+      - "${ORCHESTRATOR_PORT:-8000}:8000"
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
+      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
+      CKAN_MCP_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
+      ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
+      EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}
+      OECD_MCP_URL: ${OECD_MCP_URL:-}
+      OSM_MCP_URL: ${OSM_MCP_URL:-http://osm-mcp:8080/mcp}
+      ENABLE_OSM_MAPS: ${ENABLE_OSM_MAPS:-true}
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
+      EUROSTAT_SDMX_BASE_URL: ${EUROSTAT_SDMX_BASE_URL:-https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1}
+      OECD_SDMX_BASE_URL: ${OECD_SDMX_BASE_URL:-https://sdmx.oecd.org/public/rest}
+      ENABLE_CKAN: ${ENABLE_CKAN:-true}
+      ENABLE_ISTAT: ${ENABLE_ISTAT:-true}
+      ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-false}
+      ENABLE_OECD: ${ENABLE_OECD:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      ckan-mcp:
+        condition: service_started
+      istat-mcp:
+        condition: service_started
+      osm-mcp:
+        condition: service_started
+      ollama-cpu:
+        condition: service_healthy
+        required: false
+      ollama-gpu:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # ───── Web UI (Next.js) — points at the orchestrator ─────
   opendata-ai-ui:
     build:
       context: ./opendata-ai-ui
@@ -98,12 +221,14 @@ services:
     ports:
       - "${UI_PORT:-3000}:3000"
     environment:
-      AGENT_API_URL: ${AGENT_API_URL:-http://ckan-agent:8002}
+      AGENT_API_URL: ${AGENT_API_URL:-http://opendata-orchestrator:8000}
+      # Slow local models (qwen2.5:32b fan-out) can take minutes; default 10 min.
+      AGENT_API_TIMEOUT_MS: ${AGENT_API_TIMEOUT_MS:-600000}
     depends_on:
-      ckan-agent:
+      opendata-orchestrator:
         condition: service_started
     restart: unless-stopped
 
 volumes:
   ollama_data:
-    name: ckan-ollama-data
+    name: opendata-ai-ollama-data

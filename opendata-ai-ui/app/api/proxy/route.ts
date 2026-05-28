@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB cap on previewable payload
-const TIMEOUT_MS = 20_000;
+const MAX_BYTES = 15 * 1024 * 1024; // 15 MB cap (PDFs can be a few MB)
+const TIMEOUT_MS = 25_000;
 
 const BINARY_MAGIC: Array<[number[], string]> = [
   [[0x50, 0x4b, 0x03, 0x04], "ZIP"],

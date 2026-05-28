@@ -7,7 +7,7 @@ from ckan_agent.config import Settings
 
 def test_defaults_load() -> None:
     s = Settings()  # type: ignore[call-arg]
-    assert s.llm_provider in {"ollama", "azure_foundry", "claude"}
+    assert s.llm_provider in {"auto", "ollama", "azure_foundry", "claude"}
     assert s.mcp_server_url.endswith("/mcp")
     assert s.ckan_default_base_url == "https://www.dati.gov.it/opendata"
     assert s.api_port > 0
