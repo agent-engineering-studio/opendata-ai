@@ -202,6 +202,14 @@ _CKAN_KEEP_FORMATS = {
 }
 _MAX_CKAN_CAPTURED = 15
 
+# Surface geographic-renderable formats first so the UI's /mappa page sees them
+# even when a package also exposes a CSV/JSON variant the LLM happened to download.
+_FORMAT_PRIORITY = {
+    "GEOJSON": 0, "KML": 0, "KMZ": 0, "SHP": 0, "GPKG": 0, "TOPOJSON": 0, "GML": 1,
+    "WMS": 2, "WFS": 2,
+    "CSV": 3, "JSON": 3, "XLSX": 3, "XLS": 3, "TXT": 3, "XML": 3, "RDF": 3,
+}
+
 
 def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     """Extract real resources from a ckan_package_search / package_show result."""
@@ -217,9 +225,17 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     seen: set[str] = set()
     for pkg in pkgs:
         title = pkg.get("title") or pkg.get("name") or ""
-        for r in (pkg.get("resources") or []):
-            if not isinstance(r, dict):
-                continue
+        # Sort each package's resources so geo formats come first; CSV/JSON last.
+        # Within a priority bucket, preserve original order.
+        raw_resources = [r for r in (pkg.get("resources") or []) if isinstance(r, dict)]
+        ordered = sorted(
+            enumerate(raw_resources),
+            key=lambda ir: (
+                _FORMAT_PRIORITY.get((ir[1].get("format") or "").upper().strip(), 9),
+                ir[0],
+            ),
+        )
+        for _, r in ordered:
             url = r.get("url")
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                 continue
