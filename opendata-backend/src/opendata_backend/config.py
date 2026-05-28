@@ -305,6 +305,15 @@ class Settings(BaseSettings):
     # The schema `opendata` is created by Alembic migration 0001_initial.
     database_url: str | None = Field(default=None)
 
+    # ── Redis cache + rate limit (logical db 1) ──────────────────────
+    # Caches /datasets/fetch (6h), /datasets/classify (24h),
+    # /datasets/by-category (5min) and the per-user rate-limit counter.
+    # Optional — when unset, caches turn into no-ops and the rate-limit
+    # dependency is bypassed.
+    redis_url: str | None = Field(default=None)
+    # Requests per minute per Clerk user (fixed window). Set to 0 to disable.
+    rate_limit_per_minute: int = Field(default=60)
+
 
 def resolve_provider(settings: Settings) -> Provider:
     """Resolve the effective LLM provider.

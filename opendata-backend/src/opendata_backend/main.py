@@ -19,6 +19,9 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+import redis.asyncio as redis
+
+from .cache.state import set_redis
 from .config import get_settings
 from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
@@ -49,6 +52,21 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     else:
         log.warning("DATABASE_URL not set — /me/*, /api-keys/* and /datasets/classify will 503")
 
+    # Redis — optional at boot. When missing, caches no-op and rate-limit
+    # dependency lets every request through.
+    if settings.redis_url:
+        try:
+            redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+            await redis_client.ping()
+            set_redis(redis_client)
+            session_holder.redis = redis_client
+            log.info("Redis connected at %s", settings.redis_url)
+        except Exception:
+            log.warning("REDIS_URL set but Redis is unreachable; cache + rate-limit disabled",
+                        exc_info=True)
+    else:
+        log.warning("REDIS_URL not set — cache + rate-limit disabled")
+
     try:
         session_holder.session = OrchestratorSession(settings)
         await session_holder.session.__aenter__()
@@ -67,6 +85,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             await session_holder.database.dispose()
             set_session_factory(None)
             session_holder.database = None
+        if session_holder.redis is not None:
+            await session_holder.redis.aclose()
+            set_redis(None)
+            session_holder.redis = None
 
 
 app = FastAPI(title="opendata-backend", version="0.1.0", lifespan=lifespan)

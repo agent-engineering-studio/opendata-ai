@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import ClerkUser, require_user
+from ..auth import ClerkUser
 from ..db.repositories import api_keys as api_keys_repo
 from ..db.repositories import users as users_repo
 from ..db.session import get_db_session
+from ..shared.ratelimit import enforce_rate_limit
 
 router = APIRouter(tags=["api-keys"])
 
@@ -29,7 +30,7 @@ class GenerateResponse(BaseModel):
 async def generate(
     body: GenerateRequest,
     session: AsyncSession = Depends(get_db_session),
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> GenerateResponse:
     local_user = await users_repo.get_or_create(
         session, clerk_user_id=user.subject, email=user.email

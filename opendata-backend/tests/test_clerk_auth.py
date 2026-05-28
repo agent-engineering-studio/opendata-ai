@@ -97,12 +97,8 @@ def test_valid_bearer_returns_user(monkeypatch: pytest.MonkeyPatch) -> None:
     assert res.json() == {"subject": "user_42", "email": "x@y.z"}
 
 
-def test_verify_rejects_without_issuer_setting() -> None:
+async def test_verify_rejects_without_issuer_setting() -> None:
     clerk_module._reset_jwks_cache()
     settings = Settings(auth_enabled=True, clerk_jwt_issuer=None)  # type: ignore[call-arg]
     with pytest.raises(ClerkAuthError, match="CLERK_JWT_ISSUER"):
-        # Sync call — pytest runs in asyncio_mode=auto so use a coroutine runner.
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(
-            clerk_module.verify_clerk_token("anything", settings=settings)
-        )
+        await clerk_module.verify_clerk_token("anything", settings=settings)

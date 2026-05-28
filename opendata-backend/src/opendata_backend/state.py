@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from typing import Any
+
 from .config import Settings
 from .db.session import Database
 from .factory import OrchestratorSession
@@ -18,6 +20,7 @@ class _Holder:
     session: OrchestratorSession | None = None
     settings: Settings | None = None
     database: Database | None = None
+    redis: Any | None = None  # redis.asyncio.Redis — typed Any to avoid import cycle
 
 
 session_holder = _Holder()

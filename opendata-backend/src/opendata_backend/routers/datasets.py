@@ -14,7 +14,9 @@ from pydantic import BaseModel
 
 from opendata_core.ckan import CkanClient
 
-from ..auth import ClerkUser, require_user
+from ..auth import ClerkUser
+from ..cache import by_category as by_category_cache
+from ..cache import fetch as fetch_cache
 from ..orchestrator.parsing import (
     Resource,
     fill_missing_content,
@@ -22,6 +24,7 @@ from ..orchestrator.parsing import (
     upgrade_sdmx_resources,
 )
 from ..osm_map import attach_maps
+from ..shared.ratelimit import enforce_rate_limit
 from ..state import session_holder
 
 log = logging.getLogger("opendata-backend.datasets")
@@ -98,7 +101,7 @@ async def _run_orchestrator(query: str, base_url: str | None) -> ChatResponse:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> ChatResponse:
     """Back-compat alias of /datasets/search — used by the legacy frontend."""
     log.info("/chat subject=%s", user.subject)
@@ -108,7 +111,7 @@ async def chat(
 @router.post("/datasets/search", response_model=ChatResponse)
 async def search(
     req: ChatRequest,
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> ChatResponse:
     """Multi-source fan-out (CKAN + ISTAT [+ Eurostat + OECD if enabled])."""
     log.info("/datasets/search subject=%s", user.subject)
@@ -118,34 +121,47 @@ async def search(
 @router.post("/datasets/by-category", response_model=ChatResponse)
 async def by_category(
     req: ByCategoryRequest,
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> ChatResponse:
-    """Search restricted to a category (and optional region)."""
+    """Search restricted to a category (and optional region). 5-min Redis cache."""
     log.info("/datasets/by-category subject=%s category=%r", user.subject, req.category)
+    cached = await by_category_cache.get(req.category, req.base_url, req.region)
+    if cached is not None:
+        log.info("by_category cache HIT category=%r", req.category)
+        return ChatResponse.model_validate(cached)
     parts = [f"Find datasets about '{req.category}'"]
     if req.region:
         parts.append(f"in the region of {req.region}")
     parts.append("from the available open data portals.")
     query = " ".join(parts)
-    return await _run_orchestrator(query, req.base_url)
+    response = await _run_orchestrator(query, req.base_url)
+    await by_category_cache.set(
+        req.category, req.base_url, req.region, response.model_dump()
+    )
+    return response
 
 
 @router.post("/datasets/fetch", response_model=FetchResponse)
 async def fetch(
     req: FetchRequest,
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> FetchResponse:
-    """Download a single resource via the shared CkanClient — no LLM involved."""
+    """Download a single resource via the shared CkanClient — 6h Redis cache."""
     log.info("/datasets/fetch subject=%s url=%r", user.subject, req.url)
+    cached = await fetch_cache.get(req.url)
+    if cached is not None:
+        log.info("fetch cache HIT url=%r", req.url)
+        return FetchResponse(**cached)
     async with CkanClient() as client:
         result = await client.download_resource(req.url)
+    await fetch_cache.set(req.url, result)
     return FetchResponse(**result)
 
 
 @router.post("/datasets/classify")
 async def classify(
     req: ClassifyRequest,
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict[str, str]:
     """Stub — implemented in step 6 (Claude Haiku 4.5)."""
     raise HTTPException(

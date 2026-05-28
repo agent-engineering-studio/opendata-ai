@@ -23,6 +23,23 @@ x-ollama-base: &ollama-base
     start_period: 30s
 
 services:
+  # ───── Redis 7 — cache + per-user fixed-window rate-limit (logical db 1) ─────
+  redis:
+    image: redis:7-alpine
+    container_name: opendata-ai-redis
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
   # ───── Postgres 16 — shared state for users / favorites / history / api-keys / classifications ─────
   postgres:
     image: postgres:16-alpine
@@ -153,11 +170,15 @@ services:
       CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER:-}
       CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://opendata:opendata@postgres:5432/opendata}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       ckan-mcp:
         condition: service_started
@@ -196,3 +217,5 @@ volumes:
     name: opendata-ai-ollama-data
   postgres_data:
     name: opendata-ai-postgres-data
+  redis_data:
+    name: opendata-ai-redis-data

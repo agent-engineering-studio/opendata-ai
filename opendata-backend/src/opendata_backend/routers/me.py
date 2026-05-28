@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import ClerkUser, require_user
+from ..auth import ClerkUser
 from ..db.repositories import favorites as favorites_repo
 from ..db.repositories import history as history_repo
 from ..db.repositories import users as users_repo
 from ..db.session import get_db_session
+from ..shared.ratelimit import enforce_rate_limit
 
 router = APIRouter(tags=["me"])
 
@@ -48,7 +49,7 @@ async def _local_user_id(session: AsyncSession, user: ClerkUser) -> int:
 @router.get("/me/favorites", response_model=list[FavoriteOut])
 async def list_favorites(
     session: AsyncSession = Depends(get_db_session),
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> list[FavoriteOut]:
     uid = await _local_user_id(session, user)
     rows = await favorites_repo.list_for_user(session, user_id=uid)
@@ -69,7 +70,7 @@ async def list_favorites(
 async def add_favorite(
     body: FavoriteIn,
     session: AsyncSession = Depends(get_db_session),
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> FavoriteOut:
     uid = await _local_user_id(session, user)
     row = await favorites_repo.add(
@@ -96,7 +97,7 @@ async def remove_favorite(
     source: str,
     dataset_id: str,
     session: AsyncSession = Depends(get_db_session),
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> None:
     uid = await _local_user_id(session, user)
     n = await favorites_repo.remove(
@@ -110,7 +111,7 @@ async def remove_favorite(
 @router.get("/me/history", response_model=list[HistoryOut])
 async def list_history(
     session: AsyncSession = Depends(get_db_session),
-    user: ClerkUser = Depends(require_user),
+    user: ClerkUser = Depends(enforce_rate_limit),
 ) -> list[HistoryOut]:
     uid = await _local_user_id(session, user)
     rows = await history_repo.list_for_user(session, user_id=uid)

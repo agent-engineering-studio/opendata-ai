@@ -40,3 +40,5 @@ azure-creds.json
 # Build artefacts
 *.log
 *.tmp
+
+.clerk/
