@@ -8,6 +8,9 @@ Transports:
 - `stdio` (default) — for local MCP hosts such as Claude Desktop
 - `streamable-http` — for Docker / Azure deployment
 
+> For the combined Claude Desktop config across all three opendata-ai MCP
+> servers (CKAN + ISTAT + OSM), see [`docs/claude-desktop.md`](../docs/claude-desktop.md).
+
 The base URL is configurable via `ISTAT_SDMX_BASE_URL`; any SDMX 2.1 endpoint
 that speaks the same REST dialect will work.
 

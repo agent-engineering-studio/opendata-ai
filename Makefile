@@ -119,6 +119,19 @@ agent-backend: ## Launch the unified backend REPL against the running stack
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-backend:local opendata-agent
 
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm
+mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
+
+mcp-stdio-istat: ## Smoke-test the ISTAT MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio istat-mcp-server:local
+
+mcp-stdio-osm: ## Smoke-test the OSM MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e MCP_TRANSPORT=stdio osm-mcp:local
+
 # ──────────────────────────── Dev tasks ──────────────────────────
 
 .PHONY: lint test
