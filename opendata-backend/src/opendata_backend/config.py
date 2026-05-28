@@ -249,6 +249,10 @@ class Settings(BaseSettings):
     # Anthropic Claude API
     anthropic_api_key: str | None = Field(default=None)
     claude_model: str = Field(default="claude-sonnet-4-6")
+    # Smaller, cheaper model dedicated to /datasets/classify — keep separate
+    # from `claude_model` so we can run synthesis on Sonnet while classifying
+    # on Haiku.
+    claude_classify_model: str = Field(default="claude-haiku-4-5-20251001")
 
     # Agent names — these become executor_ids in the ConcurrentBuilder and
     # are the strings the synth aggregator uses to tag resources with `source`.

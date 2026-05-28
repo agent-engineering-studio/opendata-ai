@@ -14,9 +14,15 @@ from pydantic import BaseModel
 
 from opendata_core.ckan import CkanClient
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..auth import ClerkUser
 from ..cache import by_category as by_category_cache
 from ..cache import fetch as fetch_cache
+from ..classify import classify_dataset
+from ..classify.anthropic_client import Classifier
+from ..config import Settings, get_settings
+from ..db.session import get_db_session
 from ..orchestrator.parsing import (
     Resource,
     fill_missing_content,
@@ -61,8 +67,19 @@ class FetchResponse(BaseModel):
 
 
 class ClassifyRequest(BaseModel):
+    source: str
     dataset_id: str
+    dataset_name: str
+    dataset_description: str | None = None
     taxonomy: list[str]
+
+
+class ClassifyResponse(BaseModel):
+    source: str
+    dataset_id: str
+    scores: dict[str, float]
+    model: str
+    cached: bool
 
 
 async def _run_orchestrator(query: str, base_url: str | None) -> ChatResponse:
@@ -158,13 +175,46 @@ async def fetch(
     return FetchResponse(**result)
 
 
-@router.post("/datasets/classify")
+@router.post("/datasets/classify", response_model=ClassifyResponse)
 async def classify(
     req: ClassifyRequest,
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
-) -> dict[str, str]:
-    """Stub — implemented in step 6 (Claude Haiku 4.5)."""
-    raise HTTPException(
-        status_code=501,
-        detail="classify endpoint not implemented yet (step 6, Claude Haiku 4.5)",
+) -> ClassifyResponse:
+    """Score a dataset against a caller-supplied taxonomy with Claude Haiku 4.5.
+
+    Order of resolution: Redis cache (24h) → Postgres durable cache → Anthropic.
+    """
+    if not settings.anthropic_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="classify requires ANTHROPIC_API_KEY",
+        )
+    if not req.taxonomy:
+        raise HTTPException(status_code=400, detail="taxonomy must be non-empty")
+
+    classifier = Classifier(
+        api_key=settings.anthropic_api_key,
+        model=settings.claude_classify_model,
+    )
+    result = await classify_dataset(
+        session,
+        classifier,
+        source=req.source,
+        dataset_id=req.dataset_id,
+        dataset_name=req.dataset_name,
+        dataset_description=req.dataset_description,
+        taxonomy=req.taxonomy,
+    )
+    log.info(
+        "/datasets/classify subject=%s source=%s dataset=%s cached=%s",
+        user.subject, req.source, req.dataset_id, result.cached,
+    )
+    return ClassifyResponse(
+        source=result.source,
+        dataset_id=result.dataset_id,
+        scores=result.scores,
+        model=result.model,
+        cached=result.cached,
     )
