@@ -16,7 +16,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from osm_mcp.config import settings
+from .settings import osm_settings as settings
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 _env = Environment(

@@ -43,8 +43,8 @@ services:
   # ───── CKAN MCP server (Streamable HTTP) ─────
   ckan-mcp:
     build:
-      context: ./ckan-mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ckan-mcp-server/Dockerfile
     image: ckan-mcp-server:local
     container_name: ckan-mcp
     ports:
@@ -62,8 +62,8 @@ services:
   # ───── ISTAT MCP server (Streamable HTTP) ─────
   istat-mcp:
     build:
-      context: ./istat-mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: istat-mcp-server/Dockerfile
     image: istat-mcp-server:local
     container_name: istat-mcp
     ports:
@@ -81,8 +81,8 @@ services:
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:
-      context: ./osm-mcp
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: osm-mcp/Dockerfile
     image: osm-mcp:local
     container_name: osm-mcp
     # Container listens on 8080 (its Dockerfile healthcheck is hardcoded to 8080);

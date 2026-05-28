@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from ckan_mcp.ckan_client import CkanClient, CkanError, _normalize_base
+from opendata_core.ckan.client import CkanClient, CkanError, _normalize_base
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 

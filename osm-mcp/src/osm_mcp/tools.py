@@ -9,9 +9,9 @@ from typing import Any
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 from pydantic import AnyUrl
 
-from osm_mcp import geojson_builder as _gjb
-from osm_mcp import html_renderer as _hr
-from osm_mcp import osm_client
+from opendata_core.osm import geojson as _gjb
+from opendata_core.osm import render as _hr
+from opendata_core.osm import client as osm_client
 
 
 def _json(data: Any) -> str:

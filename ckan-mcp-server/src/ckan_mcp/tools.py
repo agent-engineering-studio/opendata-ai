@@ -10,7 +10,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .ckan_client import DOWNLOADABLE_FORMATS, CkanClient
+from opendata_core.ckan import DOWNLOADABLE_FORMATS, CkanClient
 
 _KEEP_RESOURCE_FIELDS = {"id", "url", "name", "format", "description", "mimetype", "size"}
 _KEEP_PACKAGE_FIELDS = {

@@ -139,6 +139,7 @@ agent-istat: ## Launch the ISTAT specialist REPL against the running stack
 
 .PHONY: lint test
 lint: ## Run ruff on all Python packages
+	cd opendata_core && ruff check src
 	cd ckan-mcp-server && ruff check src
 	cd ckan-mcp-agent && ruff check src
 	cd istat-mcp-server && ruff check src
@@ -147,6 +148,7 @@ lint: ## Run ruff on all Python packages
 	cd opendata-orchestrator && ruff check src
 
 test: ## Run pytest on all Python packages
+	cd opendata_core && pytest -q
 	cd ckan-mcp-server && pytest -q
 	cd ckan-mcp-agent && pytest -q
 	cd istat-mcp-server && pytest -q

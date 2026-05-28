@@ -11,10 +11,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
-COPY src ./src
+# Build context is the repo root (set via docker-compose) so that the shared
+# opendata-core package can be copied in alongside this service's source.
+COPY opendata_core/pyproject.toml opendata_core/README.md /opendata_core/
+COPY opendata_core/src /opendata_core/src
+RUN pip install --upgrade pip && pip install /opendata_core
 
-RUN pip install --upgrade pip && pip install .
+COPY ckan-mcp-server/pyproject.toml ckan-mcp-server/README.md ./
+COPY ckan-mcp-server/src ./src
+RUN pip install .
 
 RUN useradd --system --create-home --uid 1000 app \
     && chown -R app:app /app

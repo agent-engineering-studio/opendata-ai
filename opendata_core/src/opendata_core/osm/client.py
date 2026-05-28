@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 import httpx
 
-from osm_mcp.config import settings
+from .settings import osm_settings as settings
 
 Profile = Literal["driving", "walking", "cycling"]
 

@@ -1,19 +1,17 @@
 [project]
-name = "ckan-mcp-server"
+name = "opendata-core"
 version = "0.1.0"
-description = "MCP server exposing CKAN Action API tools for any CKAN open data portal"
+description = "Shared async clients for CKAN, SDMX (ISTAT/Eurostat/OECD) and OSM rendering — consumed by both the MCP servers and the unified opendata-backend."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Agent Engineering Studio" }]
 dependencies = [
-    "opendata-core>=0.1.0",
-    "mcp>=1.2.0",
     "httpx>=0.27.0",
     "pydantic>=2.7.0",
-    "anyio>=4.4.0",
-    "uvicorn[standard]>=0.30.0",
-    "starlette>=0.37.0",
+    "pydantic-settings>=2.3.0",
+    "cachetools>=5.3.0",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -24,15 +22,15 @@ dev = [
     "ruff>=0.6.0",
 ]
 
-[project.scripts]
-ckan-mcp-server = "ckan_mcp.server:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ckan_mcp"]
+packages = ["src/opendata_core"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/opendata_core/osm/templates" = "opendata_core/osm/templates"
 
 [tool.ruff]
 line-length = 100
