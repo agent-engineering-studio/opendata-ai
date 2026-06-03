@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
 import { apiFetch } from "@/lib/api";

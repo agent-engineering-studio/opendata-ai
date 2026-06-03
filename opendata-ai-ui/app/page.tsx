@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { ChatHeader } from "@/components/ChatHeader";

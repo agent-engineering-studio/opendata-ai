@@ -1,29 +1,72 @@
+/* Designers Italia — Bootstrap Italia v2 first, so Tailwind utilities win on conflicts. */
+@import "bootstrap-italia/dist/css/bootstrap-italia.min.css";
+
+/* Institutional fonts (Titillium Web body, Lora display, Roboto Mono code). */
+@import "@fontsource/titillium-web/300.css";
+@import "@fontsource/titillium-web/400.css";
+@import "@fontsource/titillium-web/600.css";
+@import "@fontsource/titillium-web/700.css";
+@import "@fontsource/roboto-mono/400.css";
+@import "@fontsource/roboto-mono/500.css";
+
 @import "tailwindcss";
+
+/*
+ * Designers Italia design tokens mapped into Tailwind v4 @theme.
+ * Reference: https://github.com/italia/design-tokens-italia and
+ * https://italia.github.io/bootstrap-italia/docs/customizzazioni/colori/
+ * Domain components keep Tailwind classes (bg-primary, text-secondary) but
+ * resolve to PA colors instead of hard-coded slate/blue.
+ */
+@theme {
+  /* Institutional palette */
+  --color-primary: #0066cc;
+  --color-primary-100: #d4e5f7;
+  --color-primary-200: #a9ccf0;
+  --color-primary-700: #004080;
+  --color-primary-900: #002b56;
+  --color-secondary: #00cf86;
+  --color-success: #008055;
+  --color-warning: #a66300;
+  --color-danger: #d9364f;
+
+  /* Surface / text — neutral PA grays */
+  --color-bg: #ffffff;
+  --color-bg-muted: #f5f5f5;
+  --color-border: #e3e4e6;
+  --color-text: #17324d;
+  --color-text-muted: #5b6f82;
+
+  /* Typography */
+  --font-sans: "Titillium Web", system-ui, -apple-system, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, "SFMono-Regular", monospace;
+}
 
 @layer base {
   html,
   body {
     height: 100%;
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: var(--color-bg-muted);
+    color: var(--color-text);
+    font-family: var(--font-sans);
   }
 }
 
 @layer components {
   .json-key {
-    color: #0369a1;
+    color: var(--color-primary-700);
   }
   .json-string {
-    color: #15803d;
+    color: var(--color-success);
   }
   .json-number {
-    color: #b45309;
+    color: var(--color-warning);
   }
   .json-boolean {
     color: #7c3aed;
   }
   .json-null {
-    color: #64748b;
+    color: var(--color-text-muted);
     font-style: italic;
   }
 }
