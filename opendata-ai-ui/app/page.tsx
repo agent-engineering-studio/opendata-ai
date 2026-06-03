@@ -73,7 +73,7 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ChatHeader
         onReset={() => setMessages([])}
         canReset={messages.length > 0 && !loading}

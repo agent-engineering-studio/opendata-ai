@@ -23,7 +23,7 @@ export function Message({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-blue-600 px-4 py-2 text-white">
+        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[var(--color-primary)] px-4 py-2 text-white">
           <Paragraphs text={message.text} />
         </div>
       </div>
@@ -33,7 +33,10 @@ export function Message({ message }: { message: ChatMessage }) {
   if (message.role === "error") {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] rounded-2xl rounded-bl-sm border border-red-300 bg-red-50 px-4 py-2 text-red-800">
+        <div
+          role="alert"
+          className="alert alert-danger max-w-[80%] mb-0"
+        >
           <Paragraphs text={message.text} />
         </div>
       </div>
@@ -42,10 +45,10 @@ export function Message({ message }: { message: ChatMessage }) {
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[90%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 text-slate-800 shadow-sm">
+      <div className="w-full max-w-[90%] rounded-2xl rounded-bl-sm border border-[var(--color-border)] bg-white px-4 py-3 text-[var(--color-text)] shadow-sm">
         <AssistantMarkdown text={message.text} />
         <ResourceList resources={message.resources} />
-        <div className="mt-3 text-xs text-slate-400">
+        <div className="mt-3 text-xs text-[var(--color-text-muted)]">
           ⏱ {(message.durationMs / 1000).toFixed(1)}s
         </div>
       </div>
