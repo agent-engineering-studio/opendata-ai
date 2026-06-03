@@ -1,67 +1,34 @@
 name: opendata-ai-prod
 
-# Production stack for a single-host Aruba VPS.
+# Production stack for a single Aruba VPS, on the SHARED infrastructure
+# provided by agent-engineering-studio-infra.
 #
-# Pulls images from GHCR (built by `.github/workflows/docker-publish.yml`) and
-# exposes the backend through Caddy, which terminates TLS via Let's Encrypt.
-# Postgres + Redis live next to the backend on the same host with named
-# volumes for durability.
+# Postgres, Redis and the reverse proxy (formerly Caddy) are no longer defined
+# here — they are run once by the infra repo. `opendata-backend` attaches to
+# the external `aes-net` network (where the shared Traefik routes to it and the
+# datastores live) and to a private `opendata-internal` network shared with the
+# MCP servers. The MCP servers stay private and are not routed publicly.
 #
-# Frontend is NOT in this file — it is hosted on GitHub Pages and consumes
-# `https://api.opendata.<your-domain>` from the browser.
-
-x-image-owner: &image-owner ghcr.io/agent-engineering-studio
+#                api.opendata.<domain> (Aruba VPS)
+#                         │  aes-traefik (TLS via Let's Encrypt)
+#                         ▼  aes-net
+#                ┌──────────────────────┐
+#                │   opendata-backend   │ — uvicorn :8000
+#                └──────────────────────┘
+#                   │      │      │   │ (opendata-internal)
+#              ckan-mcp ist-mcp osm-mcp
+#                                     │ (aes-net)
+#                          aes-postgres + aes-redis
+#
+# Frontend is hosted on GitHub Pages and consumes https://api.opendata.<domain>.
+#
+# Prerequisite: agent-engineering-studio-infra is up (creates aes-net + datastores).
+# POSTGRES_PASSWORD / REDIS_PASSWORD here MUST equal the infra's
+# OPENDATA_DB_PASSWORD / REDIS_PASSWORD.
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: opendata-ai-caddy
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      opendata-backend:
-        condition: service_healthy
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: opendata-ai-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
-  redis:
-    image: redis:7-alpine
-    container_name: opendata-ai-redis
-    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes",
-              "--requirepass", "${REDIS_PASSWORD:-}"]
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-}\" ping"]
-      interval: 15s
-      timeout: 3s
-      retries: 5
-
   ckan-mcp:
-    image: *image-owner/ckan-mcp-server:latest
+    image: ghcr.io/agent-engineering-studio/ckan-mcp-server:latest
     container_name: ckan-mcp
     environment:
       TRANSPORT: streamable-http
@@ -71,9 +38,11 @@ services:
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL}
       LOG_LEVEL: INFO
     restart: unless-stopped
+    networks:
+      - opendata-internal
 
   istat-mcp:
-    image: *image-owner/istat-mcp-server:latest
+    image: ghcr.io/agent-engineering-studio/istat-mcp-server:latest
     container_name: istat-mcp
     environment:
       TRANSPORT: streamable-http
@@ -83,9 +52,11 @@ services:
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL}
       LOG_LEVEL: INFO
     restart: unless-stopped
+    networks:
+      - opendata-internal
 
   osm-mcp:
-    image: *image-owner/osm-mcp:latest
+    image: ghcr.io/agent-engineering-studio/osm-mcp:latest
     container_name: osm-mcp
     environment:
       MCP_TRANSPORT: streamable-http
@@ -93,9 +64,11 @@ services:
       MCP_PORT: "8080"
       LOG_LEVEL: INFO
     restart: unless-stopped
+    networks:
+      - opendata-internal
 
   opendata-backend:
-    image: *image-owner/opendata-backend:latest
+    image: ghcr.io/agent-engineering-studio/opendata-backend:latest
     container_name: opendata-backend
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-claude}
@@ -110,8 +83,10 @@ services:
       ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-true}
       ENABLE_OECD: ${ENABLE_OECD:-true}
       ENABLE_OSM_MAPS: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      # DB — shared Postgres, database `opendata`
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opendata}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@aes-postgres:5432/${POSTGRES_DB:-opendata}
+      # Cache / rate-limit — shared Redis, logical db 1
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@aes-redis:6379/1
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       AUTH_ENABLED: "true"
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
@@ -123,16 +98,19 @@ services:
       API_PORT: "8000"
       LOG_LEVEL: INFO
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       ckan-mcp:
         condition: service_started
       istat-mcp:
         condition: service_started
       osm-mcp:
         condition: service_started
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.opendata-api.rule=Host(`${OPENDATA_API_HOST:?set OPENDATA_API_HOST}`)
+      - traefik.http.routers.opendata-api.entrypoints=websecure
+      - traefik.http.routers.opendata-api.tls.certresolver=le
+      - traefik.http.routers.opendata-api.middlewares=secure-headers@file,compress@file
+      - traefik.http.services.opendata-api.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
@@ -140,9 +118,15 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
+    networks:
+      - aes-net
+      - opendata-internal
 
-volumes:
-  caddy_data: { name: opendata-ai-caddy-data }
-  caddy_config: { name: opendata-ai-caddy-config }
-  postgres_data: { name: opendata-ai-postgres-data }
-  redis_data: { name: opendata-ai-redis-data }
+networks:
+  # Shared ingress + datastores network (created by the infra repo).
+  aes-net:
+    external: true
+  # Private network for backend ↔ MCP servers only.
+  opendata-internal:
+    name: opendata-internal
+    driver: bridge
