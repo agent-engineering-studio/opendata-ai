@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from opendata_core.osm.settings import osm_settings
+
 from osm_mcp import tools
 from osm_mcp.config import settings
 
@@ -189,7 +191,7 @@ async def osm_health() -> str:
     import json
 
     # Overpass blocks the default `python-httpx/X.Y` UA with 406, so identify ourselves.
-    headers = {"User-Agent": settings.OSM_USER_AGENT}
+    headers = {"User-Agent": osm_settings.OSM_USER_AGENT}
 
     async def _ping(url: str) -> bool:
         try:
@@ -200,9 +202,9 @@ async def osm_health() -> str:
             return False
 
     checks = {
-        "nominatim": await _ping(f"{settings.NOMINATIM_URL}/status"),
-        "overpass": await _ping(settings.OVERPASS_URL.rsplit("/", 1)[0] + "/status"),
-        "osrm": await _ping(f"{settings.OSRM_URL}/route/v1/car/9.19,45.46;9.20,45.47?overview=false"),
+        "nominatim": await _ping(f"{osm_settings.NOMINATIM_URL}/status"),
+        "overpass": await _ping(osm_settings.OVERPASS_URL.rsplit("/", 1)[0] + "/status"),
+        "osrm": await _ping(f"{osm_settings.OSRM_URL}/route/v1/car/9.19,45.46;9.20,45.47?overview=false"),
     }
     status = "healthy" if all(checks.values()) else "degraded"
     return json.dumps({**checks, "status": status})

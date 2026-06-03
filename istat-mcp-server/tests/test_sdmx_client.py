@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pytest_httpx import HTTPXMock
 
-from istat_mcp.sdmx_client import SdmxClient, SdmxError, data_path, df_ref
+from opendata_core.sdmx.client import SdmxClient, SdmxError, data_path, df_ref
 
 
 def test_df_ref_is_percent_encoded() -> None:

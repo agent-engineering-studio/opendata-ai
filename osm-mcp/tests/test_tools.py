@@ -11,8 +11,9 @@ import httpx
 import pytest
 import respx
 
+from opendata_core.osm.settings import osm_settings as settings
+
 from osm_mcp import tools
-from osm_mcp.config import settings
 
 
 @pytest.mark.asyncio

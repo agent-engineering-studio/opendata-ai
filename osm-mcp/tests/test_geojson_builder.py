@@ -2,7 +2,7 @@
 
 import pytest
 
-from osm_mcp.geojson_builder import (
+from opendata_core.osm.geojson import (
     assign_layer_styles,
     compute_bounds,
     parse_geojson,

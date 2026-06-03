@@ -2,7 +2,7 @@
 
 import pytest
 
-from osm_mcp.html_renderer import MapLayer, render_map
+from opendata_core.osm.render import MapLayer, render_map
 
 
 @pytest.fixture

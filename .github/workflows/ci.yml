@@ -15,10 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [ ckan-mcp-server, ckan-mcp-agent, istat-mcp-server, istat-mcp-agent, osm-mcp, opendata-orchestrator ]
-    defaults:
-      run:
-        working-directory: ${{ matrix.package }}
+        package: [ opendata_core, ckan-mcp-server, istat-mcp-server, osm-mcp, opendata-backend ]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,15 +24,22 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install package (editable + dev extras)
+      - name: Install opendata-core (shared)
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e "./opendata_core[dev]"
+
+      - name: Install package (editable + dev extras)
+        working-directory: ${{ matrix.package }}
+        run: |
           python -m pip install --pre -e ".[dev]" || python -m pip install -e ".[dev]"
 
       - name: Ruff
+        working-directory: ${{ matrix.package }}
         run: ruff check src
 
       - name: Pytest
+        working-directory: ${{ matrix.package }}
         run: |
           if [ -d tests ]; then pytest -q ; else echo "no tests yet" ; fi
 
@@ -45,19 +49,20 @@ jobs:
     strategy:
       matrix:
         service:
-          - { name: ckan-mcp-server,       context: ckan-mcp-server }
-          - { name: ckan-mcp-agent,        context: ckan-mcp-agent  }
-          - { name: istat-mcp-server,      context: istat-mcp-server }
-          - { name: istat-mcp-agent,       context: istat-mcp-agent  }
-          - { name: osm-mcp,               context: osm-mcp }
-          - { name: opendata-orchestrator, context: opendata-orchestrator }
+          - { name: ckan-mcp-server,  dockerfile: ckan-mcp-server/Dockerfile  }
+          - { name: istat-mcp-server, dockerfile: istat-mcp-server/Dockerfile }
+          - { name: osm-mcp,          dockerfile: osm-mcp/Dockerfile          }
+          - { name: opendata-backend, dockerfile: opendata-backend/Dockerfile }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build ${{ matrix.service.name }}
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
+          # All services build from the repo root so the shared opendata_core/
+          # package can be copied in alongside their own sources.
+          context: .
+          file: ${{ matrix.service.dockerfile }}
           push: false
           load: true
           tags: ${{ matrix.service.name }}:ci

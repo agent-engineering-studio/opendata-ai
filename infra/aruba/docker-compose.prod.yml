@@ -1,0 +1,132 @@
+name: opendata-ai-prod
+
+# Production stack for a single Aruba VPS, on the SHARED infrastructure
+# provided by agent-engineering-studio-infra.
+#
+# Postgres, Redis and the reverse proxy (formerly Caddy) are no longer defined
+# here — they are run once by the infra repo. `opendata-backend` attaches to
+# the external `aes-net` network (where the shared Traefik routes to it and the
+# datastores live) and to a private `opendata-internal` network shared with the
+# MCP servers. The MCP servers stay private and are not routed publicly.
+#
+#                api.opendata.<domain> (Aruba VPS)
+#                         │  aes-traefik (TLS via Let's Encrypt)
+#                         ▼  aes-net
+#                ┌──────────────────────┐
+#                │   opendata-backend   │ — uvicorn :8000
+#                └──────────────────────┘
+#                   │      │      │   │ (opendata-internal)
+#              ckan-mcp ist-mcp osm-mcp
+#                                     │ (aes-net)
+#                          aes-postgres + aes-redis
+#
+# Frontend is hosted on GitHub Pages and consumes https://api.opendata.<domain>.
+#
+# Prerequisite: agent-engineering-studio-infra is up (creates aes-net + datastores).
+# POSTGRES_PASSWORD / REDIS_PASSWORD here MUST equal the infra's
+# OPENDATA_DB_PASSWORD / REDIS_PASSWORD.
+
+services:
+  ckan-mcp:
+    image: ghcr.io/agent-engineering-studio/ckan-mcp-server:latest
+    container_name: ckan-mcp
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL}
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+    networks:
+      - opendata-internal
+
+  istat-mcp:
+    image: ghcr.io/agent-engineering-studio/istat-mcp-server:latest
+    container_name: istat-mcp
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8081"
+      MCP_PATH: /mcp
+      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL}
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+    networks:
+      - opendata-internal
+
+  osm-mcp:
+    image: ghcr.io/agent-engineering-studio/osm-mcp:latest
+    container_name: osm-mcp
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8080"
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+    networks:
+      - opendata-internal
+
+  opendata-backend:
+    image: ghcr.io/agent-engineering-studio/opendata-backend:latest
+    container_name: opendata-backend
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}
+      CKAN_MCP_URL: http://ckan-mcp:8080/mcp
+      ISTAT_MCP_URL: http://istat-mcp:8081/mcp
+      OSM_MCP_URL: http://osm-mcp:8080/mcp
+      ENABLE_CKAN: "true"
+      ENABLE_ISTAT: "true"
+      ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-true}
+      ENABLE_OECD: ${ENABLE_OECD:-true}
+      ENABLE_OSM_MAPS: "true"
+      # DB — shared Postgres, database `opendata`
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-opendata}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@aes-postgres:5432/${POSTGRES_DB:-opendata}
+      # Cache / rate-limit — shared Redis, logical db 1
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@aes-redis:6379/1
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      AUTH_ENABLED: "true"
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      LOG_LEVEL: INFO
+    depends_on:
+      ckan-mcp:
+        condition: service_started
+      istat-mcp:
+        condition: service_started
+      osm-mcp:
+        condition: service_started
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.opendata-api.rule=Host(`${OPENDATA_API_HOST:?set OPENDATA_API_HOST}`)
+      - traefik.http.routers.opendata-api.entrypoints=websecure
+      - traefik.http.routers.opendata-api.tls.certresolver=le
+      - traefik.http.routers.opendata-api.middlewares=secure-headers@file,compress@file
+      - traefik.http.services.opendata-api.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - aes-net
+      - opendata-internal
+
+networks:
+  # Shared ingress + datastores network (created by the infra repo).
+  aes-net:
+    external: true
+  # Private network for backend ↔ MCP servers only.
+  opendata-internal:
+    name: opendata-internal
+    driver: bridge

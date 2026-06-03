@@ -5,12 +5,11 @@ on:
     branches: [ main ]
     tags:     [ 'v*.*.*' ]
     paths:
+      - 'opendata_core/**'
       - 'ckan-mcp-server/**'
-      - 'ckan-mcp-agent/**'
       - 'istat-mcp-server/**'
       - 'osm-mcp/**'
-      - 'istat-mcp-agent/**'
-      - 'opendata-orchestrator/**'
+      - 'opendata-backend/**'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
     inputs:
@@ -30,7 +29,9 @@ env:
   REGISTRY: ghcr.io
   # Images are published as:
   #   ghcr.io/<owner>/ckan-mcp-server:<tag>
-  #   ghcr.io/<owner>/ckan-mcp-agent:<tag>
+  #   ghcr.io/<owner>/istat-mcp-server:<tag>
+  #   ghcr.io/<owner>/osm-mcp:<tag>
+  #   ghcr.io/<owner>/opendata-backend:<tag>
   IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -41,23 +42,13 @@ jobs:
       matrix:
         service:
           - name: ckan-mcp-server
-            context: ckan-mcp-server
             dockerfile: ckan-mcp-server/Dockerfile
-          - name: ckan-mcp-agent
-            context: ckan-mcp-agent
-            dockerfile: ckan-mcp-agent/Dockerfile
           - name: istat-mcp-server
-            context: istat-mcp-server
             dockerfile: istat-mcp-server/Dockerfile
-          - name: istat-mcp-agent
-            context: istat-mcp-agent
-            dockerfile: istat-mcp-agent/Dockerfile
           - name: osm-mcp
-            context: osm-mcp
             dockerfile: osm-mcp/Dockerfile
-          - name: opendata-orchestrator
-            context: opendata-orchestrator
-            dockerfile: opendata-orchestrator/Dockerfile
+          - name: opendata-backend
+            dockerfile: opendata-backend/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,7 +93,9 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
+          # All images build from the repo root so the shared opendata_core/
+          # package can be copied in alongside their own sources.
+          context: .
           file: ${{ matrix.service.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true

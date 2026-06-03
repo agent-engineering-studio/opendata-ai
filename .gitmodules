@@ -1,0 +1,7 @@
+[submodule "vendor/agent-stack"]
+	path = vendor/agent-stack
+	url = https://github.com/agent-engineering-studio/agent-stack
+	# Read-only mirror of the agent-stack monorepo. We import the
+	# `opendata.*` schema migrations from this submodule; they are owned
+	# by agent-stack and should never be edited from inside opendata-ai.
+	# Initialise with: `git submodule update --init --depth=1`.

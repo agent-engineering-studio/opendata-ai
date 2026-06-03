@@ -11,7 +11,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .sdmx_client import SdmxClient, df_ref, data_path
+from opendata_core.sdmx import SdmxClient, data_path, df_ref
 
 # Max CSV characters returned by istat_get_data. A full SDMX cube can be tens of
 # MB; returning it whole overflows LLM context windows. ~120 KB ≈ 30k tokens.

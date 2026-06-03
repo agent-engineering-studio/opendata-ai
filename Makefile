@@ -16,10 +16,10 @@ OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
 
 # Custom-built compose services (skip the Ollama service — it uses a pre-built image
 # managed by `make build-ollama` / `make pull-models`, not by `docker compose build`).
-CUSTOM_SERVICES := ckan-mcp istat-mcp osm-mcp ckan-agent istat-agent opendata-orchestrator opendata-ai-ui
+CUSTOM_SERVICES := ckan-mcp istat-mcp osm-mcp opendata-backend opendata-ai-ui
 
-# `make agent SOURCE=ckan|istat|orchestrator` selects which REPL to launch.
-SOURCE ?= orchestrator
+# `make agent` launches the unified backend REPL against the running stack.
+SOURCE ?= backend
 COMPOSE_PROJECT ?= opendata-ai
 
 .DEFAULT_GOAL := help
@@ -106,10 +106,10 @@ refresh-cpu: refresh up
 
 # ──────────────────────────── Interactive ────────────────────────
 
-.PHONY: agent agent-ckan agent-istat agent-orchestrator
-agent: agent-$(SOURCE) ## Interactive REPL — SOURCE=orchestrator|ckan|istat (default: orchestrator)
+.PHONY: agent agent-backend
+agent: agent-$(SOURCE) ## Interactive REPL against the running stack
 
-agent-orchestrator: ## Launch the orchestrator REPL against the running stack
+agent-backend: ## Launch the unified backend REPL against the running stack
 	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
 	  -e LLM_PROVIDER=ollama \
 	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
@@ -117,39 +117,34 @@ agent-orchestrator: ## Launch the orchestrator REPL against the running stack
 	  -e CKAN_MCP_URL=http://ckan-mcp:8080/mcp \
 	  -e ISTAT_MCP_URL=http://istat-mcp:8081/mcp \
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
-	  opendata-orchestrator:local opendata-agent
+	  opendata-backend:local opendata-agent
 
-agent-ckan: ## Launch the CKAN specialist REPL against the running stack
-	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
-	  -e LLM_PROVIDER=ollama \
-	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
-	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
-	  -e MCP_SERVER_URL=http://ckan-mcp:8080/mcp \
-	  ckan-mcp-agent:local ckan-agent
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm
+mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
 
-agent-istat: ## Launch the ISTAT specialist REPL against the running stack
-	docker run --rm -it --network $(COMPOSE_PROJECT)_default \
-	  -e LLM_PROVIDER=ollama \
-	  -e OLLAMA_BASE_URL=http://opendata-ai-ollama:11434 \
-	  -e OLLAMA_LLM_MODEL=$(OLLAMA_MODEL) \
-	  -e MCP_SERVER_URL=http://istat-mcp:8081/mcp \
-	  istat-mcp-agent:local istat-agent
+mcp-stdio-istat: ## Smoke-test the ISTAT MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio istat-mcp-server:local
+
+mcp-stdio-osm: ## Smoke-test the OSM MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e MCP_TRANSPORT=stdio osm-mcp:local
 
 # ──────────────────────────── Dev tasks ──────────────────────────
 
 .PHONY: lint test
 lint: ## Run ruff on all Python packages
+	cd opendata_core && ruff check src
 	cd ckan-mcp-server && ruff check src
-	cd ckan-mcp-agent && ruff check src
 	cd istat-mcp-server && ruff check src
-	cd istat-mcp-agent && ruff check src
 	cd osm-mcp && ruff check src
-	cd opendata-orchestrator && ruff check src
+	cd opendata-backend && ruff check src
 
 test: ## Run pytest on all Python packages
+	cd opendata_core && pytest -q
 	cd ckan-mcp-server && pytest -q
-	cd ckan-mcp-agent && pytest -q
 	cd istat-mcp-server && pytest -q
-	cd istat-mcp-agent && pytest -q
 	cd osm-mcp && pytest -q
-	cd opendata-orchestrator && pytest -q
+	cd opendata-backend && pytest -q

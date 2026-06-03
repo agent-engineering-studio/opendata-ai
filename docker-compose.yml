@@ -23,6 +23,43 @@ x-ollama-base: &ollama-base
     start_period: 30s
 
 services:
+  # ───── Redis 7 — cache + per-user fixed-window rate-limit (logical db 1) ─────
+  redis:
+    image: redis:7-alpine
+    container_name: opendata-ai-redis
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  # ───── Postgres 16 — shared state for users / favorites / history / api-keys / classifications ─────
+  postgres:
+    image: postgres:16-alpine
+    container_name: opendata-ai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opendata}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opendata}
+      POSTGRES_DB: ${POSTGRES_DB:-opendata}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-opendata} -d $${POSTGRES_DB:-opendata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   # ───── Ollama — GPU profile ─────
   ollama-gpu:
     <<: *ollama-base
@@ -43,8 +80,8 @@ services:
   # ───── CKAN MCP server (Streamable HTTP) ─────
   ckan-mcp:
     build:
-      context: ./ckan-mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ckan-mcp-server/Dockerfile
     image: ckan-mcp-server:local
     container_name: ckan-mcp
     ports:
@@ -62,8 +99,8 @@ services:
   # ───── ISTAT MCP server (Streamable HTTP) ─────
   istat-mcp:
     build:
-      context: ./istat-mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: istat-mcp-server/Dockerfile
     image: istat-mcp-server:local
     container_name: istat-mcp
     ports:
@@ -81,8 +118,8 @@ services:
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:
-      context: ./osm-mcp
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: osm-mcp/Dockerfile
     image: osm-mcp:local
     container_name: osm-mcp
     # Container listens on 8080 (its Dockerfile healthcheck is hardcoded to 8080);
@@ -96,81 +133,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
-  # ───── CKAN specialist agent (standalone debug entry on :8002) ─────
-  ckan-agent:
+  # ───── Unified backend (multi-source fan-out + /datasets/* + stubs) — main UI entry on :8000 ─────
+  opendata-backend:
     build:
-      context: ./ckan-mcp-agent
-      dockerfile: Dockerfile
-    image: ckan-mcp-agent:local
-    container_name: ckan-agent
+      context: .
+      dockerfile: opendata-backend/Dockerfile
+    image: opendata-backend:local
+    container_name: opendata-backend
     ports:
-      - "${CKAN_AGENT_PORT:-8002}:8002"
-    environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
-      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
-      MCP_SERVER_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
-      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
-      API_HOST: 0.0.0.0
-      API_PORT: "8002"
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    depends_on:
-      ckan-mcp:
-        condition: service_started
-      ollama-cpu:
-        condition: service_healthy
-        required: false
-      ollama-gpu:
-        condition: service_healthy
-        required: false
-    restart: unless-stopped
-
-  # ───── ISTAT specialist agent (standalone debug entry on :8003) ─────
-  istat-agent:
-    build:
-      context: ./istat-mcp-agent
-      dockerfile: Dockerfile
-    image: istat-mcp-agent:local
-    container_name: istat-agent
-    ports:
-      - "${ISTAT_AGENT_PORT:-8003}:8003"
-    environment:
-      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
-      OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-qwen2.5:32k}
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
-      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
-      MCP_SERVER_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
-      ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
-      API_HOST: 0.0.0.0
-      API_PORT: "8003"
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    depends_on:
-      istat-mcp:
-        condition: service_started
-      ollama-cpu:
-        condition: service_healthy
-        required: false
-      ollama-gpu:
-        condition: service_healthy
-        required: false
-    restart: unless-stopped
-
-  # ───── Orchestrator (fan-out CKAN + ISTAT, synthesise) — main UI entry on :8000 ─────
-  opendata-orchestrator:
-    build:
-      context: ./opendata-orchestrator
-      dockerfile: Dockerfile
-    image: opendata-orchestrator:local
-    container_name: opendata-orchestrator
-    ports:
-      - "${ORCHESTRATOR_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
@@ -193,10 +164,23 @@ services:
       ENABLE_OECD: ${ENABLE_OECD:-false}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_JWT_ISSUER: ${CLERK_JWT_ISSUER:-}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://opendata:opendata@postgres:5432/opendata}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
       ckan-mcp:
         condition: service_started
       istat-mcp:
@@ -211,7 +195,7 @@ services:
         required: false
     restart: unless-stopped
 
-  # ───── Web UI (Next.js) — points at the orchestrator ─────
+  # ───── Web UI (Next.js) — points at the unified backend ─────
   opendata-ai-ui:
     build:
       context: ./opendata-ai-ui
@@ -221,14 +205,21 @@ services:
     ports:
       - "${UI_PORT:-3000}:3000"
     environment:
-      AGENT_API_URL: ${AGENT_API_URL:-http://opendata-orchestrator:8000}
-      # Slow local models (qwen2.5:32b fan-out) can take minutes; default 10 min.
-      AGENT_API_TIMEOUT_MS: ${AGENT_API_TIMEOUT_MS:-600000}
+      # `next dev` is what runs inside this container; the static export
+      # bakes these vars at build time. Keep them in sync.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
     depends_on:
-      opendata-orchestrator:
+      opendata-backend:
         condition: service_started
     restart: unless-stopped
 
 volumes:
   ollama_data:
     name: opendata-ai-ollama-data
+  postgres_data:
+    name: opendata-ai-postgres-data
+  redis_data:
+    name: opendata-ai-redis-data

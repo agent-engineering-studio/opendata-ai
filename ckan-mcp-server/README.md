@@ -31,6 +31,9 @@ pip install -e .
 TRANSPORT=stdio ckan-mcp-server
 ```
 
+> For the combined Claude Desktop config across all three opendata-ai MCP
+> servers (CKAN + ISTAT + OSM), see [`docs/claude-desktop.md`](../docs/claude-desktop.md).
+
 Configure in Claude Desktop (`claude_desktop_config.json`):
 
 ```json

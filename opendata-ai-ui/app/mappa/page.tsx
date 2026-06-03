@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useAuth } from "@/lib/auth";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
+import { apiFetch } from "@/lib/api";
 import { resourceToGeo } from "@/lib/geoConvert";
 import { ChatInput } from "@/components/ChatInput";
 import { AssistantMarkdown } from "@/components/AssistantMarkdown";
@@ -25,6 +26,7 @@ const LAYER_COLORS = [
 ];
 
 export default function MapPage() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [layers, setLayers] = useState<GeoLayer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,9 +44,10 @@ export default function MapPage() {
     const t0 = performance.now();
     try {
       const body: ChatRequest = { query };
-      const res = await fetch("/api/chat", {
+      const token = await getToken();
+      const res = await apiFetch("/datasets/search", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        token,
         body: JSON.stringify(body),
       });
       const raw = await res.text();
@@ -127,23 +130,12 @@ export default function MapPage() {
   const geoCount = layers.length;
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <div>
-          <h1 className="text-base font-semibold text-slate-900">OpenData AI — Mappa</h1>
-          <p className="text-xs text-slate-500">
-            Chiedi dati geografici: compaiono come layer sulla mappa OpenStreetMap.
-          </p>
-        </div>
-        <nav className="flex gap-2 text-sm">
-          <Link href="/" className="rounded-md border border-slate-300 bg-white px-3 py-1 text-slate-700 hover:bg-slate-50">
-            Chat
-          </Link>
-          <span className="rounded-md border border-blue-500 bg-blue-50 px-3 py-1 font-medium text-blue-800">
-            Mappa
-          </span>
-        </nav>
-      </header>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-[var(--color-border)] bg-white px-4 py-2">
+        <p className="text-xs text-[var(--color-text-muted)]">
+          Chiedi dati geografici: compaiono come layer sulla mappa OpenStreetMap.
+        </p>
+      </div>
 
       <div className="flex min-h-0 flex-1">
         {/* Map */}

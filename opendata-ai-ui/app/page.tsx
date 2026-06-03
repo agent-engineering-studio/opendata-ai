@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/lib/auth";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
 import { ChatInput } from "@/components/ChatInput";
 import { ExampleQueries } from "@/components/ExampleQueries";
 
 export default function Page() {
+  const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [prefill, setPrefill] = useState<string | undefined>(undefined);
@@ -26,9 +29,10 @@ export default function Page() {
     const body: ChatRequest = { query };
 
     try {
-      const res = await fetch("/api/chat", {
+      const token = await getToken();
+      const res = await apiFetch("/datasets/search", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        token,
         body: JSON.stringify(body),
       });
 
@@ -69,7 +73,7 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ChatHeader
         onReset={() => setMessages([])}
         canReset={messages.length > 0 && !loading}
