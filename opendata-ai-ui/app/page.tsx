@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth";
 import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { ChatHeader } from "@/components/ChatHeader";
@@ -73,7 +73,7 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <ChatHeader
         onReset={() => setMessages([])}
         canReset={messages.length > 0 && !loading}

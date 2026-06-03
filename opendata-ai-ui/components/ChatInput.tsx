@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Button, Input } from "design-react-kit";
 
 type Props = {
   onSubmit: (query: string) => void;
@@ -31,34 +32,39 @@ export function ChatInput({ onSubmit, loading, prefill, prefillKey }: Props) {
 
   return (
     <form
-      className="flex items-end gap-2 border-t border-slate-200 bg-white p-3"
+      className="flex items-end gap-2 border-t border-[var(--color-border)] bg-white p-3"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        rows={2}
-        disabled={loading}
-        placeholder="Scrivi una domanda… (Invio per inviare, Shift+Invio per andare a capo)"
-        className="flex-1 resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50"
-      />
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-300"
-      >
+      <div className="flex-1">
+        <label htmlFor="chat-query" className="sr-only">
+          Domanda
+        </label>
+        {/* BI Input typings don't include textarea-specific props (rows),
+            so spread them as untyped extras. The underlying element is a
+            <textarea> when type="textarea". */}
+        <Input
+          type="textarea"
+          id="chat-query"
+          innerRef={textareaRef as unknown as React.Ref<HTMLInputElement>}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          disabled={loading}
+          placeholder="Scrivi una domanda… (Invio per inviare, Shift+Invio per andare a capo)"
+          {...({ rows: 2 } as Record<string, unknown>)}
+        />
+      </div>
+      <Button color="primary" type="submit" disabled={!canSubmit}>
         Invia
-      </button>
+      </Button>
     </form>
   );
 }

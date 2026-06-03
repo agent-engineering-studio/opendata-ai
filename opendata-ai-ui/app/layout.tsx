@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { ClerkProvider, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { AuthShell } from "@/components/AuthShell";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 
 import "./globals.css";
 
@@ -16,27 +18,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="it">
-      <body className="min-h-screen antialiased">
-        <ClerkProvider>
-          <header className="flex items-center justify-end gap-2 px-6 py-3 text-sm">
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-50">
-                  Accedi
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="rounded bg-slate-900 px-3 py-1 text-white hover:bg-slate-700">
-                  Registrati
-                </button>
-              </SignUpButton>
-            </SignedOut>
-            <SignedIn>
-              <UserButton afterSignOutUrl="/" />
-            </SignedIn>
-          </header>
-          {children}
-        </ClerkProvider>
+      <body className="min-h-screen flex flex-col antialiased">
+        <AuthShell>
+          <a href="#main-content" className="visually-hidden-focusable">
+            Vai al contenuto principale
+          </a>
+          <SiteHeader />
+          <main id="main-content" className="flex flex-1 min-h-0 flex-col">
+            {children}
+          </main>
+          <SiteFooter />
+        </AuthShell>
       </body>
     </html>
   );
