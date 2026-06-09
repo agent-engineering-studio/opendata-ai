@@ -10,6 +10,7 @@ on:
       - 'istat-mcp-server/**'
       - 'osm-mcp/**'
       - 'opendata-backend/**'
+      - 'opendata-ai-ui/**'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
     inputs:
@@ -32,6 +33,7 @@ env:
   #   ghcr.io/<owner>/istat-mcp-server:<tag>
   #   ghcr.io/<owner>/osm-mcp:<tag>
   #   ghcr.io/<owner>/opendata-backend:<tag>
+  #   ghcr.io/<owner>/opendata-ai-ui:<tag>
   IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
@@ -41,14 +43,28 @@ jobs:
       fail-fast: false
       matrix:
         service:
+          # Backend services build from repo root so they can copy the shared
+          # opendata_core/ package in alongside their own sources.
           - name: ckan-mcp-server
+            context: .
             dockerfile: ckan-mcp-server/Dockerfile
           - name: istat-mcp-server
+            context: .
             dockerfile: istat-mcp-server/Dockerfile
           - name: osm-mcp
+            context: .
             dockerfile: osm-mcp/Dockerfile
           - name: opendata-backend
+            context: .
             dockerfile: opendata-backend/Dockerfile
+          # UI is a self-contained Next.js app; build from its own directory
+          # so the `output: 'export'` bundle is produced cleanly. NEXT_PUBLIC_*
+          # are baked at build time — pass them via repo variables/secrets
+          # (set vars: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_CLERK_SIGN_IN_URL,
+          # NEXT_PUBLIC_CLERK_SIGN_UP_URL; secret: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY).
+          - name: opendata-ai-ui
+            context: opendata-ai-ui
+            dockerfile: opendata-ai-ui/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -93,14 +109,22 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          # All images build from the repo root so the shared opendata_core/
-          # package can be copied in alongside their own sources.
-          context: .
+          # Context depends on the service — backend images build from repo
+          # root to access opendata_core/, the UI builds from its own dir.
+          context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # next.config.ts uses `output: 'export'` so NEXT_PUBLIC_* must be
+          # baked at build time. Unused by other services — docker/build-push
+          # silently ignores build-args the Dockerfile doesn't declare.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_CLERK_SIGN_IN_URL=${{ vars.NEXT_PUBLIC_CLERK_SIGN_IN_URL }}
+            NEXT_PUBLIC_CLERK_SIGN_UP_URL=${{ vars.NEXT_PUBLIC_CLERK_SIGN_UP_URL }}
           provenance: true
           sbom: true
           cache-from: type=gha,scope=${{ matrix.service.name }}
