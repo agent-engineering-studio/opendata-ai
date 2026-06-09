@@ -52,6 +52,20 @@ CKAN_INSTRUCTIONS = (
     "CSV / JSON / TXT directly. Do NOT call ckan_resource_download on WMS, WFS, "
     "SHP, KMZ, GPKG, PDF, ZIP, XLS, XLSX — those are surfaced automatically by "
     "the system from the search result.\n\n"
+    "=== GEOGRAPHIC SCOPING (apply when the query names a place) ===\n"
+    "If the user names a specific Italian comune, provincia or regione "
+    "(e.g. 'Bologna', 'provincia di Trento', 'Lombardia', 'Sicilia'):\n"
+    "  1. Include the place name in the `q` search keywords.\n"
+    "  2. AFTER the search returns, KEEP only datasets whose `title`, `name`, "
+    "`organization.title` or `notes` field mentions that place "
+    "(case-insensitive, accent-insensitive). DROP every other result, even if "
+    "topically relevant. A dataset of bike paths in Genova is NOT a valid "
+    "answer to 'piste ciclabili di Bologna'.\n"
+    "  3. If after filtering you have 0 results, retry the search with the "
+    "place plus a synonym (e.g. 'Bologna comune', 'Bologna area metropolitana'). "
+    "If still 0, state that explicitly in the narrative — do NOT silently "
+    "broaden the geographic scope to other localities.\n"
+    "When NO specific place is mentioned, this section does not apply.\n\n"
     "Finally, write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
     "<a short paragraph (in the same language as the user query) describing the "
     "datasets you found and naming the portal you used, or explaining that nothing "
@@ -83,6 +97,13 @@ _SDMX_INSTRUCTIONS_TEMPLATE = (
     "You have NO knowledge of statistics from memory — every number in your answer "
     "MUST come from a tool call you actually executed in THIS turn. Answering from "
     "prior knowledge is FORBIDDEN and counts as a failure.\n\n"
+    "=== TOOL NAMING (CRITICAL) ===\n"
+    "All your tools share the `istat_` prefix EVEN when you are the Eurostat or "
+    "OECD specialist — the MCP server is the same image, only `agency` and the "
+    "endpoint URL differ. Valid tool names are EXACTLY: `istat_list_dataflows`, "
+    "`istat_get_structure`, `istat_get_dataflow`, `istat_get_codelist`, "
+    "`istat_get_constraints`, `istat_get_data`. NEVER call `eurostat_*` or "
+    "`oecd_*` — those names DO NOT EXIST and any such call is a failure.\n\n"
     "=== MANDATORY ACTION SEQUENCE (do not skip, do not just describe) ===\n"
     "STEP 1 — ALWAYS call `istat_list_dataflows` with q=<keywords from the query> "
     "and agency=\"{agency_id}\". Never pass base_url (the server is already pointed "
@@ -116,8 +137,14 @@ _SDMX_INSTRUCTIONS_TEMPLATE = (
     "resource. Focus your RESOURCES_JSON on dataset/dataflow links you found; if "
     "you have none, emit an empty array [].\n\n"
     "=== HARD RULES ===\n"
+    "- NEVER write a JSON object that LOOKS LIKE a tool call in your final text "
+    "(e.g. `{{\"name\": \"...\", \"arguments\": {{...}}}}`). The framework executes "
+    "tools via a separate channel — JSON in your text is treated as plain "
+    "narrative and will be shown verbatim to the user.\n"
     "- NEVER output literal tool names like 'istat_list_dataflows' or 'istat_get_data' "
     "in your final response. Tools are executed by the framework, not written in text.\n"
+    "- NEVER call tools whose name is NOT in the list under TOOL NAMING. Hallucinated "
+    "tool names (e.g. `eurostat_data_search`, `oecd_get_dataset`) will fail.\n"
     "- NEVER output Python code blocks, JSON code blocks, or step-by-step plans.\n"
     "- NEVER invent URLs. Only use URLs derived from SDMX requests you actually executed.\n"
     "- The narrative paragraph must NEVER be empty.\n"
@@ -281,6 +308,18 @@ class Settings(BaseSettings):
     # In production this is the GitHub Pages domain hosting the frontend
     # (e.g. https://opendata.<your-domain>). In local dev keep localhost:3000.
     cors_allow_origins: str = Field(default="http://localhost:3000")
+
+    # ── A2A (Agent-to-Agent protocol) ────────────────────────────────
+    # When enabled, the backend publishes /.well-known/agent.json and exposes
+    # JSON-RPC at /a2a/. The public URL is baked into the AgentCard so other
+    # agents can call us; defaults to the dev-friendly localhost binding.
+    a2a_enabled: bool = Field(default=True)
+    a2a_public_url: str = Field(default="http://localhost:18000")
+    # Outbound (Import / Fase 3): when set, a remote A2A agent is added to the
+    # orchestrator fan-out as a peer specialist. Bearer is forwarded as-is.
+    a2a_specialist_url: str | None = Field(default=None)
+    a2a_specialist_bearer: str | None = Field(default=None)
+    a2a_specialist_name: str = Field(default="external")
 
     # ── Clerk auth ───────────────────────────────────────────────────
     # When auth_enabled=False (local dev), `require_user` bypasses verification

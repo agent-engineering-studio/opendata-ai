@@ -13,6 +13,8 @@ from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
+from .url import needs_pooler_safe_engine, to_async_dsn
+
 SessionFactory = async_sessionmaker[AsyncSession]
 
 
@@ -33,15 +35,22 @@ class Database:
 def create_database(database_url: str, *, echo: bool = False) -> Database:
     """Build an `AsyncEngine` + `async_sessionmaker` from a connection URL.
 
-    The URL must use the asyncpg driver, e.g.
-        postgresql+asyncpg://user:pass@host:5432/db
+    Accepts any common Postgres DSN form (`postgresql://`, `postgresql+asyncpg://`,
+    `postgresql+psycopg://`). SSL-related query params (`sslmode`,
+    `channel_binding`) are translated into asyncpg `connect_args`.
     """
-    if not database_url.startswith("postgresql+asyncpg://"):
-        raise ValueError(
-            "DATABASE_URL must use the postgresql+asyncpg driver "
-            f"(got {database_url.split(':', 1)[0]!r})"
-        )
-    engine = create_async_engine(database_url, echo=echo, future=True, pool_pre_ping=True)
+    async_url, connect_args = to_async_dsn(database_url)
+    engine_kwargs: dict = {
+        "echo": echo,
+        "future": True,
+        "pool_pre_ping": True,
+        "connect_args": connect_args,
+    }
+    # Transaction-mode poolers (Neon, Supabase) reject SQLAlchemy's prepared
+    # statement cache. Disable it when the DSN looks like a hosted Postgres.
+    if needs_pooler_safe_engine(database_url):
+        engine_kwargs["prepared_statement_cache_size"] = 0
+    engine = create_async_engine(async_url, **engine_kwargs)
     return Database(
         engine=engine,
         sessionmaker=async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession),

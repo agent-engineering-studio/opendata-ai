@@ -25,6 +25,7 @@ dependencies = [
     "alembic>=1.13.0",
     "redis>=5.0.0",
     "anthropic>=0.40.0",
+    "a2a-sdk[fastapi]>=1.1.0",
 ]
 
 [project.optional-dependencies]

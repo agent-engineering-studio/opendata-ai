@@ -90,13 +90,15 @@ function mergeCollections(parsed: GeoJsonObject | GeoJsonObject[]): GeoJsonObjec
 }
 
 async function proxyText(url: string): Promise<string> {
-  const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+  const { proxyFetch } = await import("./api");
+  const r = await proxyFetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.text();
 }
 
 async function proxyBuffer(url: string): Promise<ArrayBuffer> {
-  const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+  const { proxyFetch } = await import("./api");
+  const r = await proxyFetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.arrayBuffer();
 }

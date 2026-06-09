@@ -32,7 +32,7 @@ help: ## Show this help
 
 # ──────────────────────────── Local stack ────────────────────────
 
-.PHONY: up up-cpu up-gpu up-host-ollama
+.PHONY: up up-cpu up-gpu up-host-ollama up-claude
 up: up-cpu ## Start the stack (CPU profile — default)
 
 up-cpu: ## Start the stack with CPU-only Ollama (Dockerized)
@@ -48,6 +48,14 @@ up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ol
 	fi
 	@echo "✅ Host Ollama reachable. Bringing up stack without the Ollama container…"
 	$(COMPOSE) up -d $(CUSTOM_SERVICES)
+
+up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANTHROPIC_API_KEY in $(ENV_FILE).
+	@if ! grep -qE '^ANTHROPIC_API_KEY=.+' $(ENV_FILE); then \
+		echo "⚠️  ANTHROPIC_API_KEY not set in $(ENV_FILE) — Claude provider needs it."; \
+		exit 1; \
+	fi
+	@echo "✅ Using Claude as LLM provider. Bringing up stack without the Ollama container…"
+	LLM_PROVIDER=claude $(COMPOSE) up -d $(CUSTOM_SERVICES)
 
 .PHONY: down logs ps
 down: ## Stop the stack

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "./auth";
+import { proxyFetch } from "./api";
 
 type State<T> =
   | { status: "loading" }
@@ -12,6 +14,7 @@ export function useProxyFetch<T>(
   decode: (resp: Response) => Promise<T>,
 ): State<T> {
   const [state, setState] = useState<State<T>>({ status: "loading" });
+  const { getToken } = useAuth();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -19,10 +22,8 @@ export function useProxyFetch<T>(
 
     (async () => {
       try {
-        const resp = await fetch(
-          `/api/proxy?url=${encodeURIComponent(url)}`,
-          { signal: controller.signal },
-        );
+        const token = await getToken();
+        const resp = await proxyFetch(url, { token, signal: controller.signal });
         if (!resp.ok) {
           let detail = `HTTP ${resp.status}`;
           try {
@@ -45,7 +46,7 @@ export function useProxyFetch<T>(
     })();
 
     return () => controller.abort();
-  }, [url, decode]);
+  }, [url, decode, getToken]);
 
   return state;
 }

@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { proxyFetch } from "@/lib/api";
 
 /**
  * Renders a PDF inline. Embedding the source URL directly fails on most open-data
  * portals (X-Frame-Options / CSP block cross-origin framing, plus http→https mixed
- * content) → blank iframe. Instead we fetch the file through our same-origin
- * `/api/proxy`, turn it into a blob: URL, and frame that. Falls back to an
- * "Apri" link on error (e.g. file too large for the proxy cap).
+ * content) → blank iframe. Instead we fetch the file through the backend proxy,
+ * turn it into a blob: URL, and frame that. Falls back to an "Apri" link on
+ * error (e.g. file too large for the proxy cap).
  */
 export function PdfPreview({ url }: { url: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { getToken } = useAuth();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -21,9 +24,8 @@ export function PdfPreview({ url }: { url: string }) {
 
     (async () => {
       try {
-        const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, {
-          signal: controller.signal,
-        });
+        const token = await getToken();
+        const resp = await proxyFetch(url, { token, signal: controller.signal });
         if (!resp.ok) {
           let detail = `HTTP ${resp.status}`;
           try {
@@ -66,7 +68,7 @@ export function PdfPreview({ url }: { url: string }) {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [url]);
+  }, [url, getToken]);
 
   if (error) {
     return (

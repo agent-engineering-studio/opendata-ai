@@ -19,7 +19,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import AsyncExitStack
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, AsyncIterator
 
 from agent_framework import Agent, MCPStreamableHTTPTool
 
@@ -190,6 +191,24 @@ class OrchestratorSession:
             )
             participants.append(agent)
 
+        # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
+        # orchestrator fans out to a remote A2A-compliant agent as a peer. It
+        # appears in the same loop as CKAN / ISTAT — same lifecycle, same
+        # `_worker` wrapper, same aggregator hook. Lives behind a feature flag
+        # so absence-of-config is the safe default.
+        if s.a2a_specialist_url:
+            from .orchestrator.a2a_specialist import A2ARemoteAgent
+
+            remote = A2ARemoteAgent(
+                name=s.a2a_specialist_name,
+                url=s.a2a_specialist_url,
+                bearer=s.a2a_specialist_bearer,
+            )
+            await self._stack.enter_async_context(remote)
+            participants.append(remote)  # type: ignore[arg-type]
+            log.info("Added A2A remote specialist | name=%s url=%s",
+                     s.a2a_specialist_name, s.a2a_specialist_url)
+
         if len(participants) < 1:
             raise RuntimeError("No participants enabled — refusing to start")
 
@@ -237,3 +256,138 @@ class OrchestratorSession:
             if messages:
                 text = getattr(messages[-1], "text", None)
         return text if text is not None else str(final)
+
+    async def run_streaming(
+        self,
+        query: str,
+        *,
+        heartbeat_sec: float = 10.0,
+        total_timeout_sec: float = 600.0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Same fan-out as `run()`, but yields status events as the work progresses.
+
+        Bypasses the agent-framework workflow (which is opaque) to keep direct
+        control of per-participant entry/exit. The aggregator is still reused so
+        downstream parsing matches `run()` exactly.
+
+        Yields dicts shaped:
+            {"event": "status",    "source": "<name>", "phase": "start|end", "error"?: str}
+            {"event": "heartbeat", "in_flight": ["istat", ...], "elapsed_ms": int}
+            {"event": "result",    "text": str}     # last, exactly once
+            {"event": "error",     "message": str}  # only on fatal failure
+        """
+        if not self._participants or self._aggregator is None:
+            raise RuntimeError("OrchestratorSession not entered")
+
+        # The same lock as run(): participant Agents are shared across requests
+        # and the underlying MCP sessions don't tolerate concurrent reuse.
+        async with self._lock:
+            queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+            in_flight: set[str] = set()
+            t0 = asyncio.get_event_loop().time()
+
+            async def _worker(agent: Agent) -> _WrappedAgentResult:
+                name = getattr(agent, "name", None) or "agent"
+                in_flight.add(name)
+                await queue.put({"event": "status", "source": name, "phase": "start"})
+                try:
+                    resp = await agent.run(query)
+                except Exception as exc:
+                    in_flight.discard(name)
+                    await queue.put(
+                        {"event": "status", "source": name, "phase": "end", "error": str(exc)}
+                    )
+                    raise
+                in_flight.discard(name)
+                await queue.put({"event": "status", "source": name, "phase": "end"})
+                return _WrappedAgentResult(executor_id=name, agent_response=resp)
+
+            tasks = [asyncio.create_task(_worker(p)) for p in self._participants]
+
+            async def _drain_then_sentinel() -> list[Any]:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                await queue.put(None)  # sentinel
+                return results
+
+            collector = asyncio.create_task(_drain_then_sentinel())
+            deadline = t0 + total_timeout_sec
+            timed_out = False
+
+            try:
+                while True:
+                    now = asyncio.get_event_loop().time()
+                    remaining = deadline - now
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    wait = min(heartbeat_sec, remaining)
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=wait)
+                    except asyncio.TimeoutError:
+                        # No status changes within `heartbeat_sec` — emit a heartbeat
+                        # so the client knows the connection is still alive and which
+                        # sources are still running.
+                        if in_flight:
+                            elapsed_ms = int((asyncio.get_event_loop().time() - t0) * 1000)
+                            yield {
+                                "event": "heartbeat",
+                                "in_flight": sorted(in_flight),
+                                "elapsed_ms": elapsed_ms,
+                            }
+                        continue
+                    if event is None:
+                        break
+                    yield event
+
+                if timed_out:
+                    log.warning(
+                        "run_streaming hit total_timeout_sec=%s; cancelling %d tasks",
+                        total_timeout_sec, len(tasks),
+                    )
+                    yield {
+                        "event": "error",
+                        "message": (
+                            f"Timeout dopo {int(total_timeout_sec)}s. Sorgenti ancora attive: "
+                            f"{', '.join(sorted(in_flight)) or '—'}."
+                        ),
+                    }
+                    return
+
+                results = await collector
+                # Bubble up unexpected non-Exception failures the same way run() would.
+                real_results = [r for r in results if not isinstance(r, BaseException)]
+
+                yield {"event": "status", "source": "synth", "phase": "start"}
+                try:
+                    synth_output = await self._aggregator(real_results)
+                except Exception as exc:
+                    log.exception("synth aggregator failed in run_streaming")
+                    yield {"event": "status", "source": "synth", "phase": "end", "error": str(exc)}
+                    yield {"event": "error", "message": f"Sintesi fallita: {exc}"}
+                    return
+                yield {"event": "status", "source": "synth", "phase": "end"}
+
+                yield {"event": "result", "text": getattr(synth_output, "text", "") or str(synth_output)}
+            finally:
+                # Cancel any still-pending participant work so a timed-out or
+                # client-aborted request doesn't leak tasks (which would keep
+                # the next request waiting on `self._lock`).
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                if not collector.done():
+                    collector.cancel()
+                # Best-effort drain; we don't propagate cancellation exceptions.
+                await asyncio.gather(*tasks, collector, return_exceptions=True)
+
+
+@dataclass
+class _WrappedAgentResult:
+    """Mirror the AgentExecutorResponse shape consumed by `orchestrator.synth`.
+
+    The aggregator reads `.executor_id` (for source tagging) and
+    `.agent_response.messages` (for tool-result capture).
+    """
+
+    executor_id: str
+    agent_response: Any

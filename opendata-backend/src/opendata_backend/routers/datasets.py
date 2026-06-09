@@ -6,11 +6,18 @@ keeps working unchanged during the migration; it will be removed in step 8.
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import logging
+import socket
 import time
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from opendata_core.ckan import CkanClient
 
@@ -41,6 +48,10 @@ router = APIRouter(tags=["datasets"])
 class ChatRequest(BaseModel):
     query: str
     base_url: str | None = None
+    # True when the request comes from the /mappa page: the orchestrator biases
+    # the agents toward geographic resources (GeoJSON / Shapefile / KML / WMS)
+    # and administrative boundaries, instead of tabular CSV/JSON.
+    prefer_geo: bool | None = None
 
 
 class ChatResponse(BaseModel):
@@ -82,18 +93,39 @@ class ClassifyResponse(BaseModel):
     cached: bool
 
 
-async def _run_orchestrator(query: str, base_url: str | None) -> ChatResponse:
+_MAP_MODE_HINT = (
+    "MAP_MODE: l'utente sta visualizzando una mappa. PREFERISCI risorse "
+    "geografiche (GeoJSON, Shapefile, KML, GPX, WMS) e confini amministrativi "
+    "(regioni, province, comuni) quando opportuno. Evita risorse puramente "
+    "tabulari (CSV / JSON di valori) se sono disponibili alternative geografiche."
+)
+
+
+def _wrap_query(query: str, base_url: str | None, prefer_geo: bool | None) -> str:
+    """Prepend portal + map-mode hints to the user query without altering its meaning.
+
+    Hints are plain-text directives consumed by the specialist prompts (see
+    config.py CKAN_/ISTAT_INSTRUCTIONS). They never run as code.
+    """
+    parts: list[str] = []
+    if base_url:
+        # Forwarded only to the CKAN specialist; ISTAT ignores it (its base_url
+        # is a separate setting wired into the MCP server).
+        parts.append(f"PORTAL_HINT: use base_url={base_url} for all CKAN tool calls.")
+    if prefer_geo:
+        parts.append(_MAP_MODE_HINT)
+    parts.append(f"USER QUERY: {query}")
+    return "\n".join(parts)
+
+
+async def _run_orchestrator(
+    query: str, base_url: str | None, prefer_geo: bool | None = None
+) -> ChatResponse:
     sess = session_holder.session
     settings = session_holder.settings
     if sess is None or settings is None:
         raise HTTPException(status_code=503, detail="Backend session not initialised")
-    if base_url:
-        # Forwarded only to the CKAN specialist as a portal hint; ISTAT ignores it
-        # (its base_url is a separate setting wired into the MCP server).
-        query = (
-            f"PORTAL_HINT: use base_url={base_url} for all CKAN tool calls.\n"
-            f"USER QUERY: {query}"
-        )
+    query = _wrap_query(query, base_url, prefer_geo)
     log.info("orchestrator query: %r", query[:200])
     t0 = time.perf_counter()
     raw = await sess.run(query)
@@ -122,7 +154,7 @@ async def chat(
 ) -> ChatResponse:
     """Back-compat alias of /datasets/search — used by the legacy frontend."""
     log.info("/chat subject=%s", user.subject)
-    return await _run_orchestrator(req.query, req.base_url)
+    return await _run_orchestrator(req.query, req.base_url, req.prefer_geo)
 
 
 @router.post("/datasets/search", response_model=ChatResponse)
@@ -132,7 +164,66 @@ async def search(
 ) -> ChatResponse:
     """Multi-source fan-out (CKAN + ISTAT [+ Eurostat + OECD if enabled])."""
     log.info("/datasets/search subject=%s", user.subject)
-    return await _run_orchestrator(req.query, req.base_url)
+    return await _run_orchestrator(req.query, req.base_url, req.prefer_geo)
+
+
+@router.post("/datasets/search/stream")
+async def search_stream(
+    req: ChatRequest,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> StreamingResponse:
+    """Same as /datasets/search but yields NDJSON progress events while the
+    orchestrator runs, then a final `result` line with the parsed payload.
+
+    Stream format (one JSON object per line):
+        {"event":"status","source":"ckan","phase":"start"}
+        {"event":"status","source":"ckan","phase":"end"}
+        {"event":"status","source":"istat","phase":"start"}
+        ...
+        {"event":"status","source":"synth","phase":"end"}
+        {"event":"result","text":"...","resources":[...]}
+    """
+    log.info("/datasets/search/stream subject=%s", user.subject)
+    sess = session_holder.session
+    settings = session_holder.settings
+    if sess is None or settings is None:
+        raise HTTPException(status_code=503, detail="Backend session not initialised")
+
+    query = _wrap_query(req.query, req.base_url, req.prefer_geo)
+
+    async def _events():
+        t0 = time.perf_counter()
+        try:
+            async for ev in sess.run_streaming(query):
+                if ev.get("event") == "result":
+                    raw = ev.get("text") or ""
+                    text, resources = parse_agent_reply(raw)
+                    await fill_missing_content(resources)
+                    try:
+                        await upgrade_sdmx_resources(resources)
+                    except Exception:
+                        log.warning("upgrade_sdmx_resources failed", exc_info=True)
+                    if settings.enable_osm_maps:
+                        try:
+                            await attach_maps(settings.osm_mcp_url, text, resources)
+                        except Exception:
+                            log.warning("attach_maps failed", exc_info=True)
+                    elapsed = (time.perf_counter() - t0) * 1000
+                    log.info("/datasets/search/stream reply in %.0fms", elapsed)
+                    payload = {
+                        "event": "result",
+                        "text": text,
+                        "resources": [r.model_dump() for r in resources],
+                    }
+                    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+                else:
+                    yield (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
+        except Exception as exc:
+            log.exception("/datasets/search/stream failed")
+            err = {"event": "error", "message": str(exc)}
+            yield (json.dumps(err, ensure_ascii=False) + "\n").encode("utf-8")
+
+    return StreamingResponse(_events(), media_type="application/x-ndjson")
 
 
 @router.post("/datasets/by-category", response_model=ChatResponse)
@@ -217,4 +308,129 @@ async def classify(
         scores=result.scores,
         model=result.model,
         cached=result.cached,
+    )
+
+
+# ───────────────────────────── /datasets/proxy ─────────────────────────────
+# Static-export frontend can't run Next.js API routes anymore; resources hosted
+# on opendata portals usually don't send CORS headers either. We expose a
+# server-side proxy here so the UI (e.g. /mappa GeoJSON/Shapefile fetch) can
+# pull arbitrary file URLs through the backend's origin.
+
+# Sane defaults — opendata files are sometimes large (shapefile zips, KML).
+_PROXY_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
+_PROXY_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
+_PROXY_FORWARD_HEADERS = {
+    "content-type",
+    "content-length",
+    "content-disposition",
+    "etag",
+    "last-modified",
+}
+
+
+def _validate_proxy_url(raw: str) -> str:
+    """Reject obviously malicious / non-public targets before we hit the network."""
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="Solo schemi http(s) sono accettati")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Hostname mancante nell'URL")
+    # Block hostnames that resolve to private/loopback/link-local addresses to
+    # prevent the backend from being used as a relay onto internal networks.
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror as exc:
+        raise HTTPException(status_code=400, detail=f"DNS lookup fallito: {exc}") from exc
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=f"L'URL punta a una rete non pubblica ({ip})",
+            )
+    return raw
+
+
+@router.get("/datasets/proxy")
+async def proxy(
+    url: str,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> StreamingResponse:
+    """Stream `url` through the backend, forwarding selected headers.
+
+    Used by the static UI to fetch portal resources (GeoJSON, Shapefile zips,
+    KML, GPX, CSV) that would otherwise fail browser-side CORS.
+    """
+    _validate_proxy_url(url)
+    log.info("/datasets/proxy subject=%s url=%s", user.subject, url[:200])
+
+    client = httpx.AsyncClient(
+        timeout=_PROXY_TIMEOUT,
+        follow_redirects=True,
+        headers={"User-Agent": "opendata-ai-backend/0.1 (+proxy)"},
+    )
+    try:
+        upstream_req = client.build_request("GET", url)
+        upstream = await client.send(upstream_req, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(status_code=502, detail=f"Errore upstream: {exc}") from exc
+
+    if upstream.status_code >= 400:
+        status = upstream.status_code
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=status, detail=f"upstream HTTP {status}")
+
+    # If upstream advertised a length and it's too big, fail fast.
+    cl = upstream.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > _PROXY_MAX_BYTES:
+                await upstream.aclose()
+                await client.aclose()
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Risorsa troppo grande ({cl} byte > {_PROXY_MAX_BYTES})",
+                )
+        except ValueError:
+            pass  # ignore malformed content-length
+
+    forwarded = {
+        k: v for k, v in upstream.headers.items() if k.lower() in _PROXY_FORWARD_HEADERS
+    }
+    media_type = upstream.headers.get("content-type", "application/octet-stream")
+
+    async def _stream():
+        sent = 0
+        try:
+            async for chunk in upstream.aiter_bytes(chunk_size=64 * 1024):
+                sent += len(chunk)
+                if sent > _PROXY_MAX_BYTES:
+                    log.warning("proxy: aborting %s after %d bytes (limit hit)", url, sent)
+                    return
+                yield chunk
+        finally:
+            await upstream.aclose()
+
+    async def _cleanup() -> None:
+        await client.aclose()
+
+    return StreamingResponse(
+        _stream(),
+        media_type=media_type,
+        headers=forwarded,
+        background=BackgroundTask(_cleanup),
     )

@@ -11,23 +11,21 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from opendata_backend.db.models import Base
+from opendata_backend.db.url import to_sync_dsn
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Force a sync DB URL for Alembic even when the runtime app uses asyncpg.
+# Force a sync (psycopg3) DSN for Alembic even when the runtime app uses asyncpg.
+# psycopg3 understands `sslmode=require` / `channel_binding=require` natively,
+# so the URL passed by Neon-style providers works as-is.
 _RUNTIME_URL = os.environ.get("DATABASE_URL", "")
-if _RUNTIME_URL.startswith("postgresql+asyncpg://"):
-    config.set_main_option(
-        "sqlalchemy.url",
-        _RUNTIME_URL.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1),
-    )
-elif _RUNTIME_URL:
-    config.set_main_option("sqlalchemy.url", _RUNTIME_URL)
+if _RUNTIME_URL:
+    config.set_main_option("sqlalchemy.url", to_sync_dsn(_RUNTIME_URL))
 
 target_metadata = Base.metadata
 
@@ -52,6 +50,11 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Alembic's own version-table lives in `opendata.alembic_version`, so the
+        # schema must exist before `_ensure_version_table()` runs. Postgres only.
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("CREATE SCHEMA IF NOT EXISTS opendata"))
+            connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

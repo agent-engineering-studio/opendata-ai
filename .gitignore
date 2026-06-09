@@ -42,3 +42,6 @@ azure-creds.json
 *.tmp
 
 .clerk/
+
+# Next.js build artefacts (when next build is accidentally run from repo root)
+.next/

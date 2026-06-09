@@ -140,6 +140,11 @@ app.include_router(me.router)
 app.include_router(api_keys.router)
 app.include_router(webhooks.router)
 
+# Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
+# and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.
+from .a2a import register_a2a  # noqa: E402 — late import to avoid circulars
+register_a2a(app, get_settings())
+
 
 def run() -> None:
     settings = get_settings()

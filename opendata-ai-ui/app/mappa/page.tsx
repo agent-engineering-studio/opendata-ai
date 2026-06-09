@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/lib/auth";
-import type { ChatMessage, ChatRequest, ChatResponse } from "@/lib/types";
+import type { ChatMessage, ChatRequest, Resource } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
 import { apiFetch } from "@/lib/api";
 import { resourceToGeo } from "@/lib/geoConvert";
@@ -25,12 +25,44 @@ const LAYER_COLORS = [
   "#7c3aed", "#0891b2", "#db2777", "#65a30d",
 ];
 
+const SOURCE_LABEL: Record<string, string> = {
+  ckan: "Catalogo CKAN",
+  istat: "ISTAT",
+  eurostat: "Eurostat",
+  oecd: "OCSE",
+  synth: "Sintesi",
+};
+
+type StreamEvent =
+  | { event: "status"; source: string; phase: "start" | "end"; error?: string }
+  | { event: "heartbeat"; in_flight: string[]; elapsed_ms: number }
+  | { event: "result"; text: string; resources: Resource[] }
+  | { event: "error"; message: string };
+
+function statusLabel(ev: { source: string; phase: "start" | "end"; error?: string }): string {
+  const label = SOURCE_LABEL[ev.source] ?? ev.source;
+  if (ev.error) return `${label} ha riportato un errore — proseguo…`;
+  if (ev.phase === "start") {
+    return ev.source === "synth" ? "Sintesi finale in corso…" : `Interrogo ${label}…`;
+  }
+  return ev.source === "synth" ? "Sintesi completata" : `${label} ha risposto`;
+}
+
+function heartbeatLabel(ev: { in_flight: string[]; elapsed_ms: number }): string {
+  const labels = ev.in_flight.map((s) => SOURCE_LABEL[s] ?? s);
+  const human = labels.length > 1 ? labels.join(" + ") : labels[0] ?? "agente";
+  const secs = Math.floor(ev.elapsed_ms / 1000);
+  return `Ancora in lavorazione su ${human}… (${secs}s)`;
+}
+
 export default function MapPage() {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [layers, setLayers] = useState<GeoLayer[]>([]);
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const [discardedCount, setDiscardedCount] = useState(0);
 
   function toggleLayer(id: string) {
     setLayers((prev) =>
@@ -38,92 +70,130 @@ export default function MapPage() {
     );
   }
 
+  async function _consumeStream(
+    res: Response,
+  ): Promise<{ final?: { text: string; resources: Resource[] }; streamError?: string }> {
+    if (!res.ok || !res.body) {
+      return { streamError: `Errore HTTP ${res.status}` };
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let final: { text: string; resources: Resource[] } | undefined;
+    let streamError: string | undefined;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (!line) continue;
+        let ev: StreamEvent;
+        try {
+          ev = JSON.parse(line) as StreamEvent;
+        } catch {
+          continue;
+        }
+        if (ev.event === "status") setStatus(statusLabel(ev));
+        else if (ev.event === "heartbeat") setStatus(heartbeatLabel(ev));
+        else if (ev.event === "result") final = { text: ev.text, resources: ev.resources ?? [] };
+        else if (ev.event === "error") streamError = ev.message;
+      }
+    }
+    return { final, streamError };
+  }
+
   async function send(query: string) {
     setMessages((prev) => [...prev, { role: "user", text: query }]);
     setLoading(true);
+    setStatus(undefined);
     const t0 = performance.now();
     try {
-      const body: ChatRequest = { query };
+      // prefer_geo biases the backend toward GeoJSON/Shapefile/KML/WMS resources.
+      const body: ChatRequest = { query, prefer_geo: true };
       const token = await getToken();
-      const res = await apiFetch("/datasets/search", {
+      const res = await apiFetch("/datasets/search/stream", {
         method: "POST",
         token,
         body: JSON.stringify(body),
       });
-      const raw = await res.text();
-      let parsed: ChatResponse | { error: string };
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = { error: "Risposta non valida dal proxy" };
-      }
+      const { final, streamError } = await _consumeStream(res);
       const durationMs = performance.now() - t0;
-      if (!res.ok || "error" in parsed) {
-        const errText = "error" in parsed ? parsed.error : `Errore HTTP ${res.status}`;
-        setMessages((prev) => [...prev, { role: "error", text: errText }]);
-      } else {
-        const resources = parsed.resources ?? [];
+      if (streamError) {
+        setMessages((prev) => [...prev, { role: "error", text: streamError }]);
+        return;
+      }
+      if (!final) {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", text: parsed.text, resources, durationMs },
+          { role: "error", text: "Lo stream è terminato senza una risposta." },
         ]);
-        // Convert every geographic resource (GeoJSON/KML/GPX/SHP, fetched +
-        // reprojected as needed) and accumulate them as map layers.
-        setConverting(true);
-        try {
-          const results = await Promise.all(
-            resources.map(async (r) => ({ r, geo: await resourceToGeo(r) })),
-          );
-          setLayers((prev) => {
-            const next = [...prev];
-            for (const { r, geo } of results) {
-              // WMS: one entry per layer published by the GetCapabilities.
-              if (geo && geo.status === "wms") {
-                for (const wmsLayer of geo.layers) {
-                  const idx = next.length;
-                  next.push({
-                    id: `${r.url || r.name}-${wmsLayer.name}-${idx}`,
-                    name: `${r.name || "WMS"} — ${wmsLayer.title || wmsLayer.name}`,
-                    geojson: null,
-                    wms: {
-                      baseUrl: geo.baseUrl,
-                      layerName: wmsLayer.name,
-                      bbox: wmsLayer.bbox,
-                    },
-                    color: LAYER_COLORS[idx % LAYER_COLORS.length],
-                    visible: true,
-                  });
-                }
-                continue;
+        return;
+      }
+      const resources = final.resources;
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: final.text, resources, durationMs },
+      ]);
+      // Convert every resource and keep ONLY the geographic ones (GeoJSON / WMS).
+      // Tabular CSV/JSON resources are intentionally hidden from the map view:
+      // they're already in the assistant text on the right pane.
+      setConverting(true);
+      setStatus("Conversione dati geografici per la mappa…");
+      try {
+        const results = await Promise.all(
+          resources.map(async (r) => ({ r, geo: await resourceToGeo(r) })),
+        );
+        let dropped = 0;
+        setLayers((prev) => {
+          const next = [...prev];
+          for (const { r, geo } of results) {
+            if (geo && geo.status === "wms") {
+              for (const wmsLayer of geo.layers) {
+                const idx = next.length;
+                next.push({
+                  id: `${r.url || r.name}-${wmsLayer.name}-${idx}`,
+                  name: `${r.name || "WMS"} — ${wmsLayer.title || wmsLayer.name}`,
+                  geojson: null,
+                  wms: {
+                    baseUrl: geo.baseUrl,
+                    layerName: wmsLayer.name,
+                    bbox: wmsLayer.bbox,
+                  },
+                  color: LAYER_COLORS[idx % LAYER_COLORS.length],
+                  visible: true,
+                });
               }
+              continue;
+            }
+            if (geo && geo.status === "ok") {
               const idx = next.length;
-              const geojson = geo && geo.status === "ok" ? geo.geojson : null;
-              const error =
-                geo == null
-                  ? `formato non geografico${r.format ? ` (${r.format})` : ""}`
-                  : geo.status === "ok"
-                    ? undefined
-                    : geo.reason;
               next.push({
                 id: `${r.url || r.name}-${idx}`,
                 name: r.name || `Risorsa ${idx + 1}`,
-                geojson,
+                geojson: geo.geojson,
                 color: LAYER_COLORS[idx % LAYER_COLORS.length],
-                visible: geojson != null,
-                error,
+                visible: true,
               });
+              continue;
             }
-            return next;
-          });
-        } finally {
-          setConverting(false);
-        }
+            // Non-geographic resource: drop it from the map layers panel.
+            dropped += 1;
+          }
+          return next;
+        });
+        setDiscardedCount((prev) => prev + dropped);
+      } finally {
+        setConverting(false);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setMessages((prev) => [...prev, { role: "error", text: `Errore di rete: ${message}` }]);
     } finally {
       setLoading(false);
+      setStatus(undefined);
     }
   }
 
@@ -207,10 +277,16 @@ export default function MapPage() {
                 </div>
               ))
             )}
-            {loading ? (
-              <div className="text-xs text-slate-400">L&apos;agente sta cercando…</div>
-            ) : converting ? (
-              <div className="text-xs text-slate-400">Conversione dati geografici per la mappa…</div>
+            {loading || converting ? (
+              <div className="animate-pulse text-xs text-slate-500">
+                {status ?? "L’agente sta cercando…"}
+              </div>
+            ) : discardedCount > 0 ? (
+              <div className="text-xs text-slate-400">
+                {discardedCount} risors{discardedCount === 1 ? "a" : "e"} non geografic
+                {discardedCount === 1 ? "a" : "he"} omess
+                {discardedCount === 1 ? "a" : "e"} dalla mappa (sono nel testo).
+              </div>
             ) : null}
           </div>
           <div className="border-t border-slate-200 p-3">
