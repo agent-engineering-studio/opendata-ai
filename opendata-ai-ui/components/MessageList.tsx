@@ -7,15 +7,16 @@ import { Message } from "./Message";
 type Props = {
   messages: ChatMessage[];
   loading: boolean;
+  statusMessage?: string;
   emptyState?: React.ReactNode;
 };
 
-export function MessageList({ messages, loading, emptyState }: Props) {
+export function MessageList({ messages, loading, statusMessage, emptyState }: Props) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, loading]);
+  }, [messages.length, loading, statusMessage]);
 
   if (messages.length === 0) {
     return (
@@ -40,7 +41,9 @@ export function MessageList({ messages, loading, emptyState }: Props) {
       {loading ? (
         <div className="flex justify-start">
           <div className="rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
-            <span className="inline-block animate-pulse">L&apos;agent sta pensando…</span>
+            <span className="inline-block animate-pulse">
+              {statusMessage ?? "L’agent sta pensando…"}
+            </span>
           </div>
         </div>
       ) : null}

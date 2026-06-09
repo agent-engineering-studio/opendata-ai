@@ -15,6 +15,8 @@ export type Resource = {
 export type ChatRequest = {
   query: string;
   base_url?: string;
+  /** When true, the backend biases the orchestrator toward geographic resources. */
+  prefer_geo?: boolean;
 };
 
 export type ChatResponse = {

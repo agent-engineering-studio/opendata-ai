@@ -11,7 +11,7 @@ x-ollama-base: &ollama-base
   pull_policy: ${OLLAMA_PULL_POLICY:-if_not_present}
   container_name: opendata-ai-ollama
   ports:
-    - "${OLLAMA_PORT:-11434}:11434"
+    - "${OLLAMA_PORT:-11435}:11434"
   volumes:
     - ollama_data:/root/.ollama
   restart: unless-stopped
@@ -29,7 +29,7 @@ services:
     container_name: opendata-ai-redis
     command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-16379}:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -49,7 +49,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opendata}
       POSTGRES_DB: ${POSTGRES_DB:-opendata}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-15432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -85,7 +85,7 @@ services:
     image: ckan-mcp-server:local
     container_name: ckan-mcp
     ports:
-      - "${CKAN_MCP_PORT:-8080}:8080"
+      - "${CKAN_MCP_PORT:-18080}:8080"
     environment:
       TRANSPORT: streamable-http
       HOST: 0.0.0.0
@@ -104,7 +104,7 @@ services:
     image: istat-mcp-server:local
     container_name: istat-mcp
     ports:
-      - "${ISTAT_MCP_PORT:-8081}:8081"
+      - "${ISTAT_MCP_PORT:-18081}:8081"
     environment:
       TRANSPORT: streamable-http
       HOST: 0.0.0.0
@@ -112,7 +112,12 @@ services:
       MCP_PATH: /mcp
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
       ISTAT_HTTP_TIMEOUT: "60"
+      # L2 persistent cache for the dataflow catalogue (slow + rarely changes).
+      SDMX_PERSISTENT_CACHE_DIR: /var/cache/sdmx
+      SDMX_PERSISTENT_CACHE_TTL_SECONDS: ${SDMX_PERSISTENT_CACHE_TTL_SECONDS:-86400}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - sdmx_cache:/var/cache/sdmx
     restart: unless-stopped
 
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
@@ -125,7 +130,7 @@ services:
     # Container listens on 8080 (its Dockerfile healthcheck is hardcoded to 8080);
     # exposed on the host as 8085 to avoid clashing with ckan-mcp.
     ports:
-      - "${OSM_MCP_PORT:-8085}:8080"
+      - "${OSM_MCP_PORT:-18085}:8080"
     environment:
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
@@ -141,7 +146,7 @@ services:
     image: opendata-backend:local
     container_name: opendata-backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-18000}:8000"
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://opendata-ai-ollama:11434}
@@ -173,6 +178,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://opendata:opendata@postgres:5432/opendata}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/1}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      # Static UI is served by nginx on host port 13000 (compose UI_PORT).
+      # Keep localhost:3000 too for host-side `npm run dev` workflows.
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:13000,http://localhost:3000}
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -200,17 +208,17 @@ services:
     build:
       context: ./opendata-ai-ui
       dockerfile: Dockerfile
+      # `next.config.ts` uses `output: 'export'`, so NEXT_PUBLIC_* must be
+      # baked at build time. nginx then serves the static `out/` bundle.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:18000}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
+        NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
     image: opendata-ai-ui:local
     container_name: opendata-ai-ui
     ports:
-      - "${UI_PORT:-3000}:3000"
-    environment:
-      # `next dev` is what runs inside this container; the static export
-      # bakes these vars at build time. Keep them in sync.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
-      NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
-      NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
+      - "${UI_PORT:-13000}:3000"
     depends_on:
       opendata-backend:
         condition: service_started
@@ -223,3 +231,5 @@ volumes:
     name: opendata-ai-postgres-data
   redis_data:
     name: opendata-ai-redis-data
+  sdmx_cache:
+    name: opendata-ai-sdmx-cache

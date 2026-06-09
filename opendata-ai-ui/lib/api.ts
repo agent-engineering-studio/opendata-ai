@@ -28,3 +28,25 @@ export async function apiFetch(path: string, opts: ApiFetchOptions = {}): Promis
   if (token) merged["Authorization"] = `Bearer ${token}`;
   return fetch(apiUrl(path), { ...rest, headers: merged });
 }
+
+/**
+ * Server-side proxy for arbitrary file URLs (CSV/JSON/GeoJSON/KML/SHP zips).
+ * The static UI can't run a Next.js proxy route anymore (`output: 'export'`),
+ * so the backend exposes `GET /datasets/proxy?url=…` and we route through it.
+ *
+ * Returns the backend URL string — pass it to `fetch()` (with a Bearer token
+ * via the `Authorization` header if AUTH_ENABLED=true).
+ */
+export function proxyUrl(targetUrl: string): string {
+  return apiUrl(`/datasets/proxy?url=${encodeURIComponent(targetUrl)}`);
+}
+
+/** Convenience: GET the proxy URL with the standard Auth header pattern. */
+export async function proxyFetch(
+  targetUrl: string,
+  opts: { token?: string | null; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (opts.token) headers["Authorization"] = `Bearer ${opts.token}`;
+  return fetch(proxyUrl(targetUrl), { headers, signal: opts.signal });
+}

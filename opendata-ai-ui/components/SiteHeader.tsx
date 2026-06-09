@@ -26,6 +26,7 @@ const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const NAV = [
   { href: "/", label: "Chat" },
   { href: "/mappa", label: "Mappa" },
+  { href: "/info", label: "Informazioni" },
 ] as const;
 
 export function SiteHeader() {

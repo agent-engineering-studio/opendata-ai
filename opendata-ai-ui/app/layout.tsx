@@ -24,7 +24,16 @@ export default function RootLayout({
             Vai al contenuto principale
           </a>
           <SiteHeader />
-          <main id="main-content" className="flex flex-1 min-h-0 flex-col">
+          {/*
+            `overflow-y-auto` is the key here: chat/mappa fill `main` exactly
+            via internal `flex-1` children (no overflow → no scrollbar shown),
+            while long-form pages like /info or /privacy scroll inside `main`
+            instead of pushing their <article> visually over the footer.
+          */}
+          <main
+            id="main-content"
+            className="flex flex-1 min-h-0 flex-col overflow-y-auto"
+          >
             {children}
           </main>
           <SiteFooter />

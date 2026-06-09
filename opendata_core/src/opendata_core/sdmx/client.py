@@ -17,8 +17,12 @@ Known ISTAT server behaviours:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
+import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -37,6 +41,21 @@ USER_AGENT = os.getenv(
 )
 CACHE_TTL = int(os.getenv("ISTAT_CACHE_TTL_SECONDS", "3600"))
 CACHE_MAXSIZE = int(os.getenv("ISTAT_CACHE_MAXSIZE", "512"))
+# L2 persistent cache (file-based) — survives container restarts. Used only for
+# slow, stable metadata listings (e.g. the full dataflow catalogue, which takes
+# ~20s to fetch from esploradati.istat.it but rarely changes). Set the dir to
+# empty string to disable persistence entirely.
+PERSISTENT_CACHE_DIR = os.getenv("SDMX_PERSISTENT_CACHE_DIR", "/var/cache/sdmx")
+PERSISTENT_CACHE_TTL = int(os.getenv("SDMX_PERSISTENT_CACHE_TTL_SECONDS", "86400"))  # 24h
+def _is_persistent_path(path: str) -> bool:
+    """Decide whether `path` is worth caching to disk (L2).
+
+    We persist only the full agency catalogue (`dataflow/{agency}`): big response,
+    slow to fetch, rarely changes. Per-flow lookups (`dataflow/{agency}/{id}/{ver}`)
+    have too high cardinality and stay on L1 only.
+    """
+    p = path.strip("/")
+    return p.startswith("dataflow/") and p.count("/") == 1
 # ISTAT has SSL certificate issues; set ISTAT_VERIFY_SSL=true to re-enable.
 VERIFY_SSL = os.getenv("ISTAT_VERIFY_SSL", "false").lower() not in {"0", "false", "no"}
 
@@ -138,10 +157,28 @@ class SdmxClient:
         return resp
 
     async def get_json(self, path: str, *, params: dict[str, Any] | None = None, cache: bool = True) -> dict[str, Any]:
-        """GET an SDMX endpoint requesting SDMX-JSON. Cached by (base, path, params)."""
+        """GET an SDMX endpoint requesting SDMX-JSON.
+
+        Caching is a two-tier hierarchy:
+          L1: in-memory TTLCache (process-local, short TTL, all paths)
+          L2: persistent file cache on disk (survives restarts, long TTL,
+              gated to the full catalogue listings via `_is_persistent_path`).
+
+        Lookup order: L1 → L2 → network. Writes happen to whichever tier the
+        path qualifies for; an L2 hit is promoted to L1.
+        """
         key = ("json", self._base, path, tuple(sorted((params or {}).items())))
+
         if cache and key in self._cache:
             return self._cache[key]  # type: ignore[return-value]
+
+        persistent = cache and _is_persistent_path(path) and bool(PERSISTENT_CACHE_DIR)
+        if persistent:
+            hit = self._persistent_read(key)
+            if hit is not None:
+                self._cache[key] = hit
+                log.info("SDMX persistent cache HIT for %s", path)
+                return hit
 
         resp = await self._get(path, accept=ACCEPT_JSON, params=params)
         try:
@@ -151,7 +188,54 @@ class SdmxClient:
 
         if cache:
             self._cache[key] = payload
+        if persistent:
+            self._persistent_write(key, payload)
         return payload
+
+    # ───────────────────────── persistent (L2) cache ──────────────────────────
+
+    @staticmethod
+    def _key_hash(key: tuple) -> str:
+        # Stable digest of the cache key tuple — used as a flat filename.
+        raw = json.dumps(key, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()[:32]
+
+    @classmethod
+    def _persistent_path(cls, key: tuple) -> Path:
+        return Path(PERSISTENT_CACHE_DIR) / f"{cls._key_hash(key)}.json"
+
+    @classmethod
+    def _persistent_read(cls, key: tuple) -> dict[str, Any] | None:
+        path = cls._persistent_path(key)
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.warning("SDMX persistent cache stat failed for %s: %s", path, exc)
+            return None
+        if time.time() - stat.st_mtime > PERSISTENT_CACHE_TTL:
+            log.debug("SDMX persistent cache expired for %s", path.name)
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError) as exc:
+            log.warning("SDMX persistent cache read failed for %s: %s", path, exc)
+            return None
+
+    @classmethod
+    def _persistent_write(cls, key: tuple, payload: dict[str, Any]) -> None:
+        path = cls._persistent_path(key)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".json.tmp")
+            with tmp.open("w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+            tmp.replace(path)  # atomic on POSIX
+            log.info("SDMX persistent cache STORED %s (%d bytes)", path.name, path.stat().st_size)
+        except OSError as exc:
+            log.warning("SDMX persistent cache write failed for %s: %s", path, exc)
 
     async def get_csv(self, path: str, *, params: dict[str, Any] | None = None) -> str:
         """GET an SDMX data endpoint requesting SDMX-CSV. Never cached (can be large)."""
@@ -163,17 +247,35 @@ class SdmxClient:
     @classmethod
     def cache_stats(cls) -> dict[str, Any]:
         c = cls._cache
+        l2_files = 0
+        l2_dir = Path(PERSISTENT_CACHE_DIR) if PERSISTENT_CACHE_DIR else None
+        if l2_dir is not None and l2_dir.is_dir():
+            l2_files = sum(1 for _ in l2_dir.glob("*.json"))
         return {
-            "size": len(c),
-            "maxsize": c.maxsize,
-            "ttl_seconds": c.ttl,
-            "hits_approx": getattr(c, "hits", None),
-            "misses_approx": getattr(c, "misses", None),
+            "l1": {
+                "size": len(c),
+                "maxsize": c.maxsize,
+                "ttl_seconds": c.ttl,
+                "hits_approx": getattr(c, "hits", None),
+                "misses_approx": getattr(c, "misses", None),
+            },
+            "l2": {
+                "dir": str(l2_dir) if l2_dir else None,
+                "files": l2_files,
+                "ttl_seconds": PERSISTENT_CACHE_TTL,
+            },
         }
 
     @classmethod
     def cache_clear(cls) -> None:
         cls._cache.clear()
+        l2_dir = Path(PERSISTENT_CACHE_DIR) if PERSISTENT_CACHE_DIR else None
+        if l2_dir is not None and l2_dir.is_dir():
+            for f in l2_dir.glob("*.json"):
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
 
 
 # ──────────────────────────── SDMX path helpers ───────────────────────────

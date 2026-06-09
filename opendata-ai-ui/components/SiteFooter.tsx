@@ -29,6 +29,9 @@ export function SiteFooter() {
         <div className="container">
           <ul className="it-footer-small-prints-list list-inline mb-0 d-flex flex-column flex-md-row">
             <li className="list-inline-item">
+              <Link href="/info">Informazioni</Link>
+            </li>
+            <li className="list-inline-item">
               <Link href="/accessibilita">Dichiarazione di accessibilità</Link>
             </li>
             <li className="list-inline-item">
@@ -36,6 +39,15 @@ export function SiteFooter() {
             </li>
             <li className="list-inline-item">
               <Link href="/privacy">Privacy policy</Link>
+            </li>
+            <li className="list-inline-item">
+              <a
+                href="https://github.com/agent-engineering-studio/opendata-ai"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                GitHub
+              </a>
             </li>
           </ul>
         </div>

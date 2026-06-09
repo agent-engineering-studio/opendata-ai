@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type JSZip from "jszip";
+import { useAuth } from "@/lib/auth";
+import { proxyFetch } from "@/lib/api";
 import { CsvTablePreview } from "./CsvTablePreview";
 import { ResourcePreview, isPreviewable } from "./ResourcePreview";
 import { GeoResourceMap } from "./GeoResourceMap";
@@ -50,6 +52,7 @@ type State =
 
 export function ZipPreview({ url, name }: { url?: string; name?: string }) {
   const [state, setState] = useState<State>({ kind: "loading" });
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +62,8 @@ export function ZipPreview({ url, name }: { url?: string; name?: string }) {
         return;
       }
       try {
-        const resp = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`);
+        const token = await getToken();
+        const resp = await proxyFetch(url, { token });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const buf = await resp.arrayBuffer();
         const JSZip = (await import("jszip")).default;
@@ -90,7 +94,7 @@ export function ZipPreview({ url, name }: { url?: string; name?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, getToken]);
 
   if (state.kind === "loading")
     return <div className="text-xs text-slate-500">Apertura archivio…</div>;
