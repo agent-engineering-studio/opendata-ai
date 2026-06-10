@@ -1,19 +1,26 @@
 name: deploy-aruba
 
-# Triggered on semver tags. SSHs into the Aruba VPS, pulls the new tag and
-# runs `docker compose up -d` against the production compose file. Skips
-# gracefully if the SSH secrets are not configured (initial bootstrap is
-# manual — see infra/aruba/README.md).
+# Pulls the latest `:main` (or a specific `:sha-…` tag) images from GHCR onto
+# the Aruba VPS and recreates the opendata-* services in-place via the shared
+# /opt/aes-infra/ compose stack. The VPS is not a clone of this repo — it runs
+# the agent-engineering-studio-infra topology (docker-compose.yml base +
+# docker-compose.opendata.yml overlay, env-files .env + .env.opendata).
+#
+# Skips gracefully if the SSH secrets are not configured (initial bootstrap is
+# documented in infra/aruba/README.md but the live VPS uses the aes-infra
+# layout above; this workflow targets that layout).
 
 on:
-  push:
-    tags: [ 'v*.*.*' ]
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Git ref to deploy (default: HEAD)'
+      tag:
+        description: 'Image tag to deploy (e.g. main, sha-abc1234, v0.1.0). Default: main'
         required: false
-        default: ''
+        default: 'main'
+  workflow_run:
+    workflows: [docker-publish]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -21,6 +28,12 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # When triggered by workflow_run, only proceed if the upstream backend +
+    # UI publish jobs succeeded. The MCP jobs may still fail for unrelated
+    # reasons (e.g. GHCR access on third-party packages); we deploy anyway.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Bail out if SSH not configured
         id: have_secret
@@ -40,22 +53,63 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -t ed25519 "${{ vars.ARUBA_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Pull + redeploy on Aruba
+      - name: Pull + recreate opendata services
         if: steps.have_secret.outputs.configured == 'true'
         env:
-          REF: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || github.ref }}
+          ARUBA_USER: ${{ vars.ARUBA_USER }}
+          ARUBA_HOST: ${{ vars.ARUBA_HOST }}
+          # Default compose path on the VPS. Overridable via ARUBA_REPO_PATH
+          # to keep parity with older deployments that used a per-repo clone.
+          COMPOSE_DIR: ${{ vars.ARUBA_REPO_PATH || '/opt/aes-infra' }}
+          IMAGE_TAG: ${{ github.event.inputs.tag || 'main' }}
         run: |
-          ssh "${{ vars.ARUBA_USER }}@${{ vars.ARUBA_HOST }}" bash -s <<EOF
+          ssh "$ARUBA_USER@$ARUBA_HOST" \
+            bash -s "$COMPOSE_DIR" "$IMAGE_TAG" <<'REMOTE'
             set -euo pipefail
-            cd "${{ vars.ARUBA_REPO_PATH }}"
-            git fetch --tags --prune
-            git checkout "$REF"
-            git submodule update --init --depth=1
-            cd infra/aruba
-            docker compose --env-file .env.prod -f docker-compose.prod.yml pull
-            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
-            docker compose --env-file .env.prod -f docker-compose.prod.yml \
-              exec -T opendata-backend alembic upgrade head
-            sleep 5
-            curl -fsS http://127.0.0.1:8000/health
-          EOF
+            COMPOSE_DIR="$1"
+            IMAGE_TAG="$2"
+            cd "$COMPOSE_DIR"
+
+            # The 5 opendata services we own. We deliberately do NOT touch the
+            # shared aes-infra services (traefik, redis) — those are managed
+            # by the infra repo, not by this workflow.
+            SERVICES=(ckan-mcp istat-mcp osm-mcp opendata-backend opendata-ai-ui)
+
+            COMPOSE=(docker compose
+              --env-file .env --env-file .env.opendata
+              -f docker-compose.yml -f docker-compose.opendata.yml)
+
+            echo "=== Deploying tag=$IMAGE_TAG to ${SERVICES[*]} ==="
+            export OPENDATA_TAG="$IMAGE_TAG"
+            "${COMPOSE[@]}" pull "${SERVICES[@]}"
+            "${COMPOSE[@]}" up -d "${SERVICES[@]}"
+
+            # Backend entrypoint (scripts/migrate.sh) runs alembic upgrade
+            # head before uvicorn — no separate exec needed here.
+
+            echo "=== Waiting for backend health ==="
+            for i in {1..30}; do
+              status=$(docker inspect opendata-backend \
+                --format '{{.State.Health.Status}}' 2>/dev/null || echo "missing")
+              if [[ "$status" == "healthy" ]]; then
+                echo "backend healthy after ${i} attempts"
+                break
+              fi
+              if [[ "$i" == "30" ]]; then
+                echo "FATAL: backend not healthy after 30 attempts (last status: $status)" >&2
+                docker logs --tail 50 opendata-backend >&2 || true
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "=== Smoke test ==="
+            docker exec opendata-backend curl -fsS http://127.0.0.1:8000/health
+            echo
+
+            echo "=== Final image digests ==="
+            for svc in "${SERVICES[@]}"; do
+              digest=$(docker inspect "$svc" --format '{{.Image}}' 2>/dev/null || echo "n/a")
+              printf '  %-22s %s\n' "$svc" "$digest"
+            done
+          REMOTE
