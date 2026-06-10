@@ -101,9 +101,17 @@ regardless of the synth provider — keep them separate.
 
 ## Production layout
 
-Frontend → GitHub Pages (`deploy-pages.yml`). Backend → Aruba VPS
-(`infra/aruba/docker-compose.prod.yml` + Caddyfile, deployed via
-`deploy-aruba.yml`). There is no Azure code anymore.
+Frontend + backend both run on a shared Aruba VPS under the
+`agent-engineering-studio-infra` topology at `/opt/aes-infra/` (base
+`docker-compose.yml` + overlay `docker-compose.opendata.yml`, env files
+`.env` + `.env.opendata`). Images are pulled from GHCR by the
+`OPENDATA_TAG` env var (default `main`). The `deploy-aruba.yml` workflow
+SSHs into the VPS, runs `docker compose pull && up -d` on the 5 opendata
+services (ckan/istat/osm-mcp + opendata-backend + opendata-ai-ui), and
+leaves traefik/redis untouched (those belong to the infra repo). The
+in-repo `infra/aruba/docker-compose.prod.yml` is a legacy
+single-tenant reference — the live VPS does NOT use it. There is no
+Azure code anymore.
 
 ## Things easy to get wrong
 
@@ -314,5 +322,8 @@ Quick examples:
 - **Permitted Bash patterns:** `.claude/settings.local.json`
 - **Backend Dockerfile + entrypoint:** `opendata-backend/Dockerfile`,
   `opendata-backend/scripts/migrate.sh`
-- **Prod compose + reverse proxy:** `infra/aruba/docker-compose.prod.yml`,
-  `infra/aruba/Caddyfile`
+- **Prod compose + reverse proxy (live VPS):** `/opt/aes-infra/docker-compose.yml`
+  (base) + `/opt/aes-infra/docker-compose.opendata.yml` (overlay), Traefik
+  routes via labels on each service. Legacy single-tenant reference at
+  `infra/aruba/docker-compose.prod.yml` + `infra/aruba/Caddyfile` is kept
+  for documentation but NOT used by `deploy-aruba.yml` anymore.
