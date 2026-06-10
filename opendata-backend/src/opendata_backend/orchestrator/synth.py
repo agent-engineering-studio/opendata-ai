@@ -48,29 +48,28 @@ def _extract_text_from_result(result: Any) -> str:
         return ""
     if isinstance(result, BaseException):
         return ""
-    # AgentExecutorResponse from agent_framework.orchestrations
+    # AgentExecutorResponse from agent_framework.orchestrations: if we recognise
+    # the wrapper, commit to it — an empty .text means the agent produced no
+    # output, not that we should fall through and stringify the wrapper itself.
     agent_resp = getattr(result, "agent_response", None)
     if agent_resp is not None:
         text = getattr(agent_resp, "text", None)
-        if text:
+        if text is not None:
             return text
         messages = getattr(agent_resp, "messages", None)
         if messages:
             last = messages[-1]
-            text = getattr(last, "text", None)
-            if text:
-                return text
+            return getattr(last, "text", None) or ""
+        return ""
     # Direct AgentResponse
     text = getattr(result, "text", None)
-    if text:
+    if text is not None:
         return text
     messages = getattr(result, "messages", None)
     if messages:
         last = messages[-1]
-        text = getattr(last, "text", None)
-        if text:
-            return text
-    return str(result)
+        return getattr(last, "text", None) or ""
+    return ""
 
 
 def _executor_id(result: Any) -> str:
@@ -348,6 +347,12 @@ def build_aggregator(
             if not raw_text:
                 log.warning("aggregator: participant %s produced no text", exec_id)
                 parts.append((source, []))
+                # Still record an empty narrative so the synth prompt renders
+                # the section as "(nessun risultato)" instead of dropping it.
+                if source:
+                    narratives_by_source[source] = ""
+                else:
+                    narratives_by_source.setdefault(exec_id, "")
                 continue
             narrative, resources = parse_agent_reply(raw_text)
             # Drop hallucinated placeholder URLs (small models emit .../uuid/... links).

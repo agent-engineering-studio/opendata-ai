@@ -93,7 +93,8 @@ CKAN_INSTRUCTIONS = (
 # (a small local model truncates the URL and breaks content negotiation → HTTP 406).
 # The only per-source argument is `agency`.
 _SDMX_INSTRUCTIONS_TEMPLATE = (
-    "You are a data-retrieval agent for the {source_name} SDMX 2.1 REST API. "
+    "You are a data-retrieval agent for the {source_name} SDMX 2.1 REST API "
+    "(endpoint: {base_url}). "
     "You have NO knowledge of statistics from memory — every number in your answer "
     "MUST come from a tool call you actually executed in THIS turn. Answering from "
     "prior knowledge is FORBIDDEN and counts as a failure.\n\n"
@@ -163,6 +164,7 @@ _OECD_BASE_URL = "https://sdmx.oecd.org/public/rest"
 ISTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
     source_name="ISTAT (Italian National Institute of Statistics)",
     agency_id="IT1",
+    base_url=_ISTAT_BASE_URL,
     source_hint=(
         "SCOPE: focus on Italy. Reject queries that are clearly about non-Italian "
         "geographies by returning an empty resources array and a one-line narrative "
@@ -177,6 +179,7 @@ ISTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
 EUROSTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
     source_name="Eurostat (European Union statistical office)",
     agency_id="ESTAT",
+    base_url=_EUROSTAT_BASE_URL,
     source_hint=(
         "SCOPE: focus on EU member states + EFTA. Geography codelist is typically "
         "`GEO` with NUTS / country codes (e.g. IT, FR, DE, EU27_2020). When the "
@@ -189,6 +192,7 @@ EUROSTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
 OECD_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
     source_name="OECD (Organisation for Economic Co-operation and Development)",
     agency_id="all",
+    base_url=_OECD_BASE_URL,
     source_hint=(
         "SCOPE: focus on OECD member countries + key economic partners. The OECD "
         "endpoint hosts datasets from many sub-agencies (OECD.SDD.STES, OECD.ELS, "
