@@ -8,6 +8,7 @@ import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
 import { ChatInput } from "@/components/ChatInput";
 import { ExampleQueries } from "@/components/ExampleQueries";
+import { SignInGate } from "@/components/SignInGate";
 
 // Backend agent names → Italian labels for the rolling status string.
 const SOURCE_LABEL: Record<string, string> = {
@@ -169,11 +170,15 @@ export default function Page() {
           <ExampleQueries onPick={pickExample} disabled={loading} />
         </div>
       ) : null}
-      <ChatInput
-        onSubmit={send}
-        loading={loading}
-        prefill={prefill}
-        prefillKey={prefillKey}
+      <SignInGate
+        signedIn={
+          <ChatInput
+            onSubmit={send}
+            loading={loading}
+            prefill={prefill}
+            prefillKey={prefillKey}
+          />
+        }
       />
     </div>
   );

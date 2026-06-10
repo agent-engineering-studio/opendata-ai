@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { resourceToGeo } from "@/lib/geoConvert";
 import { ChatInput } from "@/components/ChatInput";
 import { AssistantMarkdown } from "@/components/AssistantMarkdown";
+import { SignInGate } from "@/components/SignInGate";
 
 // Leaflet touches `window`; load the map only on the client.
 const GeoMap = dynamic(() => import("@/components/GeoMap").then((m) => m.GeoMap), {
@@ -289,9 +290,13 @@ export default function MapPage() {
               </div>
             ) : null}
           </div>
-          <div className="border-t border-slate-200 p-3">
-            <ChatInput onSubmit={send} loading={loading} />
-          </div>
+          <SignInGate
+            signedIn={
+              <div className="border-t border-slate-200 p-3">
+                <ChatInput onSubmit={send} loading={loading} />
+              </div>
+            }
+          />
         </aside>
       </div>
     </div>
