@@ -107,7 +107,6 @@ class OrchestratorSession:
         self._settings = settings
         self._stack = AsyncExitStack()
         self._participants: list[Agent] = []
-        self._aggregator: Any | None = None
         self._synth_agent: Agent | None = None
         self._enabled_sources: list[str] = []
         # agent-framework workflows reject concurrent .run() on the same instance,
@@ -217,11 +216,12 @@ class OrchestratorSession:
         )
         self._synth_agent = synth_agent
 
-        # Store the building blocks; a FRESH workflow is built per request in run()
-        # because agent-framework workflow instances cannot be re-run concurrently
-        # (and are single-shot). See run().
+        # Store the building blocks; a FRESH workflow + aggregator are built
+        # per request in run() / run_streaming() because (a) agent-framework
+        # workflow instances cannot be re-run concurrently (single-shot), and
+        # (b) the aggregator needs the per-call user query to apply the
+        # deterministic geographic filter on the final resource set.
         self._participants = participants
-        self._aggregator = build_aggregator(synth_agent)
         log.info(
             "OrchestratorSession ready (%d participants + synth)", len(participants)
         )
@@ -229,7 +229,6 @@ class OrchestratorSession:
 
     async def __aexit__(self, *exc: object) -> None:
         self._participants = []
-        self._aggregator = None
         self._synth_agent = None
         await self._stack.aclose()
 
@@ -240,10 +239,11 @@ class OrchestratorSession:
         agent-framework workflow object rejects concurrent / repeat executions,
         and the participant Agents are shared across requests.
         """
-        if not self._participants or self._aggregator is None:
+        if not self._participants or self._synth_agent is None:
             raise RuntimeError("OrchestratorSession not entered")
         async with self._lock:
-            workflow = build_workflow(self._participants, self._aggregator)
+            aggregator = build_aggregator(self._synth_agent, user_query=query)
+            workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(query)
         outputs = events.get_outputs()
         if not outputs:
@@ -276,12 +276,13 @@ class OrchestratorSession:
             {"event": "result",    "text": str}     # last, exactly once
             {"event": "error",     "message": str}  # only on fatal failure
         """
-        if not self._participants or self._aggregator is None:
+        if not self._participants or self._synth_agent is None:
             raise RuntimeError("OrchestratorSession not entered")
 
         # The same lock as run(): participant Agents are shared across requests
         # and the underlying MCP sessions don't tolerate concurrent reuse.
         async with self._lock:
+            aggregator = build_aggregator(self._synth_agent, user_query=query)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -359,7 +360,7 @@ class OrchestratorSession:
 
                 yield {"event": "status", "source": "synth", "phase": "start"}
                 try:
-                    synth_output = await self._aggregator(real_results)
+                    synth_output = await aggregator(real_results)
                 except Exception as exc:
                     log.exception("synth aggregator failed in run_streaming")
                     yield {"event": "status", "source": "synth", "phase": "end", "error": str(exc)}

@@ -20,6 +20,7 @@ from typing import Any, Awaitable, Callable
 from agent_framework import Agent
 
 from ..config import _EUROSTAT_BASE_URL, _ISTAT_BASE_URL, _OECD_BASE_URL
+from .geo_filter import filter_resources
 from .parsing import Resource, parse_agent_reply
 
 log = logging.getLogger("orchestrator.synth")
@@ -332,8 +333,15 @@ def _build_synth_prompt(narratives_by_source: dict[str, str]) -> str:
 
 def build_aggregator(
     synth_agent: Agent,
+    user_query: str | None = None,
 ) -> Callable[[list[Any]], Awaitable[_SynthOutput]]:
-    """Return an async aggregator suitable for ConcurrentBuilder.with_aggregator."""
+    """Return an async aggregator suitable for ConcurrentBuilder.with_aggregator.
+
+    `user_query` enables the deterministic geographic post-filter — when the
+    user names a specific Italian comune, resources that point at a different
+    comune are dropped before the JSON block is serialised. Pass None to skip
+    the filter entirely (tests, callers without a query in hand).
+    """
 
     async def aggregate(results: list[Any]) -> _SynthOutput:
         log.info("Aggregator received %d participant results", len(results))
@@ -372,6 +380,8 @@ def build_aggregator(
             "aggregator: merged %d resources from %d sources",
             len(merged_resources), len(parts),
         )
+        if user_query:
+            merged_resources = filter_resources(merged_resources, user_query)
 
         # Ask the synth agent to merge the narratives.
         synth_prompt = _build_synth_prompt(narratives_by_source)
