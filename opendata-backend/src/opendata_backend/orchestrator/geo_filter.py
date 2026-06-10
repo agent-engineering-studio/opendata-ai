@@ -68,30 +68,55 @@ _KNOWN_COMUNI: tuple[str, ...] = (
 _COMUNI_SORTED = tuple(sorted(set(_KNOWN_COMUNI), key=len, reverse=True))
 
 
+_TOKEN_SEP_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _normalise(text: str) -> str:
-    """Lowercase + strip diacritics + collapse separators to spaces."""
+    """Lowercase + strip diacritics. Leave separators intact so the caller
+    can tokenise consistently (any non-alphanumeric counts as a break)."""
     decomposed = unicodedata.normalize("NFKD", text)
     no_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
-    # Replace common URL/slug separators with space so "reggio-emilia" and
-    # "reggio_emilia" and "reggio emilia" all match the same token form.
-    return re.sub(r"[._/\-+]+", " ", no_accents.lower())
+    return no_accents.lower()
 
 
 def _find_comuni(text: str) -> set[str]:
-    """Return the set of comuni found in `text`, normalised form.
+    """Return the set of comuni named in `text`, normalised form.
 
-    Matches are word-boundary-aware so a comune doesn't accidentally match a
-    substring of an unrelated word (e.g. "como" inside "computazionale").
+    Strategy:
+      1. Lowercase, strip diacritics, split on every non-alphanumeric
+         character (handles `.`, `-`, `_`, `/`, `'`, spaces uniformly).
+      2. Exact-token match for single-word comuni; contiguous-token-window
+         match for multi-word comuni ("Reggio Emilia", "L'Aquila").
+      3. URL escape hatch: when a token literally contains "comune" (e.g.
+         the subdomain `opendatacomunegenova`), accept a city name as a
+         substring of that token. This catches the real-world glued
+         subdomain pattern without re-introducing the "como inside
+         computazionale" false positive (no "comune" → no substring match).
     """
     if not text:
         return set()
-    norm = _normalise(text)
+    tokens = [t for t in _TOKEN_SEP_RE.split(_normalise(text)) if t]
+    if not tokens:
+        return set()
+
     found: set[str] = set()
     for comune in _COMUNI_SORTED:
-        # \b is ASCII-only here, which is fine: _normalise has already stripped
-        # diacritics and lowercased.
-        if re.search(rf"\b{re.escape(comune)}\b", norm):
-            found.add(comune)
+        parts = comune.split()
+        if len(parts) == 1:
+            target = parts[0]
+            for tok in tokens:
+                if tok == target:
+                    found.add(comune)
+                    break
+                if target in tok and ("comune" in tok or "comuni" in tok):
+                    found.add(comune)
+                    break
+        else:
+            n = len(parts)
+            for i in range(len(tokens) - n + 1):
+                if tokens[i : i + n] == parts:
+                    found.add(comune)
+                    break
     return found
 
 
