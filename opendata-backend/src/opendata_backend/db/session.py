@@ -40,16 +40,19 @@ def create_database(database_url: str, *, echo: bool = False) -> Database:
     `channel_binding`) are translated into asyncpg `connect_args`.
     """
     async_url, connect_args = to_async_dsn(database_url)
+    # Transaction-mode poolers (Neon, Supabase) reuse the same backend
+    # connection across transactions, so per-connection prepared statements
+    # leak between sessions and asyncpg's DEALLOCATE storm crashes the
+    # pooler. Disabling asyncpg's statement cache makes every execute a
+    # plain SQL call — required for PgBouncer-style transaction pooling.
+    if needs_pooler_safe_engine(database_url):
+        connect_args["statement_cache_size"] = 0
     engine_kwargs: dict = {
         "echo": echo,
         "future": True,
         "pool_pre_ping": True,
         "connect_args": connect_args,
     }
-    # Transaction-mode poolers (Neon, Supabase) reject SQLAlchemy's prepared
-    # statement cache. Disable it when the DSN looks like a hosted Postgres.
-    if needs_pooler_safe_engine(database_url):
-        engine_kwargs["prepared_statement_cache_size"] = 0
     engine = create_async_engine(async_url, **engine_kwargs)
     return Database(
         engine=engine,
