@@ -7,7 +7,9 @@ import uuid as _uuid
 from typing import Any
 
 from mcp.types import EmbeddedResource, TextContent, TextResourceContents
-from pydantic import AnyUrl
+# pydantic AnyUrl is no longer imported here: TextResourceContents.uri is
+# typed as `str` in mcp.types, and pydantic 2.13 strict-mode rejects an
+# AnyUrl instance for a string field. We pass the URI as a plain string.
 
 from opendata_core.osm import geojson as _gjb
 from opendata_core.osm import render as _hr
@@ -268,7 +270,7 @@ def _html_block(html: str, kind: str = "map") -> EmbeddedResource:
     return EmbeddedResource(
         type="resource",
         resource=TextResourceContents(
-            uri=AnyUrl(f"osm://maps/{kind}-{_uuid.uuid4().hex[:8]}"),
+            uri=f"osm://maps/{kind}-{_uuid.uuid4().hex[:8]}",
             mimeType="text/html",
             text=html,
         ),
