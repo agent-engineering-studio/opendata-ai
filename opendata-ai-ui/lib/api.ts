@@ -41,12 +41,31 @@ export function proxyUrl(targetUrl: string): string {
   return apiUrl(`/datasets/proxy?url=${encodeURIComponent(targetUrl)}`);
 }
 
-/** Convenience: GET the proxy URL with the standard Auth header pattern. */
+/** Convenience: GET the proxy URL with the standard Auth header pattern.
+ *
+ * Pass `getToken` when the call may happen LONG after the surrounding
+ * operation started (e.g. after a chat stream that took 60–90s): Clerk
+ * JWTs expire quickly and a stale `token` will produce 401 on /datasets/proxy.
+ * proxyFetch will call `getToken()` just-in-time, which auto-refreshes the
+ * JWT under the Clerk SDK. Static `token` still works for short-lived calls.
+ */
 export async function proxyFetch(
   targetUrl: string,
-  opts: { token?: string | null; signal?: AbortSignal } = {},
+  opts: {
+    token?: string | null;
+    getToken?: () => Promise<string | null>;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<Response> {
+  let token = opts.token ?? null;
+  if (!token && opts.getToken) {
+    try {
+      token = await opts.getToken();
+    } catch {
+      token = null;
+    }
+  }
   const headers: Record<string, string> = {};
-  if (opts.token) headers["Authorization"] = `Bearer ${opts.token}`;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   return fetch(proxyUrl(targetUrl), { headers, signal: opts.signal });
 }

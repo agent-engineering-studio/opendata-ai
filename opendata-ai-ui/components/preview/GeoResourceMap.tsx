@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import type { GeoJSON as LeafletGeoJSON, Map as LeafletMap } from "leaflet";
+import { useAuth } from "@/lib/auth";
 import { toWgs84 } from "@/lib/geoReproject";
 import {
   GEO_MAP_FORMATS,
@@ -74,25 +75,30 @@ export function GeoResourceMap({
   format: string;
 }) {
   const [state, setState] = useState<State>({ status: "loading" });
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
-    resourceToGeo({ format, content, url, name: url }).then((res) => {
+    (async () => {
+      const res = await resourceToGeo(
+        { format, content, url, name: url },
+        { getToken },
+      );
       if (cancelled) return;
       if (!res) setState({ status: "message", text: "formato non riconosciuto" });
       else if (res.status === "ok") setState({ status: "ok", geojson: res.geojson });
       else if (res.status === "wms")
         setState({
           status: "message",
-          text: "WMS — disponibile come layer nella pagina /mappa",
+          text: "WMS — disponibile come layer nella pagina /esplora",
         });
       else setState({ status: "message", text: res.reason });
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [content, url, format]);
+  }, [content, url, format, getToken]);
 
   if (state.status === "loading")
     return <div className="text-xs text-slate-500">Preparazione mappa…</div>;
