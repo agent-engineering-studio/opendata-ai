@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 960 560"
+  role="img"
+  aria-label="Architettura di OpenData AI: il backend opendata-backend al centro connesso a UI, autenticazione Clerk, agenti A2A esterni, LLM, Postgres e Redis, e ai tre server MCP (CKAN, ISTAT, OSM) che a loro volta parlano con i portali open data."
+  font-family="Titillium Web, system-ui, sans-serif"
+>
+  <defs>
+    <style>
+      .bg { fill: #f5f5f5; }
+      .core { fill: #0066cc; stroke: #004080; stroke-width: 2; }
+      .core-text { fill: #ffffff; font-weight: 700; }
+      .core-sub { fill: #d4e5f7; }
+      .node { fill: #ffffff; stroke: #0066cc; stroke-width: 1.5; }
+      .node-mcp { fill: #ffffff; stroke: #00cf86; stroke-width: 2; }
+      .node-ext { fill: #ffffff; stroke: #5b6f82; stroke-width: 1; stroke-dasharray: 4 3; }
+      .label { fill: #17324d; font-weight: 600; }
+      .sub { fill: #5b6f82; }
+      .link { stroke: #0066cc; stroke-width: 1.5; fill: none; }
+      .link-mcp { stroke: #00cf86; stroke-width: 2; fill: none; }
+      .link-ext { stroke: #5b6f82; stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+      .edge-label { fill: #5b6f82; font-style: italic; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="960" height="560" rx="8" />
+
+  <!-- ============ EDGES (drawn before nodes so nodes sit on top) ============ -->
+
+  <!-- UI ↔ Backend -->
+  <path class="link" d="M 220 90 C 320 130, 380 180, 440 230" />
+  <text class="edge-label" font-size="12" x="298" y="160">Bearer JWT · NDJSON</text>
+
+  <!-- Clerk ↔ Backend -->
+  <path class="link" d="M 740 90 C 660 140, 600 180, 540 230" />
+  <text class="edge-label" font-size="12" x="595" y="155">verifica JWKS</text>
+
+  <!-- A2A ↔ Backend -->
+  <path class="link-ext" d="M 880 220 C 760 235, 680 250, 600 265" />
+  <text class="edge-label" font-size="12" x="700" y="225">JSON-RPC /a2a/</text>
+
+  <!-- Postgres/Redis ↔ Backend -->
+  <path class="link" d="M 880 360 C 760 350, 680 330, 600 320" />
+  <text class="edge-label" font-size="12" x="700" y="345">cache + ratelimit</text>
+
+  <!-- LLM ↔ Backend -->
+  <path class="link" d="M 80 290 C 200 290, 320 290, 410 290" />
+  <text class="edge-label" font-size="12" x="170" y="280">sintesi · classify</text>
+
+  <!-- Backend → MCP servers -->
+  <path class="link-mcp" d="M 460 360 C 410 420, 360 460, 240 480" />
+  <path class="link-mcp" d="M 490 370 C 490 430, 490 460, 490 480" />
+  <path class="link-mcp" d="M 520 360 C 580 420, 640 460, 760 480" />
+  <text class="edge-label" font-size="12" x="280" y="410">streamable-http</text>
+
+  <!-- MCP → external sources (dashed) -->
+  <path class="link-ext" d="M 180 540 C 130 540, 90 540, 60 540" />
+  <path class="link-ext" d="M 490 540 C 490 540, 490 540, 490 555" />
+  <path class="link-ext" d="M 800 540 C 850 540, 890 540, 920 540" />
+
+  <!-- ============ NODES ============ -->
+
+  <!-- Central node: opendata-backend -->
+  <rect class="core" x="410" y="230" width="180" height="130" rx="10" />
+  <text class="core-text" font-size="18" text-anchor="middle" x="500" y="265">opendata-backend</text>
+  <text class="core-sub" font-size="12" text-anchor="middle" x="500" y="286">FastAPI · port 8000</text>
+  <text class="core-sub" font-size="11" text-anchor="middle" x="500" y="307">/datasets/search · /classify</text>
+  <text class="core-sub" font-size="11" text-anchor="middle" x="500" y="323">/a2a · /me · /api-keys</text>
+  <text class="core-sub" font-size="11" text-anchor="middle" x="500" y="339">orchestrator fan-out</text>
+
+  <!-- UI -->
+  <rect class="node" x="110" y="40" width="220" height="60" rx="8" />
+  <text class="label" font-size="15" text-anchor="middle" x="220" y="65">opendata-ai-ui</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="220" y="84">Next.js · static export · GitHub Pages</text>
+
+  <!-- Clerk -->
+  <rect class="node" x="630" y="40" width="220" height="60" rx="8" />
+  <text class="label" font-size="15" text-anchor="middle" x="740" y="65">Clerk</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="740" y="84">auth · JWT · JWKS</text>
+
+  <!-- A2A external -->
+  <rect class="node-ext" x="780" y="180" width="160" height="60" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="860" y="205">Agenti A2A</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="860" y="223">SendMessage · esterni</text>
+
+  <!-- Postgres + Redis -->
+  <rect class="node" x="780" y="330" width="160" height="80" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="860" y="354">Postgres + Redis</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="860" y="373">schema opendata.*</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="860" y="390">cache 24h · ratelimit</text>
+
+  <!-- LLM -->
+  <rect class="node" x="20" y="260" width="180" height="80" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="110" y="284">LLM provider</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="110" y="303">Claude (Haiku/Sonnet)</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="110" y="320">oppure Ollama locale</text>
+
+  <!-- 3 MCP servers -->
+  <rect class="node-mcp" x="120" y="470" width="200" height="60" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="220" y="495">ckan-mcp</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="220" y="513">11 tool · qualsiasi portale CKAN</text>
+
+  <rect class="node-mcp" x="390" y="470" width="200" height="60" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="490" y="495">istat-mcp</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="490" y="513">SDMX 2.1 · ISTAT/EU/OECD</text>
+
+  <rect class="node-mcp" x="660" y="470" width="200" height="60" rx="8" />
+  <text class="label" font-size="14" text-anchor="middle" x="760" y="495">osm-mcp</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="760" y="513">geocode · POI · routing · render</text>
+
+  <!-- External data sources (under the MCP servers) -->
+  <text class="sub" font-size="11" text-anchor="end" x="50" y="544">dati.gov.it</text>
+  <text class="sub" font-size="11" text-anchor="middle" x="490" y="555">esploradati.istat.it</text>
+  <text class="sub" font-size="11" text-anchor="start" x="930" y="544">Nominatim · OSRM</text>
+
+  <!-- Legend -->
+  <g transform="translate(20, 430)">
+    <text class="sub" font-size="10" font-weight="700">Legenda</text>
+    <line class="link" x1="0" y1="14" x2="20" y2="14" />
+    <text class="sub" font-size="10" x="26" y="18">trasporto HTTP autenticato</text>
+    <line class="link-mcp" x1="0" y1="28" x2="20" y2="28" />
+    <text class="sub" font-size="10" x="26" y="32">MCP streamable-http</text>
+    <line class="link-ext" x1="0" y1="42" x2="20" y2="42" />
+    <text class="sub" font-size="10" x="26" y="46">verso esterno</text>
+  </g>
+</svg>
