@@ -26,10 +26,28 @@ export type GeoLayer = {
 /**
  * Persistent client-side Leaflet map (OSM tiles) that renders the given GeoJSON
  * layers. Adding/removing layers across chat turns keeps the same map instance
- * (a "Google Maps for geographic open data"). On layer changes it fits the view
- * to the union of all visible layers.
+ * (a "Google Maps for geographic open data").
+ *
+ * Fit behaviour:
+ *   - `focusLayerIds` set → fit to ONLY those layers (typically the layers
+ *     just added by the most recent chat turn). This keeps the viewport on
+ *     the user's latest question instead of zooming out to a regional
+ *     average that hides everything.
+ *   - `focusLayerIds` empty/undefined → fit to the union of all visible
+ *     layers (use case: explicit "Vista globale" button).
+ *
+ * `focusKey` is a counter the parent can bump (with the same `focusLayerIds`)
+ * to force a re-fit even when the ID set didn't change.
  */
-export function GeoMap({ layers }: { layers: GeoLayer[] }) {
+export function GeoMap({
+  layers,
+  focusLayerIds,
+  focusKey,
+}: {
+  layers: GeoLayer[];
+  focusLayerIds?: string[];
+  focusKey?: number;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   // id → Leaflet layer (GeoJSON or TileLayer.WMS), so we can add/remove incrementally.
@@ -115,11 +133,16 @@ export function GeoMap({ layers }: { layers: GeoLayer[] }) {
         }
       }
 
-      // Fit to the union of all visible layers. Vector layers expose getBounds();
-      // WMS tile layers don't, so use their advertised bbox when present.
+      // Fit to either the focused subset (latest batch) or the union of all
+      // visible layers. Vector layers expose getBounds(); WMS tile layers
+      // don't, so use their advertised bbox when present.
+      const focus = focusLayerIds && focusLayerIds.length > 0
+        ? new Set(focusLayerIds)
+        : null;
       let bounds: LatLngBounds | null = null;
       for (const layer of layers) {
         if (!objs.has(layer.id)) continue;
+        if (focus && !focus.has(layer.id)) continue;
         if (layer.wms?.bbox) {
           const [w, s, e, n] = layer.wms.bbox;
           if ([w, s, e, n].every((v) => Number.isFinite(v))) {
@@ -139,7 +162,7 @@ export function GeoMap({ layers }: { layers: GeoLayer[] }) {
     return () => {
       cancelled = true;
     };
-  }, [layers]);
+  }, [layers, focusLayerIds, focusKey]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

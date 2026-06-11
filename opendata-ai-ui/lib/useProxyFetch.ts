@@ -22,8 +22,10 @@ export function useProxyFetch<T>(
 
     (async () => {
       try {
-        const token = await getToken();
-        const resp = await proxyFetch(url, { token, signal: controller.signal });
+        // Use the getToken callback (not a pre-resolved token): previews
+        // sometimes mount well after the chat stream completed and a static
+        // token captured earlier may be expired.
+        const resp = await proxyFetch(url, { getToken, signal: controller.signal });
         if (!resp.ok) {
           let detail = `HTTP ${resp.status}`;
           try {

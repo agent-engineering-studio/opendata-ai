@@ -15,6 +15,36 @@ const _GEO_EXT: [string, string][] = [
   [".shp", "SHP"],
 ];
 
+// URL substrings that signal a geographic export when the resource has no
+// proper extension. Matches opendatasoft `/exports/<fmt>` and CKAN-like
+// download paths.
+const _GEO_URL_HINTS: [string, string][] = [
+  ["/exports/geojson", "GEOJSON"],
+  ["/exports/shp", "SHP"],
+  ["/exports/kml", "KML"],
+  ["/exports/gpx", "GPX"],
+  ["/download/geojson", "GEOJSON"],
+  ["/download/shp", "SHP"],
+  ["format=geojson", "GEOJSON"],
+  ["format=shp", "SHP"],
+  ["format=kml", "KML"],
+];
+
+// Common format aliases that portals use loosely. After toUpperCase() the
+// keys match the strings we typically see in CKAN's `format` field and in
+// opendatasoft metadata.
+const _FORMAT_ALIASES: Record<string, string> = {
+  "SHAPEFILE": "SHP",
+  "SHAPE": "SHP",
+  "ESRI SHAPEFILE": "SHP",
+  "GEO+JSON": "GEOJSON",
+  "GEO_JSON": "GEOJSON",
+  "GEO-JSON": "GEOJSON",
+  "TOPO+JSON": "TOPOJSON",
+  "WMS_SRVC": "WMS",
+  "OGC:WMS": "WMS",
+};
+
 /** Detect a geographic resource even when the portal mislabels the format
  *  (e.g. a GeoJSON served as "TXT"/"JSON"). Order: declared format → file
  *  extension in name/url → content sniff (GeoJSON starts with a FeatureCollection
@@ -24,10 +54,12 @@ export function detectGeoFormat(
   content?: string | null,
   ref?: string | null,
 ): string | null {
-  const fmt = (format || "").toUpperCase();
+  const fmt = (format || "").toUpperCase().trim();
   if (GEO_MAP_FORMATS.has(fmt)) return fmt;
+  if (fmt in _FORMAT_ALIASES) return _FORMAT_ALIASES[fmt];
   const r = (ref || "").toLowerCase();
   for (const [ext, f] of _GEO_EXT) if (r.includes(ext)) return f;
+  for (const [hint, f] of _GEO_URL_HINTS) if (r.includes(hint)) return f;
   const c = (content || "").trimStart();
   if (c.startsWith("{")) {
     const head = c.slice(0, 800);
@@ -89,16 +121,28 @@ function mergeCollections(parsed: GeoJsonObject | GeoJsonObject[]): GeoJsonObjec
   };
 }
 
-async function proxyText(url: string): Promise<string> {
+/** Options threaded through the conversion to authenticate proxy calls.
+ *
+ *  Prefer `getToken` for long-running conversion pipelines (the chat stream
+ *  can take 60–90s and Clerk JWTs expire fast — a static `token` collected
+ *  at the start of the request is likely expired by the time we call the
+ *  proxy). Falls back to the static `token` if `getToken` is absent.
+ */
+export type GeoConvertOptions = {
+  token?: string | null;
+  getToken?: () => Promise<string | null>;
+};
+
+async function proxyText(url: string, opts: GeoConvertOptions = {}): Promise<string> {
   const { proxyFetch } = await import("./api");
-  const r = await proxyFetch(url);
+  const r = await proxyFetch(url, { token: opts.token, getToken: opts.getToken });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.text();
 }
 
-async function proxyBuffer(url: string): Promise<ArrayBuffer> {
+async function proxyBuffer(url: string, opts: GeoConvertOptions = {}): Promise<ArrayBuffer> {
   const { proxyFetch } = await import("./api");
-  const r = await proxyFetch(url);
+  const r = await proxyFetch(url, { token: opts.token, getToken: opts.getToken });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.arrayBuffer();
 }
@@ -120,11 +164,14 @@ function directChild(parent: Element, tag: string): Element | null {
 }
 
 /** Best-effort GetCapabilities parser. Returns named, leaf-ish layers (capped). */
-async function discoverWmsLayers(baseUrl: string): Promise<WmsLayer[]> {
+async function discoverWmsLayers(
+  baseUrl: string,
+  opts: GeoConvertOptions = {},
+): Promise<WmsLayer[]> {
   let cached = _wmsCache.get(baseUrl);
   if (!cached) {
     cached = (async () => {
-      const xml = await proxyText(wmsCapsUrl(baseUrl));
+      const xml = await proxyText(wmsCapsUrl(baseUrl), opts);
       const doc = new DOMParser().parseFromString(xml, "application/xml");
       if (doc.getElementsByTagName("parsererror").length > 0) return [];
       const out: WmsLayer[] = [];
@@ -311,28 +358,70 @@ function _isJunk(name: string): boolean {
  *  Returns null when the zip carries no map-renderable layer; ZipPreview will
  *  handle the per-entry case for non-geo archives.
  */
-async function unzipForGeo(buf: ArrayBuffer): Promise<GeoConvert | null> {
+async function unzipForGeo(buf: ArrayBuffer): Promise<GeoConvert> {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(buf);
   const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir && !_isJunk(n));
   const exts = new Set(names.map(_entryExt));
 
-  // Shapefile bundle → shpjs handles the zip ArrayBuffer directly.
-  if (exts.has("shp") && exts.has("dbf")) {
-    const shp = (await import("shpjs")).default;
-    const parsed = (await shp(buf)) as unknown as GeoJsonObject | GeoJsonObject[];
-    return { status: "ok", geojson: toWgs84(mergeCollections(parsed)) };
+  // Shapefile bundle → shpjs handles the zip ArrayBuffer directly. Some
+  // portals omit .dbf or only ship .shp; shpjs tolerates that, so we accept
+  // any zip containing a .shp entry and let the library do the heavy lifting.
+  if (exts.has("shp")) {
+    try {
+      const shp = (await import("shpjs")).default;
+      const parsed = (await shp(buf)) as unknown as GeoJsonObject | GeoJsonObject[];
+      return { status: "ok", geojson: toWgs84(mergeCollections(parsed)) };
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.warn("[geoConvert] shapefile zip parse failed:", reason, { names });
+      return { status: "error", reason: `shapefile non leggibile: ${reason}` };
+    }
   }
 
   // KMZ → a .kml entry (usually doc.kml) inside a zip.
   const kmlName = names.find((n) => _entryExt(n) === "kml");
   if (kmlName) {
-    const text = await zip.files[kmlName].async("string");
-    const tj = await import("@tmcw/togeojson");
-    const dom = new DOMParser().parseFromString(text, "text/xml");
-    return { status: "ok", geojson: toWgs84(tj.kml(dom) as unknown as GeoJsonObject) };
+    try {
+      const text = await zip.files[kmlName].async("string");
+      const tj = await import("@tmcw/togeojson");
+      const dom = new DOMParser().parseFromString(text, "text/xml");
+      return { status: "ok", geojson: toWgs84(tj.kml(dom) as unknown as GeoJsonObject) };
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.warn("[geoConvert] kmz parse failed:", reason);
+      return { status: "error", reason: `KMZ non leggibile: ${reason}` };
+    }
   }
-  return null;
+
+  // Also detect geojson/topojson/gpx entries inside a zip (some portals
+  // ship GeoJSON wrapped in a zip).
+  const geojsonEntry = names.find((n) => _entryExt(n) === "geojson");
+  if (geojsonEntry) {
+    try {
+      const text = await zip.files[geojsonEntry].async("string");
+      const obj = parseJsonGeo(text);
+      if (!obj) return { status: "error", reason: "GeoJSON nello zip non valido" };
+      return { status: "ok", geojson: toWgs84(obj) };
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.warn("[geoConvert] geojson-in-zip parse failed:", reason);
+      return { status: "error", reason: `GeoJSON nello zip non leggibile: ${reason}` };
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.warn("[geoConvert] zip without recognised geo entries:", {
+    names,
+    exts: Array.from(exts),
+  });
+  return {
+    status: "unsupported",
+    reason: `archivio senza file geografici riconoscibili (estensioni viste: ${Array.from(exts).join(", ") || "nessuna"})`,
+  };
 }
 
 /**
@@ -347,14 +436,17 @@ async function unzipForGeo(buf: ArrayBuffer): Promise<GeoConvert | null> {
  *   - GML / TopoJSON: not supported client-side.
  * Returns null if the resource is not geographic at all (caller skips it).
  */
-export async function resourceToGeo(resource: GeoResource): Promise<GeoConvert | null> {
+export async function resourceToGeo(
+  resource: GeoResource,
+  opts: GeoConvertOptions = {},
+): Promise<GeoConvert | null> {
   // ZIP / KMZ: detect before the format gate — many portals label shapefile
   // bundles as "ZIP" so detectGeoFormat would (correctly) miss them.
   if (isZip(resource.format, resource.url || resource.name)) {
     const url = resource.url || undefined;
     if (!url) return null;
     try {
-      return await unzipForGeo(await proxyBuffer(url));
+      return await unzipForGeo(await proxyBuffer(url, opts));
     } catch (e) {
       return { status: "error", reason: e instanceof Error ? e.message : String(e) };
     }
@@ -372,7 +464,7 @@ export async function resourceToGeo(resource: GeoResource): Promise<GeoConvert |
     const isCsv = declared === "CSV" || /\.csv(?:$|\?)/i.test(url || "");
     if (!isCsv) return null;
     try {
-      const csv = inline && !isTruncated(inline) ? inline : url ? await proxyText(url) : "";
+      const csv = inline && !isTruncated(inline) ? inline : url ? await proxyText(url, opts) : "";
       if (!csv) return null;
       const geo = csvWktToGeoJson(csv);
       if (!geo) return null;
@@ -391,21 +483,21 @@ export async function resourceToGeo(resource: GeoResource): Promise<GeoConvert |
     if (fmt === "WMS") {
       if (!url) return { status: "error", reason: "WMS senza URL" };
       const baseUrl = url.split("?")[0];
-      const layers = await discoverWmsLayers(baseUrl);
+      const layers = await discoverWmsLayers(baseUrl, opts);
       if (!layers.length) return { status: "error", reason: "nessun layer WMS pubblicato" };
       return { status: "wms", baseUrl, layers };
     }
 
     if (fmt === "SHP") {
       if (!url) return { status: "error", reason: "shapefile senza URL scaricabile" };
-      const buf = await proxyBuffer(url);
+      const buf = await proxyBuffer(url, opts);
       const shp = (await import("shpjs")).default;
       const parsed = (await shp(buf)) as unknown as GeoJsonObject | GeoJsonObject[];
       return { status: "ok", geojson: toWgs84(mergeCollections(parsed)) };
     }
 
     if (fmt === "KML" || fmt === "GPX") {
-      const text = inline && !isTruncated(inline) ? inline : url ? await proxyText(url) : "";
+      const text = inline && !isTruncated(inline) ? inline : url ? await proxyText(url, opts) : "";
       if (!text) return { status: "error", reason: "nessun contenuto da convertire" };
       const tj = await import("@tmcw/togeojson");
       const dom = new DOMParser().parseFromString(text, "text/xml");
@@ -415,7 +507,7 @@ export async function resourceToGeo(resource: GeoResource): Promise<GeoConvert |
 
     // GEOJSON (and JSON sniffed as GeoJSON)
     let obj = inline && !isTruncated(inline) ? parseJsonGeo(inline) : null;
-    if (!obj && url) obj = parseJsonGeo(await proxyText(url));
+    if (!obj && url) obj = parseJsonGeo(await proxyText(url, opts));
     if (!obj && inline) obj = parseJsonGeo(inline); // last resort: try the (maybe truncated) inline
     if (!obj) return { status: "error", reason: "GeoJSON non valido o vuoto" };
     return { status: "ok", geojson: toWgs84(obj) };
