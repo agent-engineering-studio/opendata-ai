@@ -79,3 +79,72 @@ def test_filter_keeps_resource_that_mentions_query_city_among_others():
     ]
     kept = filter_resources(resources, "piste ciclabili di Bologna")
     assert len(kept) == 1
+
+
+# ── Region-scope filter ──────────────────────────────────────────────────
+
+
+def test_filter_drops_off_region_resource_when_query_names_a_city():
+    # Reproduces a real bug: query Bologna, agent returned a Friuli VG dataset
+    # whose URL has the region name (no comune token) — the comune-only filter
+    # missed it because FVG comuni aren't mentioned.
+    resources = [
+        _r("https://opendata.comune.bologna.it/.../piste-ciclopedonali/exports/csv"),
+        _r(
+            "https://www.dati.friuliveneziagiulia.it/api/views/7eat-pecq/rows.csv",
+            name="Piste ciclabili FVG",
+        ),
+    ]
+    kept = filter_resources(resources, "piste ciclabili di Bologna")
+    urls = {r.url for r in kept}
+    assert any("bologna" in u for u in urls)
+    assert not any("friuliveneziagiulia" in u for u in urls), (
+        "FVG resource must be dropped: different region from Bologna's"
+    )
+
+
+def test_filter_keeps_same_region_resource_for_a_city_query():
+    # Bologna is in Emilia-Romagna → a regional Emilia-Romagna dataset is
+    # legitimately in scope even though it doesn't name Bologna explicitly.
+    resources = [
+        _r(
+            "https://dati.emilia-romagna.it/dataset/x/resource/y/pisteciclabilirg.kml",
+            name="Piste ciclabili regionali",
+        ),
+    ]
+    kept = filter_resources(resources, "piste ciclabili a Bologna")
+    assert len(kept) == 1
+
+
+def test_filter_region_check_handles_glued_domain():
+    # Many regional portals concatenate the region name in the subdomain.
+    resources = [
+        _r("https://siciliaregione.it/dataset/foo"),  # off-region for Bologna
+        _r("https://emiliaromagna.it/dataset/foo"),    # in-region for Bologna
+    ]
+    kept = filter_resources(resources, "piste ciclabili a Bologna")
+    urls = {r.url for r in kept}
+    assert any("emiliaromagna" in u for u in urls)
+    assert not any("siciliaregione" in u for u in urls)
+
+
+def test_filter_keeps_truly_national_resource_when_region_unknown():
+    # No comune nor region in URL → keep, even if query has a city.
+    resources = [
+        _r("https://www.dati.gov.it/opendata/dataset/x/y.csv"),
+    ]
+    kept = filter_resources(resources, "piste ciclabili a Bologna")
+    assert len(kept) == 1
+
+
+def test_filter_drops_off_region_when_resource_names_only_another_region():
+    # Symmetric case: query for Roma → drop a resource whose URL hints
+    # explicitly at Lombardia (different region) without naming any comune.
+    resources = [
+        _r("https://www.dati.lombardia.it/dataset/foo"),
+        _r("https://opendata.comune.roma.it/dataset/bar"),
+    ]
+    kept = filter_resources(resources, "trasporti pubblici Roma")
+    urls = {r.url for r in kept}
+    assert any("roma" in u for u in urls)
+    assert not any("lombardia" in u for u in urls)
