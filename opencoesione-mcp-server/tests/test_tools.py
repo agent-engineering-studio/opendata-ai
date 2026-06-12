@@ -238,6 +238,24 @@ async def test_funding_capacity_unknown_tema_lists_available(httpx_mock: HTTPXMo
             await c.funding_capacity("072006", tema="trasporti")
 
 
+async def test_tool_coerces_list_args_from_small_models(httpx_mock: HTTPXMock) -> None:
+    """Visto live: qwen passa tema=['competitivita-imprese'] — il tool coercia."""
+    from opencoesione_mcp.server import build_server
+
+    httpx_mock.add_response(url=re.compile(r".*/territori\.json.*"), json=TERRITORI_BARI)
+    httpx_mock.add_response(url=re.compile(r".*/progetti\.json.*"), json=PROGETTI_PAGE)
+    mcp = build_server()
+    result = await mcp.call_tool(
+        "opencoesione_search_projects",
+        {"cod_comune": "072006", "tema": ["trasporti"], "natura": ["infrastrutture"]},
+    )
+    payload = result[1]
+    assert payload["total"] == 12402
+    progetti_req = [r for r in httpx_mock.get_requests() if "progetti.json" in str(r.url)][0]
+    assert progetti_req.url.params["tema"] == "trasporti"
+    assert progetti_req.url.params["natura"] == "infrastrutture"
+
+
 async def test_resolve_territorio_tool_found_and_not_found(httpx_mock: HTTPXMock) -> None:
     from opencoesione_mcp.server import build_server
 

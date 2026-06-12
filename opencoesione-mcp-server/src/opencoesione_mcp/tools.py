@@ -45,6 +45,14 @@ _READ_ONLY = ToolAnnotations(
 _MAX_RESULTS = 50
 
 
+def _scalar(v: str | list[str] | None) -> str | None:
+    """I modelli piccoli passano liste dove serve una stringa (visto live:
+    tema=['competitivita-imprese']) — prendi il primo elemento, non fallire."""
+    if isinstance(v, list):
+        return str(v[0]).strip() if v else None
+    return v
+
+
 def _with_sources(payload: dict[str, Any], *urls: str | None) -> dict[str, Any]:
     """Attach the standard `sources` block (URL + extraction date + licence)."""
     seen: list[str] = []
@@ -67,10 +75,10 @@ def register_tools(mcp: FastMCP) -> None:
         cod_provincia: str | None = None,
         cod_regione: str | None = None,
         territorio: str | None = None,
-        tema: str | None = None,
-        natura: str | None = None,
-        stato: str | None = None,
-        ciclo: str | None = None,
+        tema: str | list[str] | None = None,
+        natura: str | list[str] | None = None,
+        stato: str | list[str] | None = None,
+        ciclo: str | list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -101,10 +109,10 @@ def register_tools(mcp: FastMCP) -> None:
                 cod_provincia=cod_provincia,
                 cod_regione=cod_regione,
                 territorio=territorio,
-                tema=tema,
-                natura=natura,
-                stato=stato,
-                ciclo=ciclo,
+                tema=_scalar(tema),
+                natura=_scalar(natura),
+                stato=_scalar(stato),
+                ciclo=_scalar(ciclo),
                 limit=limit,
                 offset=offset,
             )
@@ -132,7 +140,7 @@ def register_tools(mcp: FastMCP) -> None:
         cod_provincia: str | None = None,
         cod_regione: str | None = None,
         territorio: str | None = None,
-        ciclo: str | None = None,
+        ciclo: str | list[str] | None = None,
     ) -> dict[str, Any]:
         """Aggregate public cost / payments / project counts for a territory.
 
@@ -153,7 +161,7 @@ def register_tools(mcp: FastMCP) -> None:
                 cod_provincia=cod_provincia,
                 cod_regione=cod_regione,
                 territorio=territorio,
-                ciclo=ciclo,
+                ciclo=_scalar(ciclo),
             )
         return _with_sources(out, out.get("source_url"))
 
@@ -163,9 +171,9 @@ def register_tools(mcp: FastMCP) -> None:
         cod_provincia: str | None = None,
         cod_regione: str | None = None,
         territorio: str | None = None,
-        ruolo: str | None = None,
-        tema: str | None = None,
-        natura: str | None = None,
+        ruolo: str | list[str] | None = None,
+        tema: str | list[str] | None = None,
+        natura: str | list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -192,9 +200,9 @@ def register_tools(mcp: FastMCP) -> None:
                 cod_provincia=cod_provincia,
                 cod_regione=cod_regione,
                 territorio=territorio,
-                ruolo=ruolo,
-                tema=tema,
-                natura=natura,
+                ruolo=_scalar(ruolo),
+                tema=_scalar(tema),
+                natura=_scalar(natura),
                 limit=limit,
                 offset=offset,
             )
@@ -203,8 +211,8 @@ def register_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations=_READ_ONLY)
     async def opencoesione_funding_capacity(
         cod_comune: str | None = None,
-        tema: str | None = None,
-        ciclo: str | None = None,
+        tema: str | list[str] | None = None,
+        ciclo: str | list[str] | None = None,
         territorio: str | None = None,
     ) -> dict[str, Any]:
         """Historical delivery capacity of a territory: spend ratio + completed projects.
@@ -226,7 +234,7 @@ def register_tools(mcp: FastMCP) -> None:
         """
         async with OpenCoesioneClient() as c:
             cap = await c.funding_capacity(
-                cod_comune=cod_comune, tema=tema, ciclo=ciclo, territorio=territorio
+                cod_comune=cod_comune, tema=_scalar(tema), ciclo=_scalar(ciclo), territorio=territorio
             )
         out = cap.model_dump()
         return _with_sources(out, cap.source_url)
@@ -317,8 +325,8 @@ def register_local_tools(mcp: FastMCP) -> None:
         cod_comuni: list[str] | None = None,
         cod_provincia: str | None = None,
         cod_regione: str | None = None,
-        tema: str | None = None,
-        ciclo: str | None = None,
+        tema: str | list[str] | None = None,
+        ciclo: str | list[str] | None = None,
         limit: int = 10,
         min_peers: int = 3,
         soglia_ratio: float = 0.2,
@@ -356,6 +364,8 @@ def register_local_tools(mcp: FastMCP) -> None:
             min_peers: gap_by_tema — min comparable comuni active on a theme.
             soglia_ratio: stalled_projects — spend-ratio threshold (default 0.2).
         """
+        tema = _scalar(tema)
+        ciclo = _scalar(ciclo)
         if kind == "spend_by_tema":
             if not cod_comune:
                 raise ValueError("spend_by_tema richiede cod_comune")
