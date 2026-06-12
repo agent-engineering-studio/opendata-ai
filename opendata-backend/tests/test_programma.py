@@ -287,6 +287,53 @@ def test_voce_swot_model_requires_evidence_shape() -> None:
     assert v.evidenze[0].fonte == "istat"
 
 
+@pytest.mark.asyncio
+async def test_malformed_voce_does_not_nuke_the_scheda() -> None:
+    """Regressione smoke 7B: un typo del modello (fonte mancante/struttura
+    rotta) scarta LA VOCE, non l'intera scheda; i tag fonte sono normalizzati."""
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={
+                "forze": [_voce("Voce buona.")],
+                "debolezze": [{"testo": "Voce rotta", "evidenze": "non-una-lista"}],
+                "opportunita": [
+                    {"testo": "Tag con typo ok", "evidenze": [
+                        {"fonte": "  ISPRA ", "url": _OC_URL, "dettaglio": "x"}
+                    ]}
+                ],
+                "minacce": [],
+            }
+        )
+    )
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(_participants())).response
+    assert resp is not None
+    assert len(resp.swot["forze"]) == 1          # sopravvive
+    assert resp.swot["debolezze"] == []          # solo la voce rotta scartata
+    assert len(resp.swot["opportunita"]) == 1
+    assert resp.swot["opportunita"][0].evidenze[0].fonte == "ispra"  # normalizzato
+
+
+@pytest.mark.asyncio
+async def test_duplicate_tool_citations_are_deduped() -> None:
+    """Due chiamate allo stesso tool → UNA citazione (regressione smoke 7B)."""
+    agent = _StubProgrammaAgent(_llm_json())
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+
+    # Partecipante che ha citato la stessa risorsa due volte nel blocco.
+    dup = _participant(
+        "opencoesione",
+        "Narrativa.",
+        [
+            {"name": "capacità di spesa", "url": _OC_URL, "format": "JSON", "content": None},
+            {"name": "capacità di spesa (bis)", "url": _OC_URL, "format": "JSON", "content": None},
+        ],
+    )
+    resp = (await aggregate([dup, _participants()[1]])).response
+    assert resp is not None
+    assert [r.url for r in resp.citazioni].count(_OC_URL) == 1
+
+
 def test_router_audit_summary_is_informative() -> None:
     from opendata_backend.orchestrator.parsing import Resource
     from opendata_backend.routers.programma import _summary

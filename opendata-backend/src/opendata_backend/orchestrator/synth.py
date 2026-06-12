@@ -141,14 +141,14 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
             if not payload:
                 continue
 
-            # ── opencoesione_*: every tool result carries `source_url`, the
-            # resolvable API URL of that exact response. These are citations
-            # (format JSON), never files — capture them even when the LLM
-            # omits them from its RESOURCES_JSON block.
-            if source == "opencoesione":
-                oc = _opencoesione_resource_from_payload(payload)
-                if oc is not None:
-                    captured.append(oc)
+            # ── fonti "citation-style" (opencoesione / osm / ispra): i tool
+            # includono `source_url`, l'URL risolvibile di quella risposta.
+            # Sono citazioni (format JSON), mai file — catturate anche quando
+            # l'LLM le omette dal suo blocco RESOURCES_JSON.
+            if source in _CITATION_SOURCES:
+                cit = _citation_resource_from_payload(payload, source)
+                if cit is not None:
+                    captured.append(cit)
                 continue
 
             # ── istat_get_data: SDMX-CSV observations ──
@@ -268,13 +268,17 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     return out
 
 
-def _opencoesione_resource_from_payload(payload: dict[str, Any]) -> Resource | None:
-    """Build the JSON API citation for an OpenCoesione tool result.
+#: Fonti i cui tool emettono citazioni API (`source_url`) invece di file.
+_CITATION_SOURCES = ("opencoesione", "osm", "ispra")
 
-    Every opencoesione_* tool returns a `source_url` field (the resolvable URL
-    of that exact API response). The name is derived from the payload shape so
-    the citation reads meaningfully in the UI. Territory-resolution lookups
-    (shape `{"found": ...}`) are infrastructure, not evidence — skipped.
+
+def _citation_resource_from_payload(payload: dict[str, Any], source: str) -> Resource | None:
+    """Build the JSON API citation for a citation-style tool result.
+
+    The tools of these sources return a `source_url` field (the resolvable URL
+    of that exact response). The name is derived from the payload shape so the
+    citation reads meaningfully in the UI. Lookup/infrastructure responses
+    (territory resolution, comune autocomplete) are not evidence — skipped.
     """
     source_url = payload.get("source_url")
     if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
@@ -282,21 +286,30 @@ def _opencoesione_resource_from_payload(payload: dict[str, Any]) -> Resource | N
     if "found" in payload:  # opencoesione_resolve_territorio — not a citation
         return None
 
-    if "spend_ratio" in payload:
-        where = payload.get("territorio") or payload.get("slug") or ""
-        name = f"OpenCoesione — capacità di spesa {where}".strip()
-    elif "aggregati" in payload:
-        ctx = payload.get("contesto") or {}
-        where = ctx.get("nome_territorio") or ""
-        name = f"OpenCoesione — aggregati territoriali {where}".strip()
-    elif "cod_locale_progetto" in payload:
-        name = f"OpenCoesione — progetto {payload['cod_locale_progetto']}"
-    elif "results" in payload:
-        kind = "soggetti" if "/soggetti" in source_url else "progetti"
-        name = f"OpenCoesione — ricerca {kind} ({payload.get('total', '?')} risultati)"
-    else:
-        name = "OpenCoesione — risposta API"
-    return Resource(name=name[:120], url=source_url, format="JSON", source="opencoesione")
+    if source == "opencoesione":
+        if "spend_ratio" in payload:
+            where = payload.get("territorio") or payload.get("slug") or ""
+            name = f"OpenCoesione — capacità di spesa {where}".strip()
+        elif "aggregati" in payload:
+            ctx = payload.get("contesto") or {}
+            name = f"OpenCoesione — aggregati territoriali {ctx.get('nome_territorio') or ''}".strip()
+        elif "cod_locale_progetto" in payload:
+            name = f"OpenCoesione — progetto {payload['cod_locale_progetto']}"
+        elif "results" in payload:
+            kind = "soggetti" if "/soggetti" in source_url else "progetti"
+            name = f"OpenCoesione — ricerca {kind} ({payload.get('total', '?')} risultati)"
+        else:
+            name = "OpenCoesione — risposta API"
+    elif source == "osm":
+        if "candidates" in payload:  # osm_list_zones — lookup, not evidence
+            return None
+        name = f"OpenStreetMap — {payload.get('name') or 'entità'}"
+    elif source == "ispra":
+        nome = payload.get("nome") or payload.get("cod_comune") or ""
+        name = f"ISPRA IdroGEO — indicatori di rischio {nome}".strip()
+    else:  # pragma: no cover — _CITATION_SOURCES is closed
+        name = f"{source.upper()} — risposta API"
+    return Resource(name=name[:120], url=source_url, format="JSON", source=source)  # type: ignore[arg-type]
 
 
 _PLACEHOLDER_SEGMENTS = ("uuid", "example", "your-", "path", "<", "{", "...")
@@ -320,7 +333,7 @@ def _normalise_source_tag(executor_id: str) -> str | None:
     Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan"):
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm"):
         # longest-first: eurostat before istat so a literal "eurostat" doesn't
         # get matched as istat; opencoesione first for the same reason.
         if tag in lower:
@@ -355,7 +368,7 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd", "opencoesione")
+_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra")
 
 
 def _build_synth_prompt(narratives_by_source: dict[str, str]) -> str:

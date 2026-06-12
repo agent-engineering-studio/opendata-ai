@@ -85,3 +85,10 @@ def test_task_without_zone_info_falls_back_to_text() -> None:
     req = ProgrammaRequest(cod_comune="072006", zona="area industriale")
     task = build_programma_task(req, None)
     assert "area industriale" in task and "bbox" not in task
+
+
+def test_task_carries_comune_name_for_geocoding_specialists() -> None:
+    """Regressione smoke 7A: senza nome l'agente OSM geocodifica la zona
+    'in Italia' e finisce nel comune sbagliato (visto: Alessandria)."""
+    req = ProgrammaRequest(cod_comune="110002", comune_nome="Barletta")
+    assert "110002 (Barletta)" in build_programma_task(req, None)

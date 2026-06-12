@@ -143,6 +143,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── ISPRA IdroGEO MCP server (Streamable HTTP) ─────
+  ispra-mcp:
+    build:
+      context: .
+      dockerfile: ispra-mcp-server/Dockerfile
+    image: ispra-mcp-server:local
+    container_name: ispra-mcp
+    ports:
+      - "${ISPRA_MCP_PORT:-18083}:8083"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8083"
+      MCP_PATH: /mcp
+      ISPRA_IDROGEO_BASE_URL: ${ISPRA_IDROGEO_BASE_URL:-https://idrogeo.isprambiente.it/api}
+      ISPRA_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:
@@ -193,6 +212,11 @@ services:
       ENABLE_OECD: ${ENABLE_OECD:-false}
       ENABLE_OPENCOESIONE: ${ENABLE_OPENCOESIONE:-false}
       OPENCOESIONE_AGENT_NAME: ${OPENCOESIONE_AGENT_NAME:-opencoesione}
+      ENABLE_OSM: ${ENABLE_OSM:-false}
+      OSM_AGENT_NAME: ${OSM_AGENT_NAME:-osm}
+      ENABLE_ISPRA: ${ENABLE_ISPRA:-false}
+      ISPRA_MCP_URL: ${ISPRA_MCP_URL:-http://ispra-mcp:8083/mcp}
+      ISPRA_AGENT_NAME: ${ISPRA_AGENT_NAME:-ispra}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}

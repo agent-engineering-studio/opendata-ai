@@ -6,9 +6,12 @@ import pytest
 from opendata_backend.config import (
     CKAN_INSTRUCTIONS,
     EUROSTAT_INSTRUCTIONS,
+    ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
+    OSM_INSTRUCTIONS,
+    PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
 )
@@ -129,6 +132,27 @@ def test_opencoesione_settings_defaults(monkeypatch) -> None:
     # 8082 is the eurostat host-debug convention — opencoesione must not clash.
     assert s.opencoesione_mcp_url != s.eurostat_mcp_url
     assert s.opencoesione_agent_name == "opencoesione"
+
+
+def test_osm_ispra_settings_and_instructions_contract() -> None:
+    """7A/7B (R5): contratto RESOURCES_JSON + flag opt-in + niente clash di porte."""
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_osm is False and s.enable_ispra is False
+    assert s.osm_agent_name == "osm" and s.ispra_agent_name == "ispra"
+    taken = {s.ckan_mcp_url, s.istat_mcp_url, s.eurostat_mcp_url, s.oecd_mcp_url,
+             s.opencoesione_mcp_url, s.osm_mcp_url}
+    assert s.ispra_mcp_url not in taken
+
+    for instructions, tool in (
+        (OSM_INSTRUCTIONS, "find_nearby_places"),
+        (ISPRA_INSTRUCTIONS, "ispra_risk_indicators"),
+    ):
+        assert "<!--RESOURCES_JSON-->" in instructions
+        assert tool in instructions
+    # Il synth conosce le nuove sezioni; il programma integra i vincoli ambientali.
+    assert "=== OSM ===" in SYNTH_INSTRUCTIONS and "=== ISPRA ===" in SYNTH_INSTRUCTIONS
+    assert "VINCOLI AMBIENTALI" in PROGRAMMA_INSTRUCTIONS
+    assert "P3/P4" in PROGRAMMA_INSTRUCTIONS
 
 
 def test_opencoesione_instructions_contract() -> None:

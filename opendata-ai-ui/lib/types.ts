@@ -55,7 +55,9 @@ export type FonteEvidenza =
   | "ispra";
 
 export type Evidenza = {
-  fonte: FonteEvidenza;
+  /** Tag fonte normalizzato (istat, opencoesione, …) — string: il backend
+   * tollera tag fuori lista pur di non perdere voci con URL validi. */
+  fonte: FonteEvidenza | (string & {});
   /** URL risolvibile — il cuore "verificabile": ogni claim ha la sua fonte cliccabile. */
   url: string;
   /** Cosa dice il dato (numeri inclusi), senza interpretazione. */
@@ -93,6 +95,8 @@ export type Proposta = {
 export type ProgrammaRequest = {
   /** Codice ISTAT del comune, es. "072006". */
   cod_comune: string;
+  /** Nome del comune — serve agli specialisti che geocodificano (OSM). */
+  comune_nome?: string | null;
   zona?: string | null;
   /** Tassonomia zona (Pezzo 6) — non esposta nel form finché il selettore non esiste. */
   zona_tipo?: string | null;

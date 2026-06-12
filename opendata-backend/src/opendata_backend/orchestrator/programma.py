@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .guardrails import validate_programma
 from .parsing import Resource, parse_agent_reply
@@ -42,9 +42,17 @@ SWOT_KEYS = ("forze", "debolezze", "opportunita", "minacce")
 
 
 class Evidenza(BaseModel):
-    fonte: FonteEvidenza
+    # Tag della fonte (istat, opencoesione, …). Tipato str e normalizzato, non
+    # Literal: i modelli piccoli producono typo ("ospr") e una voce malformata
+    # non deve invalidare la scheda — il guardrail vero è l'URL risolvibile.
+    fonte: str
     url: str  # risolvibile, copiata VERBATIM dalle risorse raccolte
     dettaglio: str  # cosa dice il dato (no interpretazione)
+
+    @field_validator("fonte")
+    @classmethod
+    def _normalise_fonte(cls, v: str) -> str:
+        return v.strip().lower()
 
 
 class VoceSwot(BaseModel):
@@ -74,6 +82,10 @@ class Proposta(BaseModel):
 
 class ProgrammaRequest(BaseModel):
     cod_comune: str  # codice ISTAT, es. "072006"
+    # Nome del comune: gli specialisti che geocodificano (OSM) o cercano per
+    # testo (CKAN) non sanno risolvere il codice ISTAT — senza nome l'agente
+    # OSM finisce a geocodificare "zona industriale, Italia" (visto in smoke).
+    comune_nome: str | None = None
     zona: str | None = None  # descrizione testuale (fallback)
     zona_tipo: str | None = None  # tassonomia ZonaTipo (Pezzo 6); None = livello comune
     zona_osm_id: str | None = None  # entità OSM selezionata, es. "way/123" (Pezzo 6)
@@ -120,8 +132,9 @@ def build_programma_task(
     nome/centroide/bbox vengono iniettati nel task così gli specialisti geo
     (OSM per le distanze, ISPRA per i layer WFS) non rifanno il lookup.
     """
+    label = f"{req.cod_comune} ({req.comune_nome})" if req.comune_nome else req.cod_comune
     parts = [
-        f"Raccogli evidenze sul comune con codice ISTAT {req.cod_comune}"
+        f"Raccogli evidenze sul comune con codice ISTAT {label}"
     ]
     if zona_info:
         name = zona_info.get("name") or req.zona or "zona selezionata"
@@ -174,7 +187,12 @@ def _request_header(req: ProgrammaRequest) -> str:
 
 
 def _parse_llm_json(raw: str) -> _LlmProgramma:
-    """Estrae e valida il JSON della scheda; tollera fence markdown e preamboli."""
+    """Estrae il JSON della scheda; tollera fence markdown e preamboli.
+
+    La validazione è PER VOCE: un item malformato (typo nei campi, shape
+    sbagliata) viene scartato col log, non invalida l'intera scheda — visto
+    in smoke con un modello piccolo che ha emesso `fonte: "ospr"`.
+    """
     text = raw.strip()
     if "```" in text:
         # taglia al primo blocco fenced (```json ... ```)
@@ -187,7 +205,28 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         raise ValueError(f"Nessun oggetto JSON nella risposta del programma_agent: {raw[:200]}")
-    return _LlmProgramma.model_validate(json.loads(text[start : end + 1]))
+    data = json.loads(text[start : end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("La risposta del programma_agent non è un oggetto JSON")
+
+    out = _LlmProgramma(disclaimer=str(data.get("disclaimer") or ""))
+    swot_raw = data.get("swot") if isinstance(data.get("swot"), dict) else {}
+    for key in SWOT_KEYS:
+        items = swot_raw.get(key) if isinstance(swot_raw.get(key), list) else []
+        kept: list[VoceSwot] = []
+        for item in items:
+            try:
+                kept.append(VoceSwot.model_validate(item))
+            except ValidationError:
+                log.warning("voce SWOT '%s' malformata scartata: %.80s", key, item)
+        out.swot[key] = kept
+    proposte_raw = data.get("proposte") if isinstance(data.get("proposte"), list) else []
+    for item in proposte_raw:
+        try:
+            out.proposte.append(Proposta.model_validate(item))
+        except ValidationError:
+            log.warning("proposta malformata scartata: %.80s", item)
+    return out
 
 
 # ─────────────────────────── aggregatore ────────────────────────────────────
@@ -226,9 +265,17 @@ def build_programma_aggregator(
                     r if r.source else r.model_copy(update={"source": tag})
                     for r in resources
                 ]
-            # dedupe per URL mantenendo l'ordine
+            # dedupe per URL mantenendo l'ordine — anche DENTRO lo stesso
+            # partecipante (più chiamate allo stesso tool → stessa citazione).
             seen = {r.url.strip() for r in all_resources}
-            resources = [r for r in resources if r.url.strip() not in seen]
+            unique: list[Resource] = []
+            for r in resources:
+                key = r.url.strip()
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique.append(r)
+            resources = unique
             all_resources.extend(resources)
             sections.append(_bundle_section(str(source), narrative, resources))
 

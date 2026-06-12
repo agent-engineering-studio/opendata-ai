@@ -348,6 +348,91 @@ async def test_opencoesione_participant_tags_section_and_captures_source_urls() 
 
 
 @pytest.mark.asyncio
+async def test_osm_and_ispra_participants_tag_section_and_capture() -> None:
+    """7A/7B: tag corretti, sezioni synth, cattura deterministica via source_url.
+
+    I lookup OSM (liste di candidati) NON diventano citazioni; le entità
+    singole (osm_get_zone) e gli indicatori ISPRA sì.
+    """
+    synth = _StubAgent("Sintesi con accessibilità e vincoli.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    osm_zone_payload = {
+        "feature": {"type": "Feature"},
+        "name": "Zona Industriale di Bari",
+        "source_url": "https://www.openstreetmap.org/relation/20799475",
+    }
+    osm_list_payload = {  # lookup → NON è una citazione
+        "candidates": [{"osm_id": "way/1"}],
+        "fallback_level": 1,
+        "source_url": "https://overpass-api.de/api/interpreter?data=...",
+    }
+    ispra_payload = {
+        "cod_comune": "110002",
+        "nome": "Barletta",
+        "frane_p3p4": {"area_pct": 0.04},
+        "source_url": "https://idrogeo.isprambiente.it/api/pir/comuni/110002",
+    }
+
+    def _participant_with_tools(executor_id: str, narrative: str, payloads: list[dict]) -> Any:
+        msgs = [
+            _StubMessage(contents=[
+                _StubFunctionResult(type="function_result", result=json.dumps(p))
+            ])
+            for p in payloads
+        ]
+        raw = f"{narrative}\n<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"
+        return _StubResult(
+            executor_id=executor_id,
+            agent_response=_StubInnerResponseWithMessages(text=raw, messages=msgs),
+        )
+
+    results = [
+        _participant_with_tools(
+            "osm", "La zona è a 2 km dalla stazione.", [osm_list_payload, osm_zone_payload]
+        ),
+        _participant_with_tools(
+            "ispra", "Pericolosità frane P3+P4 trascurabile (0,04%).", [ispra_payload]
+        ),
+    ]
+    out = await aggregate(results)
+    block = _extract_block(out.text)
+    by_source = {}
+    for r in block:
+        by_source.setdefault(r["source"], []).append(r)
+
+    assert [r["url"] for r in by_source["osm"]] == [
+        "https://www.openstreetmap.org/relation/20799475"
+    ]
+    assert "Zona Industriale di Bari" in by_source["osm"][0]["name"]
+    assert by_source["ispra"][0]["url"].endswith("/pir/comuni/110002")
+    assert "Barletta" in by_source["ispra"][0]["name"]
+
+    prompt = synth.last_prompt or ""
+    assert "=== OSM ===" in prompt and "=== ISPRA ===" in prompt
+    from opendata_backend.orchestrator.synth import _normalise_source_tag
+
+    assert _normalise_source_tag("osm") == "osm"
+    assert _normalise_source_tag("ispra-agent") == "ispra"
+
+
+@pytest.mark.asyncio
+async def test_geo_filter_keeps_osm_entity_for_comune_query() -> None:
+    """Le risorse OSM (osm.org/way|relation) non portano nomi di comuni →
+    il filtro geografico non deve scartarle."""
+    from opendata_backend.orchestrator.geo_filter import filter_resources
+
+    osm_res = Resource(
+        name="OpenStreetMap — Zona Industriale di Bari",
+        url="https://www.openstreetmap.org/relation/20799475",
+        format="JSON",
+        source="osm",
+    )
+    kept = filter_resources([osm_res], "zona industriale a Bari")
+    assert kept == [osm_res]
+
+
+@pytest.mark.asyncio
 async def test_geo_filter_keeps_matching_opencoesione_resources() -> None:
     """OpenCoesione URLs carry the comune slug — the geographic post-filter must
     keep the queried comune and drop a different one."""

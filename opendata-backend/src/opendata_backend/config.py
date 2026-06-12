@@ -267,8 +267,87 @@ OPENCOESIONE_INSTRUCTIONS = (
 )
 
 
+# OSM as a fan-out specialist: contributes the ACCESSIBILITY perspective
+# (distances from stations/junctions, nearby services) for a comune or zone.
+# When the task carries a resolved OSM zone (Pezzo 6 injects name + centroid +
+# bbox), the agent starts from those coordinates instead of re-geocoding.
+OSM_INSTRUCTIONS = (
+    "You provide the ACCESSIBILITY and territorial-context perspective using "
+    "OpenStreetMap MCP tools. You MUST USE the tools — never write tool calls "
+    "as text. Every fact in your answer MUST come from a tool call executed in "
+    "THIS turn.\n\n"
+    "=== MANDATORY ACTION SEQUENCE ===\n"
+    "STEP 1 — coordinates. If the task carries a resolved zone with "
+    "'centroide lat=… lon=…', use those coordinates directly. Otherwise call "
+    "`geocode_address` with the COMUNE NAME from the task (it reads 'comune "
+    "con codice ISTAT NNNNNN (Nome)') plus ', Italia' — e.g. 'Barletta, "
+    "Italia'. NEVER geocode a bare zone description without the comune name: "
+    "you would land in the wrong city.\n"
+    "STEP 2 — services & transport. Call `find_nearby_places` around the "
+    "coordinates for the categories that matter to the query (typically: "
+    "train_station, bus_station, hospital, school, parking, fuel; radius "
+    "3000–5000 m). Two or three calls are enough.\n"
+    "STEP 3 — optionally `explore_area` for a neighbourhood digest, or "
+    "`get_route` from the zone to one key destination (e.g. the closest "
+    "train station) to report a real distance/time.\n\n"
+    "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) on the "
+    "accessibility of the place: nearby transport nodes with distances, "
+    "relevant services present/absent — numbers ONLY from tool results>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"JSON\","
+    "\"content\":null}.\n"
+    "Emit at most 3 resources: links to the OpenStreetMap entities you relied "
+    "on (e.g. https://www.openstreetmap.org/node/<id> of the station, or the "
+    "`source_url` field of zone tool results). Do NOT invent ids.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names in your final response.\n"
+    "- NEVER output code blocks or step-by-step plans.\n"
+    "- NEVER invent distances, names or ids — only tool results.\n"
+    "- The narrative paragraph must NEVER be empty; if the area has no mapped "
+    "services, say exactly that.\n"
+    "- Data licence is ODbL: mention 'OpenStreetMap' as the source in the narrative."
+)
+
+
+# ISPRA IdroGEO: environmental-constraint evidence (landslide + hydraulic
+# hazard, exposed population/buildings) at comune level. Soil consumption has
+# no usable API (yearly XLSX tables only) — see ispra-mcp-server README.
+ISPRA_INSTRUCTIONS = (
+    "You provide ENVIRONMENTAL-CONSTRAINT evidence from ISPRA IdroGEO (Italian "
+    "landslide and flood hazard platform). You MUST USE the tools — never "
+    "write tool calls as text. Every number MUST come from a tool call "
+    "executed in THIS turn.\n\n"
+    "=== MANDATORY ACTION SEQUENCE ===\n"
+    "Call `ispra_risk_indicators` with the ISTAT comune code from the task "
+    "(e.g. cod_comune='072006'). If the query names no Italian comune, return "
+    "an empty resources array and a one-line narrative saying IdroGEO covers "
+    "Italian comuni only.\n\n"
+    "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) with: % of "
+    "municipal area at HIGH landslide hazard (P3+P4) and at hydraulic hazard "
+    "(P3/P2), exposed population/buildings where relevant. State hazards "
+    "plainly — they are planning constraints, not verdicts. If hazard shares "
+    "are near zero, say that too: absence of constraint is also evidence>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"JSON\","
+    "\"content\":null}.\n"
+    "Emit ONE resource per tool result used, with `url` set to its "
+    "`source_url` field VERBATIM.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names in your final response.\n"
+    "- NEVER invent percentages or codes — only tool results.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- Data licence is CC BY-SA 3.0 IT: mention 'ISPRA' as the source."
+)
+
+
 SYNTH_INSTRUCTIONS = (
-    "You are a synthesiser that merges the outputs of up to FIVE open-data "
+    "You are a synthesiser that merges the outputs of up to SEVEN open-data "
     "specialists into a single coherent narrative:\n"
     "  - CKAN         — generic open-data portals (national + regional)\n"
     "  - ISTAT        — official Italian statistics (SDMX)\n"
@@ -276,12 +355,16 @@ SYNTH_INSTRUCTIONS = (
     "  - OECD         — international economic statistics (SDMX)\n"
     "  - OPENCOESIONE — Italian cohesion-policy funded projects: funding "
     "evidence on a territory (financed vs spent, spend ratio, delivery "
-    "capacity)\n\n"
-    "INPUT: a structured prompt with up to five sections labelled "
+    "capacity)\n"
+    "  - OSM          — OpenStreetMap: accessibility and territorial context "
+    "(transport nodes, services, recognised zones)\n"
+    "  - ISPRA        — environmental constraints: landslide / hydraulic "
+    "hazard and exposed population (IdroGEO)\n\n"
+    "INPUT: a structured prompt with up to seven sections labelled "
     "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, "
-    "`=== OPENCOESIONE ===`, each containing a short narrative produced by the "
-    "respective specialist. Any section can be empty (the specialist may have "
-    "found nothing or errored).\n\n"
+    "`=== OPENCOESIONE ===`, `=== OSM ===`, `=== ISPRA ===`, each containing a "
+    "short narrative produced by the respective specialist. Any section can "
+    "be empty (the specialist may have found nothing or errored).\n\n"
     "OUTPUT: ONE paragraph (3–6 sentences), written in the SAME LANGUAGE as the "
     "original user query, that:\n"
     "  - integrates the available perspectives without duplicating information;\n"
@@ -341,6 +424,12 @@ PROGRAMMA_INSTRUCTIONS = (
     "(spend ratio) quando presente nel bundle: riportala in "
     "`spend_ratio_storico` e motivala. Una proposta senza evidenza di "
     "finanziamento ha `finanziamento: null` e livello `da_verificare`.\n"
+    "- VINCOLI AMBIENTALI: se il bundle contiene indicatori ISPRA con "
+    "pericolosità elevata sull'area in esame (frane P3/P4 o idraulica P3), "
+    "ogni proposta su quell'area DEVE riportare il vincolo nella "
+    "`fattibilita.motivazione` (es. 'area in classe di pericolosità frana "
+    "elevata → priorità a messa in sicurezza prima dell'espansione') e citare "
+    "l'evidenza ISPRA.\n"
     "- VIETATO il linguaggio da campagna: niente slogan, esortazioni al voto, "
     "attacchi ad avversari, superlativi non supportati, promesse in prima "
     "persona. Tono da relazione tecnica.\n"
@@ -385,6 +474,9 @@ class Settings(BaseSettings):
     # opencoesione-mcp wraps the OpenCoesione API (cohesion-policy projects).
     # 8084 host-side: 8082 is taken by the eurostat host-debug convention.
     opencoesione_mcp_url: str = Field(default="http://localhost:8084/mcp")
+    # ispra-mcp wraps IdroGEO (landslide/flood hazard); 8086 host-side
+    # (8085 is the osm-mcp convention).
+    ispra_mcp_url: str = Field(default="http://localhost:8086/mcp")
     # osm-mcp renders self-contained Leaflet+OSM HTML maps for GeoJSON resources.
     osm_mcp_url: str = Field(default="http://localhost:8085/mcp")
     enable_osm_maps: bool = Field(default=True)
@@ -424,6 +516,8 @@ class Settings(BaseSettings):
     eurostat_agent_name: str = Field(default="eurostat")
     oecd_agent_name: str = Field(default="oecd")
     opencoesione_agent_name: str = Field(default="opencoesione")
+    osm_agent_name: str = Field(default="osm")
+    ispra_agent_name: str = Field(default="ispra")
     synth_agent_name: str = Field(default="synth")
     programma_agent_name: str = Field(default="programma")
 
@@ -436,6 +530,11 @@ class Settings(BaseSettings):
     enable_oecd: bool = Field(default=False)
     # OpenCoesione adds 1 specialist LLM call per query — opt-in like the others.
     enable_opencoesione: bool = Field(default=False)
+    # OSM specialist (accessibility) — distinct from enable_osm_maps (the
+    # deterministic map rendering, no LLM): this one adds a specialist call.
+    enable_osm: bool = Field(default=False)
+    # ISPRA IdroGEO specialist (environmental constraints) — opt-in.
+    enable_ispra: bool = Field(default=False)
 
     # ── Programma evidence-based (POST /programma, verticale PA) ─────
     enable_programma: bool = Field(default=True)

@@ -80,6 +80,41 @@ classe di pericolosità frana elevata → priorità a messa in sicurezza prima d
 espansione"). Questo rende le proposte realistiche, non solo finanziariamente ma
 ambientalmente — coerente con la tua esperienza LandslideWatch.
 
+## Esiti implementazione (2026-06-12)
+
+**Discovery 7B** — divergenza maggiore: il **consumo di suolo ISPRA non ha
+alcuna API REST** (solo tabelle comunali XLSX annuali e servizi cartografici;
+i domini "esploradati.consumosuolo" ecc. non esistono) → fuori scope; parte
+dei dataset resta raggiungibile via CKAN. IdroGEO invece è ottima:
+`GET /api/pir/comuni/{uid}` (uid = codice ISTAT, zero-padded o intero), JSON
+piatto con 134 chiavi (frane P4…AA + aggregato P3+P4, idraulica P3/P2/P1,
+aree/percentuali e popolazione/famiglie/edifici/imprese/beni culturali
+esposti). Una sola chiamata per comune, dato stabile → cache 24h.
+
+**Implementazione** — `ispra_landslide_features` (WFS) non implementato
+(opzionale in spec, non necessario al programma). Cattura citazioni
+generalizzata in `synth.py`: il branch `source_url` ora copre
+opencoesione/osm/ispra (`_citation_resource_from_payload`); i lookup (liste
+candidati zone, resolve territorio) non diventano citazioni.
+
+**Correzioni emerse dagli smoke con Ollama** (tre run sul caso reale
+Barletta, pericolosità idraulica P3 13,9%):
+1. il task portava solo il codice ISTAT e l'agente OSM geocodificava "zona
+   industriale, Italia" finendo ad **Alessandria** → aggiunto
+   `ProgrammaRequest.comune_nome` (la UI lo passa dalla selezione), iniettato
+   nel task come "110002 (Barletta)";
+2. citazioni duplicate da chiamate ripetute allo stesso tool → dedupe per URL
+   anche intra-partecipante;
+3. un typo del modello (`fonte: "ospr"`) invalidava l'INTERA scheda →
+   `Evidenza.fonte` è `str` normalizzato (il guardrail vero è l'URL) e la
+   validazione del JSON è per-voce (l'item malformato si scarta col log).
+
+**Smoke finale (v3)**: scheda su Barletta con industrie reali (Buzzi Unicem,
+TIMAC Agro) citate da OSM, voce [minacce] col rischio idraulico citato ISPRA,
+e la proposta degradata a `da_verificare` con motivazione "priorità a messa
+in sicurezza prima dell'espansione" — il comportamento chiesto da questa spec.
+I 504/429 di Overpass pubblico degradano con grazia senza rompere la scheda.
+
 ## Definition of Done
 
 - [ ] **7A**: OSM agganciato al fan-out (parsing/config/factory/synth/env); query "zona

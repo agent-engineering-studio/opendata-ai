@@ -27,9 +27,11 @@ from agent_framework import Agent, MCPStreamableHTTPTool
 from .config import (
     CKAN_INSTRUCTIONS,
     EUROSTAT_INSTRUCTIONS,
+    ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
+    OSM_INSTRUCTIONS,
     PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
@@ -154,13 +156,15 @@ class OrchestratorSession:
                 ("eurostat", s.enable_eurostat),
                 ("oecd", s.enable_oecd),
                 ("opencoesione", s.enable_opencoesione),
+                ("osm", s.enable_osm),
+                ("ispra", s.enable_ispra),
             )
             if on
         ]
         if not enabled:
             raise RuntimeError(
                 "At least one source must be enabled "
-                "(enable_ckan / istat / eurostat / oecd / opencoesione)"
+                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra)"
             )
         self._enabled_sources = enabled
         log.info(
@@ -219,6 +223,32 @@ class OrchestratorSession:
                 default_options,
             )
             participants.append(oc_agent)
+
+        # OSM specialist (accessibility). Reuses the same osm-mcp server that
+        # already renders maps — here it joins the fan-out with the geocoding/
+        # POI/routing/zone tools.
+        if s.enable_osm:
+            osm_mcp = await self._enter_mcp_tool(
+                s.osm_agent_name,
+                s.osm_mcp_url,
+                "OpenStreetMap tools: geocoding, nearby places, routing, recognised zones.",
+            )
+            osm_agent = await self._enter_agent(
+                chat_client, OSM_INSTRUCTIONS, s.osm_agent_name, [osm_mcp], default_options,
+            )
+            participants.append(osm_agent)
+
+        # ISPRA IdroGEO specialist (environmental constraints).
+        if s.enable_ispra:
+            ispra_mcp = await self._enter_mcp_tool(
+                s.ispra_agent_name,
+                s.ispra_mcp_url,
+                "ISPRA IdroGEO tools: landslide/flood hazard indicators per comune.",
+            )
+            ispra_agent = await self._enter_agent(
+                chat_client, ISPRA_INSTRUCTIONS, s.ispra_agent_name, [ispra_mcp], default_options,
+            )
+            participants.append(ispra_agent)
 
         # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
         # orchestrator fans out to a remote A2A-compliant agent as a peer. It

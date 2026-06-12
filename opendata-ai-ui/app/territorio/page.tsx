@@ -51,6 +51,7 @@ function TerritorioInner() {
     try {
       const body: ProgrammaRequest = {
         cod_comune: cod,
+        comune_nome: selection?.comune_nome ?? null,
         // La zona OSM selezionata vince sul testo libero (che resta il fallback).
         zona: selection?.zona_label ?? (zona.trim() || null),
         zona_tipo: selection?.zona_tipo ?? null,
