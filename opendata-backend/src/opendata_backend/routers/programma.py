@@ -68,6 +68,13 @@ async def genera_programma(
     settings = session_holder.settings
     if settings is not None and not settings.enable_programma:
         raise HTTPException(status_code=404, detail="Endpoint /programma disabilitato")
+    if settings is not None and not settings.enable_opencoesione:
+        # Visto al primo collaudo: senza la fonte cuore la scheda esce vuota
+        # (guardrail corretti, configurazione no) — rendiamolo diagnosticabile.
+        log.warning(
+            "/programma con ENABLE_OPENCOESIONE=false: la scheda uscirà povera o "
+            "vuota — abilita la fonte nel .env (+ ENABLE_ISPRA/ENABLE_OSM consigliate)"
+        )
 
     try:
         resp = await sess.run_programma(req)
