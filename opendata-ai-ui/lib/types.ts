@@ -101,6 +101,47 @@ export type ProgrammaRequest = {
   cicli?: string[] | null;
 };
 
+/* ── Selezione zona via tag OSM (Pezzo 6 — GET /territorio/*) ─────────── */
+
+export type ZonaTipo =
+  | "industriale"
+  | "commerciale"
+  | "portuale"
+  | "centro_storico"
+  | "verde"
+  | "agricola";
+
+export type ComuneMatch = {
+  nome: string;
+  /** Codice ISTAT zero-padded ("072006") — usabile come cod_comune ovunque. */
+  ref_istat: string;
+  cod_provincia?: string | null;
+  osm_id: string;
+  osm_url: string;
+};
+
+export type ZoneCandidate = {
+  osm_type: string;
+  /** "way/123" | "relation/456" — va in ProgrammaRequest.zona_osm_id. */
+  osm_id: string;
+  name: string | null;
+  zona_tipo: string;
+  area_m2: number;
+  centroid: { lat: number; lon: number } | null;
+  bbox: [number, number, number, number] | null;
+  osm_url: string;
+  geometry: unknown;
+};
+
+export type ZoneListResponse = {
+  candidates: ZoneCandidate[];
+  /** 1 = match per tag; 2 = fallback Nominatim; 3 = niente → livello comune. */
+  fallback_level: 1 | 2 | 3;
+  zona_tipo: string;
+  ref_istat: string;
+  source_url?: string;
+};
+
 export type ProgrammaResponse = {
   comune: string;
   zona?: string | null;

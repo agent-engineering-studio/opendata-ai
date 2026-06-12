@@ -278,6 +278,50 @@ class OrchestratorSession:
         self._programma_agent = None
         await self._stack.aclose()
 
+    @staticmethod
+    async def _resolve_zona(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Zona OSM selezionata (Pezzo 6) → {name, centroid, bbox} per il task.
+
+        Best-effort: se Overpass non risponde si procede senza zona risolta
+        (l'analisi degrada a livello comune, come da catena di fallback).
+        """
+        if not req.zona_osm_id:
+            return None
+        try:
+            from opendata_core.osm import zones as osm_zones
+
+            osm_type, _, osm_id = req.zona_osm_id.partition("/")
+            feature = await osm_zones.get_zone(osm_type, osm_id or osm_type)
+            if feature is None:
+                return None
+            geom = feature.get("geometry") or {}
+            props = feature.get("properties") or {}
+
+            def _coords():
+                t = geom.get("type")
+                if t == "Point":
+                    yield geom["coordinates"]
+                elif t == "Polygon":
+                    yield from geom.get("coordinates", [[]])[0]
+                elif t == "MultiPolygon":
+                    for poly in geom.get("coordinates", []):
+                        yield from poly[0]
+
+            lons = [c[0] for c in _coords()]
+            lats = [c[1] for c in _coords()]
+            if not lons:
+                return None
+            bbox = [min(lats), min(lons), max(lats), max(lons)]
+            return {
+                "name": props.get("name"),
+                "centroid": {"lat": (bbox[0] + bbox[2]) / 2, "lon": (bbox[1] + bbox[3]) / 2},
+                "bbox": bbox,
+            }
+        except Exception:
+            log.warning("zona OSM %s non risolta — procedo a livello comune",
+                        req.zona_osm_id, exc_info=True)
+            return None
+
     async def run_programma(self, req: ProgrammaRequest) -> ProgrammaResponse:
         """Fan-out delle evidenze sul comune + sintesi strutturata della scheda.
 
@@ -289,10 +333,11 @@ class OrchestratorSession:
             raise RuntimeError("OrchestratorSession not entered")
         if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
+        zona_info = await self._resolve_zona(req)
         async with self._lock:
             aggregator = build_programma_aggregator(self._programma_agent, req)
             workflow = build_workflow(self._participants, aggregator)
-            events = await workflow.run(build_programma_task(req))
+            events = await workflow.run(build_programma_task(req, zona_info))
         outputs = events.get_outputs()
         if not outputs:
             raise RuntimeError("Programma workflow produced no outputs")

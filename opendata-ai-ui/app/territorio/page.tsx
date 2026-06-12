@@ -9,13 +9,14 @@ import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
 import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
+import { ZoneSelector, type ZoneSelection } from "@/components/territorio/ZoneSelector";
 
 /*
- * Studio del territorio — la UI del verticale PA (spec 05).
+ * Studio del territorio — la UI del verticale PA (spec 05 + 06).
  *
- * Layout già predisposto per i pezzi successivi:
- *  - l'header di selezione ospiterà il selettore zona via tag OSM (Pezzo 6);
- *  - l'area risultati ospiterà il toggle Scheda | Idee (Pezzo 8).
+ * Selezione del territorio: comune (autocomplete OSM→ISTAT) → tipo zona →
+ * zona riconosciuta OSM (niente disegno a mano libera). L'area risultati
+ * ospiterà il toggle Scheda | Idee (Pezzo 8).
  */
 
 type Stato =
@@ -34,10 +35,13 @@ function formatGeneratoIl(iso: string): string {
 
 function TerritorioInner() {
   const { getToken } = useAuth();
-  const [codComune, setCodComune] = useState("");
+  const [selection, setSelection] = useState<ZoneSelection | null>(null);
+  const [codManuale, setCodManuale] = useState("");
   const [zona, setZona] = useState("");
   const [tema, setTema] = useState("");
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
+
+  const codComune = (codManuale.trim() || selection?.cod_comune) ?? "";
 
   async function genera(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +51,10 @@ function TerritorioInner() {
     try {
       const body: ProgrammaRequest = {
         cod_comune: cod,
-        zona: zona.trim() || null,
+        // La zona OSM selezionata vince sul testo libero (che resta il fallback).
+        zona: selection?.zona_label ?? (zona.trim() || null),
+        zona_tipo: selection?.zona_tipo ?? null,
+        zona_osm_id: selection?.zona_osm_id ?? null,
         tema: tema.trim() || null,
       };
       const token = await getToken();
@@ -85,35 +92,24 @@ function TerritorioInner() {
 
         <form className="card shadow-sm mb-4" onSubmit={genera} aria-busy={stato.fase === "loading"}>
           <div className="card-body">
-            <div className="row g-3">
-              <div className="col-12 col-md-4">
-                <label htmlFor="cod-comune" className="form-label fw-semibold">
-                  Codice ISTAT del comune *
-                </label>
-                <input
-                  id="cod-comune"
-                  className="form-control"
-                  value={codComune}
-                  onChange={(e) => setCodComune(e.target.value)}
-                  placeholder="es. 110002 (Barletta)"
-                  required
-                  pattern="\d{6}"
-                  title="6 cifre, es. 072006 per Bari"
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="col-12 col-md-4">
-                <label htmlFor="zona" className="form-label fw-semibold">
-                  Zona <span className="fw-normal text-muted">(opzionale)</span>
-                </label>
-                <input
-                  id="zona"
-                  className="form-control"
-                  value={zona}
-                  onChange={(e) => setZona(e.target.value)}
-                  placeholder="es. area industriale"
-                />
-              </div>
+            <ZoneSelector onChange={setSelection} />
+
+            <div className="row g-3 mt-1">
+              {!selection?.zona_osm_id ? (
+                <div className="col-12 col-md-4">
+                  <label htmlFor="zona" className="form-label fw-semibold">
+                    Descrizione zona{" "}
+                    <span className="fw-normal text-muted">(opzionale)</span>
+                  </label>
+                  <input
+                    id="zona"
+                    className="form-control"
+                    value={zona}
+                    onChange={(e) => setZona(e.target.value)}
+                    placeholder="es. area industriale"
+                  />
+                </div>
+              ) : null}
               <div className="col-12 col-md-4">
                 <label htmlFor="tema" className="form-label fw-semibold">
                   Tema <span className="fw-normal text-muted">(opzionale)</span>
@@ -127,14 +123,44 @@ function TerritorioInner() {
                 />
               </div>
             </div>
+
+            <details className="mt-2">
+              <summary className="small text-muted" style={{ cursor: "pointer" }}>
+                Conosci già il codice ISTAT? Inseriscilo direttamente
+              </summary>
+              <div className="mt-2" style={{ maxWidth: 260 }}>
+                <label htmlFor="cod-comune" className="form-label fw-semibold">
+                  Codice ISTAT
+                </label>
+                <input
+                  id="cod-comune"
+                  className="form-control"
+                  value={codManuale}
+                  onChange={(e) => setCodManuale(e.target.value)}
+                  placeholder="es. 110002 (Barletta)"
+                  pattern="\d{6}"
+                  title="6 cifre, es. 072006 per Bari"
+                  inputMode="numeric"
+                />
+              </div>
+            </details>
+
             <div className="mt-3 d-flex align-items-center gap-3">
-              <button type="submit" className="btn btn-primary" disabled={stato.fase === "loading"}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={stato.fase === "loading" || !codComune}
+              >
                 {stato.fase === "loading" ? "Generazione in corso…" : "Genera scheda"}
               </button>
               {stato.fase === "loading" ? (
                 <span className="small text-muted" role="status">
                   Interrogo le fonti (ISTAT, OpenCoesione…) — può richiedere uno o
                   due minuti.
+                </span>
+              ) : !codComune ? (
+                <span className="small text-muted">
+                  Seleziona un comune per generare la scheda.
                 </span>
               ) : null}
             </div>

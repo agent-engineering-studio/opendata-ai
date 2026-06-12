@@ -145,6 +145,38 @@ Flusso di selezione in testa alla pagina:
 
 Vincoli soliti: static export, `apiFetch` con token, nessun `app/api/*` (R6).
 
+## Esiti implementazione (2026-06-12)
+
+Discovery live (4 comuni pugliesi) — conferme e correzioni:
+
+- `ref:ISTAT` su `admin_level=8`: copertura 4/4, **zero-padded** ("072006") →
+  match diretto col `cod_comune`, niente conversioni.
+- Resa per tipo buona ma eterogenea: Bari 137 aree industriali (57 nominate),
+  264 commerciali; la "Zona Industriale di Bari" è una **relation**
+  multipolygon (l'assemblaggio ring serve davvero). Barletta: porto reale ma
+  non taggato `landuse=harbour` → fallback necessario anche per tipi "ovvi".
+- **Correzione alla spec**: il centro storico non è mappato come `place`
+  nemmeno a Bari, e Nominatim su "centro storico Barletta" ritorna un B&B →
+  il fallback 2 filtra per class `place|boundary|landuse|leisure` e il
+  livello 3 (degradazione comunale) è la norma per quel tipo, non l'eccezione.
+- Le istanze pubbliche Overpass **throttlano** (429/504 osservati anche in
+  discovery) → retry con backoff nel core + cache TTL 24h in-process E Redis
+  24h sul backend. Lo smoke live ha esercitato la catena 504→504→429→ok.
+- Assemblaggio multipoligono in puro Python (niente shapely): ring stitching
+  greedy + ray casting per gli inner; aree con shoelace equirettangolare
+  (per il ranking basta). Fixture di test = risposte Overpass REALI.
+- `lookup_comune` ordina il match esatto per primo ("Bari" prima di "Bari
+  Sardo"). Il tool MCP di lista NON include le geometrie (pesano); la Feature
+  completa via `osm_get_zone`. L'endpoint backend invece le include (servono
+  alla mappa della UI).
+- UI: `ZoneSelector` (autocomplete comune → chips tipo → lista + mappa
+  GeoMap riusata, selezione evidenziata); il campo testo libero `zona` appare
+  solo quando nessuna zona OSM è selezionata; codice ISTAT manuale come
+  fallback avanzato.
+- Smoke live: "Barletta"→110002; zone industriali Bari → 30 candidati
+  fallback 1, primo "Zona Industriale di Bari" 2.31 km²; `get_zone` → Polygon
+  100 punti.
+
 ## Fuori scope / appendice PostGIS
 
 La vecchia spec (`deferred/06-confini-postgis.md`) torna utile **solo** se/quando

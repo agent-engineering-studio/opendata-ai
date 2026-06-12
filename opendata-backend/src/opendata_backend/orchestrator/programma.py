@@ -111,12 +111,34 @@ class ProgrammaOutput:
 # ─────────────────────────── evidence bundle ────────────────────────────────
 
 
-def build_programma_task(req: ProgrammaRequest) -> str:
-    """Il task inviato ai partecipanti del fan-out (stessa query per tutti)."""
+def build_programma_task(
+    req: ProgrammaRequest, zona_info: dict[str, Any] | None = None
+) -> str:
+    """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
+
+    `zona_info` è la zona OSM risolta dal Pezzo 6 ({name, centroid, bbox}):
+    nome/centroide/bbox vengono iniettati nel task così gli specialisti geo
+    (OSM per le distanze, ISPRA per i layer WFS) non rifanno il lookup.
+    """
     parts = [
         f"Raccogli evidenze sul comune con codice ISTAT {req.cod_comune}"
     ]
-    if req.zona:
+    if zona_info:
+        name = zona_info.get("name") or req.zona or "zona selezionata"
+        parts.append(f"con particolare attenzione alla zona OSM: {name}")
+        centroid = zona_info.get("centroid") or {}
+        if centroid:
+            parts.append(
+                f"(centroide lat={centroid.get('lat'):.5f} lon={centroid.get('lon'):.5f}"
+            )
+            bbox = zona_info.get("bbox")
+            if bbox:
+                parts.append(
+                    f", bbox sud={bbox[0]:.5f} ovest={bbox[1]:.5f} "
+                    f"nord={bbox[2]:.5f} est={bbox[3]:.5f}"
+                )
+            parts.append(")")
+    elif req.zona:
         parts.append(f"con particolare attenzione alla zona: {req.zona}")
     if req.zona_tipo:
         parts.append(f"(tipo di zona: {req.zona_tipo})")

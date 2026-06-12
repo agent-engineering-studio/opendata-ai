@@ -272,6 +272,59 @@ async def compose_map_from_resources(
     return await tools.compose_map_from_resources(text, resources, title, center, zoom)
 
 
+@mcp.tool()
+async def osm_lookup_comune(nome: str, limit: int = 8) -> str:
+    """Resolve an Italian comune name to its ISTAT code via the OSM admin boundary.
+
+    Searches `admin_level=8` boundaries by name (case-insensitive prefix) and
+    returns the zero-padded `ref:ISTAT` code usable across the whole stack.
+
+    Args:
+        nome: Comune name, also partial (e.g. "Barletta", "Bari").
+        limit: Max candidates (1..20, default 8). Exact name match sorts first.
+
+    Returns JSON: { results: [ { nome, ref_istat, cod_provincia, osm_id, osm_url } ],
+    count, source_url, sources } — sources carry the ODbL attribution.
+    """
+    return await tools.lookup_comune(nome, limit)
+
+
+@mcp.tool()
+async def osm_list_zones(cod_comune: str, zona_tipo: str, comune_nome: str | None = None) -> str:
+    """List recognised OSM zones of a given type inside a comune (no drawing needed).
+
+    zona_tipo is one of: industriale | commerciale | portuale | centro_storico |
+    verde | agricola. Candidates come from tag-matched OSM entities inside the
+    comune boundary (named ones first, then by area). The result declares the
+    `fallback_level` used: 1 = tag match, 2 = Nominatim named-area fallback
+    (needs comune_nome), 3 = nothing found → analyse at comune level.
+
+    Args:
+        cod_comune: ISTAT comune code, zero-padded (e.g. "072006").
+        zona_tipo: Zone taxonomy value (see above).
+        comune_nome: Comune name, enables the Nominatim fallback when tags fail.
+
+    Returns JSON: { candidates: [ { osm_type, osm_id, name, zona_tipo, area_m2,
+    centroid, bbox, osm_url } ], count, fallback_level, fallback_note,
+    source_url, sources }. Full geometry via osm_get_zone.
+    """
+    return await tools.list_zones(cod_comune, zona_tipo, comune_nome)
+
+
+@mcp.tool()
+async def osm_get_zone(osm_type: str, osm_id: str) -> str:
+    """Fetch the full GeoJSON Feature of one zone by its OSM id.
+
+    Args:
+        osm_type: way | relation | node.
+        osm_id: Numeric id (also accepts the "way/123" form).
+
+    Returns JSON: { feature, name, source_url, sources } — the feature's
+    properties carry the original OSM tags.
+    """
+    return await tools.get_zone(osm_type, osm_id)
+
+
 def main() -> None:
     """Run the MCP server.
 
