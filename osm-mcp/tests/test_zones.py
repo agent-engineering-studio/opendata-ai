@@ -115,7 +115,7 @@ def _candidate_elements() -> list[dict]:
 
 
 async def test_list_zones_sorts_named_first_then_area(monkeypatch) -> None:
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
         assert 'ref:ISTAT"="072006"' in query
         return _candidate_elements()
 
@@ -136,7 +136,7 @@ async def test_list_zones_invalid_tipo_is_actionable() -> None:
 
 
 async def test_list_zones_fallback_to_nominatim_filters_classes(monkeypatch) -> None:
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
         return []
 
     async def fake_geocode(q: str, limit: int = 5):
@@ -159,7 +159,7 @@ async def test_list_zones_fallback_to_nominatim_filters_classes(monkeypatch) -> 
 
 
 async def test_list_zones_degrades_to_level_3(monkeypatch) -> None:
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
         return []
 
     monkeypatch.setattr(zones, "_overpass", fake_overpass)
@@ -191,7 +191,7 @@ async def test_lookup_comune_exact_match_first(monkeypatch) -> None:
 async def test_mcp_list_zones_strips_geometry(monkeypatch) -> None:
     from osm_mcp import tools as mcp_tools
 
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
         return _candidate_elements()
 
     monkeypatch.setattr(zones, "_overpass", fake_overpass)
@@ -206,7 +206,7 @@ async def test_mcp_list_zones_strips_geometry(monkeypatch) -> None:
 async def test_mcp_get_zone_returns_feature(monkeypatch) -> None:
     from osm_mcp import tools as mcp_tools
 
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
         assert "way(101)" in query
         return _candidate_elements()[1:2]
 
@@ -216,3 +216,19 @@ async def test_mcp_get_zone_returns_feature(monkeypatch) -> None:
     assert payload["feature"]["geometry"]["type"] == "Polygon"
     assert payload["name"] == "Zona PIP Piccola"
     assert payload["source_url"].endswith("/way/101")
+
+
+# ───────────────────── overpass_post: rotazione mirror ──────────────────────
+
+
+async def test_overpass_post_rotates_to_mirror_on_429(httpx_mock) -> None:
+    """Visto live su explore_area: 429 sul primario → il mirror risponde."""
+    from opendata_core.osm import client as osm_client
+
+    endpoints = osm_client.overpass_endpoints()
+    assert len(endpoints) >= 2, "serve almeno un mirror di fallback"
+    httpx_mock.add_response(url=endpoints[0], status_code=429)
+    httpx_mock.add_response(url=endpoints[1], json={"elements": [{"type": "node", "id": 1}]})
+
+    elements = await osm_client.overpass_post("[out:json];node(1);out;", backoff_base=0.01)
+    assert elements == [{"type": "node", "id": 1}]
