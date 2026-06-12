@@ -25,6 +25,54 @@ type Stato =
   | { fase: "errore"; messaggio: string }
   | { fase: "risultato"; scheda: ProgrammaResponse };
 
+/** Un passaggio del feed di avanzamento (fonte o singola chiamata strumento). */
+type Step = {
+  key: string;
+  label: string;
+  kind: "fonte" | "tool";
+  phase: "start" | "end" | "error";
+};
+
+const FONTE_LABEL: Record<string, string> = {
+  ckan: "Cataloghi open data",
+  istat: "ISTAT",
+  eurostat: "Eurostat",
+  oecd: "OCSE",
+  opencoesione: "OpenCoesione",
+  osm: "OpenStreetMap",
+  ispra: "ISPRA",
+  kg: "Documenti PA",
+  sintesi: "Sintesi del report",
+};
+
+const TOOL_LABEL: Record<string, string> = {
+  opencoesione_resolve_territorio: "OpenCoesione · risoluzione territorio",
+  opencoesione_search_projects: "OpenCoesione · ricerca progetti",
+  opencoesione_get_project: "OpenCoesione · dettaglio progetto",
+  opencoesione_funding_capacity: "OpenCoesione · capacità di spesa",
+  opencoesione_territorial_aggregates: "OpenCoesione · aggregati territoriali",
+  opencoesione_search_soggetti: "OpenCoesione · soggetti attuatori",
+  opencoesione_query_local: "OpenCoesione · aggregati locali",
+  opencoesione_reference_values: "OpenCoesione · valori di riferimento",
+  ispra_risk_indicators: "ISPRA · indicatori di rischio",
+  istat_list_dataflows: "ISTAT · catalogo dataset",
+  istat_get_structure: "ISTAT · struttura dataset",
+  istat_get_codelist: "ISTAT · codici",
+  istat_get_data: "ISTAT · estrazione dati",
+  geocode_address: "OpenStreetMap · geocoding",
+  find_nearby_places: "OpenStreetMap · servizi vicini",
+  explore_area: "OpenStreetMap · esplorazione area",
+  get_route: "OpenStreetMap · calcolo percorso",
+  osm_lookup_comune: "OpenStreetMap · ricerca comune",
+  osm_list_zones: "OpenStreetMap · zone riconosciute",
+  osm_get_zone: "OpenStreetMap · geometria zona",
+  kg_query: "Documenti PA · interrogazione",
+};
+
+function toolLabel(name: string): string {
+  return TOOL_LABEL[name] ?? name.replaceAll("_", " ");
+}
+
 function formatGeneratoIl(iso: string): string {
   try {
     return new Date(iso).toLocaleString("it-IT", { dateStyle: "long", timeStyle: "short" });
@@ -41,6 +89,7 @@ function TerritorioInner() {
   const [tema, setTema] = useState("");
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
   const [attesaSec, setAttesaSec] = useState(0);
+  const [steps, setSteps] = useState<Step[]>([]);
 
   // Timer di attesa: /programma non ha (ancora) eventi di progresso e con un
   // LLM locale il fan-out può durare minuti — il contatore mostra che è vivo.
@@ -55,11 +104,28 @@ function TerritorioInner() {
 
   const codComune = (codManuale.trim() || selection?.cod_comune) ?? "";
 
+  function pushStep(step: Step) {
+    setSteps((prev) => {
+      // L'evento "end/error" aggiorna lo step aperto con la stessa chiave.
+      const idx = [...prev].reverse().findIndex(
+        (s) => s.key === step.key && s.phase === "start",
+      );
+      if (step.phase !== "start" && idx !== -1) {
+        const real = prev.length - 1 - idx;
+        const next = [...prev];
+        next[real] = { ...next[real], phase: step.phase };
+        return next;
+      }
+      return [...prev, step];
+    });
+  }
+
   async function genera(e: React.FormEvent) {
     e.preventDefault();
     const cod = codComune.trim();
     if (!cod) return;
     setStato({ fase: "loading" });
+    setSteps([]);
     try {
       const body: ProgrammaRequest = {
         cod_comune: cod,
@@ -73,16 +139,61 @@ function TerritorioInner() {
         modalita: "completa" satisfies ModalitaProgramma,
       };
       const token = await getToken();
-      const res = await apiFetch("/programma", {
+      const res = await apiFetch("/programma/stream", {
         method: "POST",
         token,
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const detail = await res.text();
         throw new Error(`HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
       }
-      const scheda = (await res.json()) as ProgrammaResponse;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let scheda: ProgrammaResponse | null = null;
+      let streamError: string | null = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          let ev: Record<string, unknown>;
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.event === "status") {
+            const source = String(ev.source ?? "");
+            pushStep({
+              key: `fonte:${source}`,
+              label: FONTE_LABEL[source] ?? source,
+              kind: "fonte",
+              phase: ev.error ? "error" : (ev.phase as "start" | "end"),
+            });
+          } else if (ev.event === "tool" && ev.name) {
+            const name = String(ev.name);
+            pushStep({
+              key: `tool:${name}`,
+              label: toolLabel(name),
+              kind: "tool",
+              phase: (ev.phase as "start" | "end" | "error") ?? "start",
+            });
+          } else if (ev.event === "result") {
+            scheda = ev.scheda as ProgrammaResponse;
+          } else if (ev.event === "error") {
+            streamError = String(ev.message ?? "errore sconosciuto");
+          }
+        }
+      }
+      if (streamError) throw new Error(streamError);
+      if (!scheda) throw new Error("Lo stream si è chiuso senza un risultato.");
       setStato({ fase: "risultato", scheda });
     } catch (err) {
       setStato({
@@ -174,9 +285,7 @@ function TerritorioInner() {
               </button>
               {stato.fase === "loading" ? (
                 <span className="small text-muted" role="status">
-                  Interrogo le fonti (ISTAT, OpenCoesione…) e sintetizzo la
-                  scheda — {attesaSec}s. Con un modello locale (Ollama) possono
-                  servire diversi minuti: gli agenti si serializzano sulla GPU.
+                  Analisi in corso — {attesaSec}s
                 </span>
               ) : !codComune ? (
                 <span className="small text-muted">
@@ -184,6 +293,37 @@ function TerritorioInner() {
                 </span>
               ) : null}
             </div>
+
+            {stato.fase === "loading" && steps.length > 0 ? (
+              <div
+                className="mt-3 rounded p-3 small"
+                style={{ backgroundColor: "var(--color-bg-muted)" }}
+                role="log"
+                aria-label="Avanzamento dell'analisi"
+              >
+                <ul className="list-unstyled mb-0 d-flex flex-column gap-1">
+                  {steps.slice(-9).map((s, i) => (
+                    <li
+                      key={`${s.key}-${i}`}
+                      className={s.kind === "tool" ? "ms-3" : "fw-semibold"}
+                      style={{
+                        color:
+                          s.phase === "error"
+                            ? "var(--color-danger)"
+                            : s.phase === "end"
+                              ? "var(--color-text-muted)"
+                              : "var(--color-text)",
+                      }}
+                    >
+                      {s.phase === "start" ? "⏳" : s.phase === "error" ? "⚠️" : "✓"}{" "}
+                      {s.label}
+                      {s.phase === "start" ? "…" : null}
+                      {s.phase === "error" ? " (errore, proseguo)" : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </form>
 

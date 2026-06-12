@@ -13,6 +13,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Depends
+from fastapi.responses import StreamingResponse
 
 from ..auth import ClerkUser
 from ..db.repositories import history as history_repo
@@ -91,3 +92,49 @@ async def genera_programma(
     await _audit(user, req, resp)
     log.info("programma generato: %s", _summary(resp))
     return resp
+
+
+@router.post("/programma/stream")
+async def genera_programma_stream(
+    req: ProgrammaRequest,
+    user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008
+) -> StreamingResponse:
+    """Come /programma ma con eventi NDJSON di avanzamento granulari.
+
+    Una riga JSON per evento: `status` (start/end per fonte e per la sintesi),
+    `tool` (ogni chiamata MCP: nome strumento, start/end/error), `heartbeat`,
+    poi un'unica riga `result` con la scheda completa.
+    """
+    sess = session_holder.session
+    if sess is None:
+        raise HTTPException(status_code=503, detail="Orchestratore non inizializzato")
+    settings = session_holder.settings
+    if settings is not None:
+        from ..config import check_territorio_scope
+
+        try:
+            check_territorio_scope(req.cod_comune, settings)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not settings.enable_programma:
+            raise HTTPException(status_code=404, detail="Endpoint /programma disabilitato")
+        if not settings.enable_opencoesione:
+            log.warning(
+                "/programma/stream con ENABLE_OPENCOESIONE=false: scheda povera o vuota"
+            )
+
+    async def _events():
+        try:
+            async for ev in sess.run_programma_streaming(req):
+                if ev.get("event") == "result":
+                    resp = ProgrammaResponse.model_validate(ev["scheda"])
+                    await _audit(user, req, resp)
+                    log.info("programma (stream) generato: %s", _summary(resp))
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as exc:  # mai un troncamento muto verso il client
+            log.exception("/programma/stream failed")
+            yield json.dumps(
+                {"event": "error", "message": str(exc)}, ensure_ascii=False
+            ) + "\n"
+
+    return StreamingResponse(_events(), media_type="application/x-ndjson")

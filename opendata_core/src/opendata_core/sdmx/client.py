@@ -59,6 +59,13 @@ def _is_persistent_path(path: str) -> bool:
 # ISTAT has SSL certificate issues; set ISTAT_VERIFY_SSL=true to re-enable.
 VERIFY_SSL = os.getenv("ISTAT_VERIFY_SSL", "false").lower() not in {"0", "false", "no"}
 
+# Circuit breaker per endpoint: esploradati.istat.it può APPENDERE le richieste
+# fino al timeout (120s) quando l'IP è rate-limitato (documentato sopra: oltre
+# 5 query/min il blocco dura 1-2 giorni). Senza breaker ogni tool call di un
+# fan-out brucia il timeout intero su una fonte morta.
+CIRCUIT_THRESHOLD = int(os.getenv("SDMX_CIRCUIT_THRESHOLD", "2"))
+CIRCUIT_COOLDOWN = float(os.getenv("SDMX_CIRCUIT_COOLDOWN_SECONDS", "600"))
+
 # Accept headers validated against esploradati.istat.it (new endpoint, 2025):
 #   version=1.0   → HTTP 500 when DB is up (valid, reaches DB layer)      ✅
 #   version=1.0.0 → HTTP 406 always (rejected at content-negotiation)     ❌
@@ -92,6 +99,8 @@ class SdmxClient:
     # Shared cache across instances — metadata is stable enough that we want
     # subsequent tool calls in the same process to benefit.
     _cache: TTLCache = TTLCache(maxsize=CACHE_MAXSIZE, ttl=CACHE_TTL)
+    # Circuit breaker per base_url: {base: (transport_failures, open_until_ts)}.
+    _circuit: dict[str, tuple[int, float]] = {}
 
     def __init__(self, timeout: float = DEFAULT_TIMEOUT, base_url: str | None = None) -> None:
         self._timeout = timeout
@@ -115,9 +124,35 @@ class SdmxClient:
 
     # ────────────────────────────── core HTTP ──────────────────────────────
 
+    def _circuit_check(self) -> None:
+        failures, open_until = self._circuit.get(self._base, (0, 0.0))
+        remaining = open_until - time.time()
+        if remaining > 0:
+            raise SdmxError(
+                f"Endpoint SDMX {self._base} in cooldown per {int(remaining)}s dopo "
+                f"{failures} errori di trasporto consecutivi — probabile rate limit "
+                "lato server (esploradati.istat.it blocca gli IP oltre ~5 query/min). "
+                "Riprova più tardi o disabilita temporaneamente la fonte."
+            )
+
+    def _circuit_record(self, ok: bool) -> None:
+        if ok:
+            self._circuit.pop(self._base, None)
+            return
+        failures, _ = self._circuit.get(self._base, (0, 0.0))
+        failures += 1
+        open_until = time.time() + CIRCUIT_COOLDOWN if failures >= CIRCUIT_THRESHOLD else 0.0
+        self._circuit[self._base] = (failures, open_until)
+        if open_until:
+            log.error(
+                "SDMX circuit OPEN per %s (%d transport error consecutivi): "
+                "fail-fast per %.0fs", self._base, failures, CIRCUIT_COOLDOWN,
+            )
+
     async def _get(self, path: str, *, accept: str, params: dict[str, Any] | None = None) -> httpx.Response:
         if self._client is None:
             raise RuntimeError("SdmxClient must be used as an async context manager")
+        self._circuit_check()
         url = str(self._client.base_url).rstrip("/") + "/" + path.lstrip("/")
         log.debug("SDMX GET %s params=%s", url, params)
         try:
@@ -127,8 +162,10 @@ class SdmxClient:
                 params=params,
             )
         except httpx.HTTPError as exc:
+            self._circuit_record(ok=False)
             log.error("SDMX transport error GET %s: %s", url, exc)
             raise SdmxError(f"Transport error on GET {path}: {exc}") from exc
+        self._circuit_record(ok=True)
 
         log.debug(
             "SDMX response %s → HTTP %s content-type=%s size=%d bytes",

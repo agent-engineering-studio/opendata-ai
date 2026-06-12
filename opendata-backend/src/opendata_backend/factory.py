@@ -378,6 +378,160 @@ class OrchestratorSession:
                         req.zona_osm_id, exc_info=True)
             return None
 
+    async def run_programma_streaming(
+        self,
+        req: ProgrammaRequest,
+        *,
+        heartbeat_sec: float = 10.0,
+        total_timeout_sec: float = 900.0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Come `run_programma`, ma con eventi di avanzamento GRANULARI.
+
+        Oltre allo start/end per fonte (pattern di `run_streaming`), un
+        logging-handler intercetta i record del framework sugli strumenti
+        ("Function name: X" / "Function X succeeded") e li rilancia come
+        eventi `tool` — ogni chiamata MCP è visibile nella UI.
+
+        Eventi:
+            {"event":"status","source":"<fonte>","phase":"start|end","error"?}
+            {"event":"tool","name":"<tool>","phase":"start|end|error"}
+            {"event":"heartbeat","in_flight":[...],"elapsed_ms":int}
+            {"event":"result","scheda":{...}}   # ultimo, una volta sola
+            {"event":"error","message":str}
+        """
+        if not self._participants:
+            raise RuntimeError("OrchestratorSession not entered")
+        if self._programma_agent is None:
+            raise RuntimeError("Programma disabilitato (enable_programma=false)")
+        zona_info = await self._resolve_zona(req)
+
+        async with self._lock:
+            aggregator = build_programma_aggregator(
+                self._programma_agent, req, idee_agent=self._idee_agent
+            )
+            task_text = build_programma_task(req, zona_info)
+            queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+            in_flight: set[str] = set()
+            t0 = asyncio.get_event_loop().time()
+
+            class _ToolEventHandler(logging.Handler):
+                """Rilancia i log del framework come eventi tool sulla coda."""
+
+                def emit(self, record: logging.LogRecord) -> None:
+                    try:
+                        msg = record.getMessage()
+                    except Exception:  # pragma: no cover — record malformato
+                        return
+                    ev: dict[str, Any] | None = None
+                    if msg.startswith("Function name: "):
+                        ev = {"event": "tool", "name": msg.removeprefix("Function name: ").strip(),
+                              "phase": "start"}
+                    elif msg.startswith("Function ") and msg.rstrip(".").endswith("succeeded"):
+                        name = msg.removeprefix("Function ").split(" ")[0]
+                        ev = {"event": "tool", "name": name, "phase": "end"}
+                    elif msg.startswith("Function failed"):
+                        ev = {"event": "tool", "name": "", "phase": "error"}
+                    if ev is not None:
+                        try:
+                            queue.put_nowait(ev)
+                        except Exception:  # pragma: no cover — coda piena
+                            pass
+
+            handler = _ToolEventHandler(level=logging.INFO)
+            fw_logger = logging.getLogger("agent_framework")
+            fw_logger.addHandler(handler)
+
+            async def _worker(agent: Agent) -> _WrappedAgentResult:
+                name = getattr(agent, "name", None) or "agent"
+                in_flight.add(name)
+                await queue.put({"event": "status", "source": name, "phase": "start"})
+                try:
+                    resp = await agent.run(task_text)
+                except Exception as exc:
+                    in_flight.discard(name)
+                    await queue.put(
+                        {"event": "status", "source": name, "phase": "end", "error": str(exc)}
+                    )
+                    raise
+                in_flight.discard(name)
+                await queue.put({"event": "status", "source": name, "phase": "end"})
+                return _WrappedAgentResult(executor_id=name, agent_response=resp)
+
+            tasks = [asyncio.create_task(_worker(p)) for p in self._participants]
+
+            async def _drain_then_sentinel() -> list[Any]:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                await queue.put(None)
+                return results
+
+            collector = asyncio.create_task(_drain_then_sentinel())
+            deadline = t0 + total_timeout_sec
+            timed_out = False
+
+            try:
+                while True:
+                    now = asyncio.get_event_loop().time()
+                    remaining = deadline - now
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    wait = min(heartbeat_sec, remaining)
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=wait)
+                    except asyncio.TimeoutError:
+                        if in_flight:
+                            elapsed_ms = int((asyncio.get_event_loop().time() - t0) * 1000)
+                            yield {
+                                "event": "heartbeat",
+                                "in_flight": sorted(in_flight),
+                                "elapsed_ms": elapsed_ms,
+                            }
+                        continue
+                    if event is None:
+                        break
+                    yield event
+
+                if timed_out:
+                    yield {
+                        "event": "error",
+                        "message": (
+                            f"Timeout dopo {int(total_timeout_sec)}s. Fonti ancora attive: "
+                            f"{', '.join(sorted(in_flight)) or '—'}."
+                        ),
+                    }
+                    return
+
+                results = await collector
+                real_results = [r for r in results if not isinstance(r, BaseException)]
+
+                fase = "report completo" if req.modalita == "completa" else req.modalita
+                yield {"event": "status", "source": "sintesi", "phase": "start",
+                       "detail": fase}
+                try:
+                    output = await aggregator(real_results)
+                except Exception as exc:
+                    log.exception("programma aggregator failed in streaming")
+                    yield {"event": "status", "source": "sintesi", "phase": "end",
+                           "error": str(exc)}
+                    yield {"event": "error", "message": f"Sintesi fallita: {exc}"}
+                    return
+                yield {"event": "status", "source": "sintesi", "phase": "end"}
+
+                resp = getattr(output, "response", None)
+                if not isinstance(resp, ProgrammaResponse):
+                    resp = ProgrammaResponse.model_validate_json(
+                        getattr(output, "text", None) or str(output)
+                    )
+                yield {"event": "result", "scheda": resp.model_dump(mode="json")}
+            finally:
+                fw_logger.removeHandler(handler)
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                if not collector.done():
+                    collector.cancel()
+                await asyncio.gather(*tasks, collector, return_exceptions=True)
+
     async def run_programma(self, req: ProgrammaRequest) -> ProgrammaResponse:
         """Fan-out delle evidenze sul comune + sintesi strutturata della scheda.
 
