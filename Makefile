@@ -127,7 +127,7 @@ agent-backend: ## Launch the unified backend REPL against the running stack
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-backend:local opendata-agent
 
-.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione
 mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
@@ -135,6 +135,10 @@ mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list rou
 mcp-stdio-istat: ## Smoke-test the ISTAT MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio istat-mcp-server:local
+
+mcp-stdio-opencoesione: ## Smoke-test the OpenCoesione MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio opencoesione-mcp-server:local
 
 mcp-stdio-osm: ## Smoke-test the OSM MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
@@ -147,6 +151,7 @@ lint: ## Run ruff on all Python packages
 	cd opendata_core && ruff check src
 	cd ckan-mcp-server && ruff check src
 	cd istat-mcp-server && ruff check src
+	cd opencoesione-mcp-server && ruff check src
 	cd osm-mcp && ruff check src
 	cd opendata-backend && ruff check src
 
@@ -154,5 +159,6 @@ test: ## Run pytest on all Python packages
 	cd opendata_core && pytest -q
 	cd ckan-mcp-server && pytest -q
 	cd istat-mcp-server && pytest -q
+	cd opencoesione-mcp-server && pytest -q
 	cd osm-mcp && pytest -q
 	cd opendata-backend && pytest -q

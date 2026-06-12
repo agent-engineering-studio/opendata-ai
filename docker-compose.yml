@@ -120,6 +120,26 @@ services:
       - sdmx_cache:/var/cache/sdmx
     restart: unless-stopped
 
+  # ───── OpenCoesione MCP server (Streamable HTTP) ─────
+  opencoesione-mcp:
+    build:
+      context: .
+      dockerfile: opencoesione-mcp-server/Dockerfile
+    image: opencoesione-mcp-server:local
+    container_name: opencoesione-mcp
+    ports:
+      - "${OPENCOESIONE_MCP_PORT:-18082}:8082"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8082"
+      MCP_PATH: /mcp
+      OPENCOESIONE_BASE_URL: ${OPENCOESIONE_BASE_URL:-https://opencoesione.gov.it/it/api}
+      OPENCOESIONE_HTTP_TIMEOUT: "60"
+      OPENCOESIONE_CACHE_TTL_SECONDS: ${OPENCOESIONE_CACHE_TTL_SECONDS:-3600}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:

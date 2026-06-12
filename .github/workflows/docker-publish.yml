@@ -51,6 +51,9 @@ jobs:
           - name: istat-mcp-server
             context: .
             dockerfile: istat-mcp-server/Dockerfile
+          - name: opencoesione-mcp-server
+            context: .
+            dockerfile: opencoesione-mcp-server/Dockerfile
           - name: osm-mcp
             context: .
             dockerfile: osm-mcp/Dockerfile
