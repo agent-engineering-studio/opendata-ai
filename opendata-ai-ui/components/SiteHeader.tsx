@@ -19,6 +19,7 @@ const PUBLIC_NAV = [
 
 const AUTH_NAV = [
   { href: "/esplora", label: "Esplora" },
+  { href: "/territorio", label: "Territorio" },
 ] as const;
 
 function KeyIcon() {

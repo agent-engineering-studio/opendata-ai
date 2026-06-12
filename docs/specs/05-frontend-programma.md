@@ -73,6 +73,27 @@ vincoli del repo: static export, `apiFetch`, niente `app/api/*`.
 - HTML semantico (heading hierarchy, liste), label sui campi, focus visibile,
   contrasto adeguato, badge non basati solo sul colore (anche etichetta testuale).
 
+## Esiti implementazione (2026-06-12)
+
+- Pagina protetta con `DashboardGate` (stesso gating client-side di
+  `/esplora`): contenuto client-rendered, il prerender statico contiene il
+  gate — è il comportamento standard del repo con static export.
+- Layout già predisposto per i pezzi successivi: header di selezione (qui
+  arriverà il selettore zona OSM del Pezzo 6) e area risultati (qui il toggle
+  Scheda | Idee del Pezzo 8), marcati nei commenti della pagina.
+- Stampa: regole `@media print` in `globals.css` — oltre a nascondere chrome e
+  form, gli `<a href^="http">` della scheda stampano l'URL esplicito accanto
+  al link, così le fonti restano verificabili anche su carta.
+- `ResourceCard` (pagina /esplora) esteso con badge/tooltip per
+  `opencoesione` e `osm`, coerente con l'estensione di `ResourceSource`.
+- Streaming NDJSON (`/programma/stream`) non consumato: l'endpoint opzionale
+  non esiste ancora (rimandato nel Pezzo 4); la pagina mostra uno stato di
+  attesa con indicazione delle fonti.
+- Verifiche: `next build` (export) verde con `/territorio` prerenderizzata,
+  ESLint pulito, stringhe e nav presenti nei chunk. Lo smoke manuale visivo
+  con stack attivo (form → scheda con fonti cliccabili) resta da fare alla
+  prima `make up` completa.
+
 ## Definition of Done
 
 - [ ] `lib/types.ts` esteso (ResourceSource + tipi Programma).

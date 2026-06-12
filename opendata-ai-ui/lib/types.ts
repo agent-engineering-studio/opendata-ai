@@ -1,4 +1,10 @@
-export type ResourceSource = "ckan" | "istat" | "eurostat" | "oecd";
+export type ResourceSource =
+  | "ckan"
+  | "istat"
+  | "eurostat"
+  | "oecd"
+  | "opencoesione"
+  | "osm";
 
 export type Resource = {
   name: string;
@@ -33,3 +39,75 @@ export type ChatMessage =
       durationMs: number;
     }
   | { role: "error"; text: string };
+
+/* ── Programma evidence-based (POST /programma — verticale PA) ──────────
+ * Specchio del contratto Pydantic in
+ * opendata-backend/src/opendata_backend/orchestrator/programma.py (spec 04 §6).
+ */
+
+export type FonteEvidenza =
+  | "istat"
+  | "opencoesione"
+  | "ckan"
+  | "eurostat"
+  | "oecd"
+  | "osm"
+  | "ispra";
+
+export type Evidenza = {
+  fonte: FonteEvidenza;
+  /** URL risolvibile — il cuore "verificabile": ogni claim ha la sua fonte cliccabile. */
+  url: string;
+  /** Cosa dice il dato (numeri inclusi), senza interpretazione. */
+  dettaglio: string;
+};
+
+export type VoceSwot = {
+  testo: string;
+  evidenze: Evidenza[];
+};
+
+export type LivelloFattibilita = "alta" | "media" | "bassa" | "da_verificare";
+
+export type Fattibilita = {
+  livello: LivelloFattibilita;
+  motivazione: string;
+  /** Spend ratio storico del comune (da OpenCoesione), se disponibile. */
+  spend_ratio_storico?: number | null;
+};
+
+export type Finanziamento = {
+  linea: string;
+  fonte_url: string;
+  stato?: string | null;
+};
+
+export type Proposta = {
+  titolo: string;
+  descrizione: string;
+  evidenze: Evidenza[];
+  finanziamento?: Finanziamento | null;
+  fattibilita: Fattibilita;
+};
+
+export type ProgrammaRequest = {
+  /** Codice ISTAT del comune, es. "072006". */
+  cod_comune: string;
+  zona?: string | null;
+  /** Tassonomia zona (Pezzo 6) — non esposta nel form finché il selettore non esiste. */
+  zona_tipo?: string | null;
+  zona_osm_id?: string | null;
+  tema?: string | null;
+  cicli?: string[] | null;
+};
+
+export type ProgrammaResponse = {
+  comune: string;
+  zona?: string | null;
+  /** Chiavi: forze / debolezze / opportunita / minacce. */
+  swot: Record<string, VoceSwot[]>;
+  proposte: Proposta[];
+  citazioni: Resource[];
+  disclaimer: string;
+  generato_il: string;
+};
