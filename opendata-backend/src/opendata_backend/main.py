@@ -26,7 +26,7 @@ from .cache.state import set_redis
 from .config import get_settings
 from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
-from .routers import api_keys, datasets, me, webhooks
+from .routers import api_keys, datasets, me, programma, webhooks
 from .state import session_holder
 
 log = logging.getLogger("opendata-backend")
@@ -139,6 +139,7 @@ app.include_router(datasets.router)
 app.include_router(me.router)
 app.include_router(api_keys.router)
 app.include_router(webhooks.router)
+app.include_router(programma.router)
 
 # Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
 # and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.

@@ -302,6 +302,62 @@ SYNTH_INSTRUCTIONS = (
 )
 
 
+# Agente tool-less che trasforma l'evidence bundle nella scheda programmatica
+# (SWOT + proposte). L'output è SOLO JSON: il parsing è in
+# orchestrator/programma.py, i guardrail deterministici in
+# orchestrator/guardrails.py (R5: aggiornare insieme contratto e validazioni).
+PROGRAMMA_INSTRUCTIONS = (
+    "Sei un analista di politiche pubbliche. Ricevi una RICHIESTA (comune ISTAT, "
+    "eventuale zona/tema) e un blocco EVIDENZE RACCOLTE con sezioni per fonte "
+    "(ISTAT, OPENCOESIONE, CKAN, …), ognuna con una narrativa e un elenco di "
+    "RISORSE CITABILI (nome | URL).\n\n"
+    "Produci una scheda programmatica VERIFICABILE in ITALIANO, sobria e tecnica. "
+    "Emetti SOLO un oggetto JSON — nessun testo prima o dopo, niente markdown — "
+    "con ESATTAMENTE questo schema:\n"
+    "{\n"
+    '  "swot": {\n'
+    '    "forze":       [{"testo": str, "evidenze": [{"fonte": str, "url": str, "dettaglio": str}]}],\n'
+    '    "debolezze":   [...same...],\n'
+    '    "opportunita": [...same...],\n'
+    '    "minacce":     [...same...]\n'
+    "  },\n"
+    '  "proposte": [{\n'
+    '    "titolo": str, "descrizione": str,\n'
+    '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
+    '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
+    '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
+    '"motivazione": str, "spend_ratio_storico": float|null}\n'
+    "  }],\n"
+    '  "disclaimer": str\n'
+    "}\n\n"
+    "REGOLE VINCOLANTI:\n"
+    "- Ogni voce SWOT e ogni proposta DEVE avere ≥1 evidenza il cui `url` è "
+    "COPIATO VERBATIM da una RISORSA CITABILE del bundle. `fonte` è il tag della "
+    "sezione (istat, opencoesione, ckan, …). `dettaglio` riporta COSA DICE il "
+    "dato (numeri inclusi), senza interpretazioni.\n"
+    "- Le voci senza evidenza verranno SCARTATE da un validatore automatico: "
+    "non emettere claim che non puoi ancorare.\n"
+    "- `fattibilita` si fonda sulla capacità di spesa storica OpenCoesione "
+    "(spend ratio) quando presente nel bundle: riportala in "
+    "`spend_ratio_storico` e motivala. Una proposta senza evidenza di "
+    "finanziamento ha `finanziamento: null` e livello `da_verificare`.\n"
+    "- VIETATO il linguaggio da campagna: niente slogan, esortazioni al voto, "
+    "attacchi ad avversari, superlativi non supportati, promesse in prima "
+    "persona. Tono da relazione tecnica.\n"
+    "- Non inventare numeri, URL o linee di finanziamento: usa solo ciò che è "
+    "nel bundle. Meglio una scheda corta e fondata che una lunga e fragile.\n"
+    "- `disclaimer`: una frase che chiarisce che è un'analisi automatica su "
+    "dati pubblici, non materiale elettorale.\n\n"
+    "Esempio minimo valido:\n"
+    '{"swot": {"forze": [{"testo": "Capacità attuativa nella media regionale: '
+    "spend ratio 0.38 sul totale dei progetti di coesione.\", \"evidenze\": "
+    '[{"fonte": "opencoesione", "url": "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comune.json", '
+    '"dettaglio": "pagamenti 224,5M€ su 584,6M€ finanziati (ratio 0.38), 2152 progetti conclusi su 2616"}]}], '
+    '"debolezze": [], "opportunita": [], "minacce": []}, "proposte": [], '
+    '"disclaimer": "Analisi automatica basata su dati pubblici citati; non costituisce materiale elettorale."}'
+)
+
+
 class Settings(BaseSettings):
     """Settings loaded from environment variables and/or a .env file."""
 
@@ -369,6 +425,7 @@ class Settings(BaseSettings):
     oecd_agent_name: str = Field(default="oecd")
     opencoesione_agent_name: str = Field(default="opencoesione")
     synth_agent_name: str = Field(default="synth")
+    programma_agent_name: str = Field(default="programma")
 
     # Source enable flags — let operators turn off expensive sources per env.
     # Eurostat/OECD default OFF so existing deployments do not silently triple
@@ -379,6 +436,12 @@ class Settings(BaseSettings):
     enable_oecd: bool = Field(default=False)
     # OpenCoesione adds 1 specialist LLM call per query — opt-in like the others.
     enable_opencoesione: bool = Field(default=False)
+
+    # ── Programma evidence-based (POST /programma, verticale PA) ─────
+    enable_programma: bool = Field(default=True)
+    # Modello dedicato alla scheda (None = riusa claude_model). Ha effetto solo
+    # col provider claude; consigliato un modello Sonnet per il JSON lungo.
+    programma_model: str | None = Field(default=None)
 
     # HTTP API
     api_host: str = Field(default="0.0.0.0")

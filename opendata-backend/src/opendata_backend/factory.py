@@ -30,9 +30,16 @@ from .config import (
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
+    PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
     resolve_provider,
+)
+from .orchestrator.programma import (
+    ProgrammaRequest,
+    ProgrammaResponse,
+    build_programma_aggregator,
+    build_programma_task,
 )
 from .orchestrator.synth import build_aggregator
 from .orchestrator.workflow import build_workflow
@@ -109,6 +116,7 @@ class OrchestratorSession:
         self._stack = AsyncExitStack()
         self._participants: list[Agent] = []
         self._synth_agent: Agent | None = None
+        self._programma_agent: Agent | None = None
         self._enabled_sources: list[str] = []
         # agent-framework workflows reject concurrent .run() on the same instance,
         # and the participant Agents are shared — serialise requests with a lock.
@@ -238,6 +246,21 @@ class OrchestratorSession:
         )
         self._synth_agent = synth_agent
 
+        # Agente tool-less della scheda programma (come il synth, istruzioni
+        # diverse). Con provider claude può girare su un modello dedicato.
+        if s.enable_programma:
+            programma_client = chat_client
+            if s.programma_model and resolve_provider(s) == "claude":
+                from agent_framework_anthropic import AnthropicClient
+
+                programma_client = AnthropicClient(
+                    api_key=s.anthropic_api_key, model=s.programma_model,
+                )
+            self._programma_agent = await self._enter_agent(
+                programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
+                None, default_options,
+            )
+
         # Store the building blocks; a FRESH workflow + aggregator are built
         # per request in run() / run_streaming() because (a) agent-framework
         # workflow instances cannot be re-run concurrently (single-shot), and
@@ -252,7 +275,34 @@ class OrchestratorSession:
     async def __aexit__(self, *exc: object) -> None:
         self._participants = []
         self._synth_agent = None
+        self._programma_agent = None
         await self._stack.aclose()
+
+    async def run_programma(self, req: ProgrammaRequest) -> ProgrammaResponse:
+        """Fan-out delle evidenze sul comune + sintesi strutturata della scheda.
+
+        Stessi partecipanti di `run()`, aggregatore dedicato (programma) al
+        posto del synth. Serializzato con lo stesso lock: workflow single-shot
+        e agenti condivisi.
+        """
+        if not self._participants:
+            raise RuntimeError("OrchestratorSession not entered")
+        if self._programma_agent is None:
+            raise RuntimeError("Programma disabilitato (enable_programma=false)")
+        async with self._lock:
+            aggregator = build_programma_aggregator(self._programma_agent, req)
+            workflow = build_workflow(self._participants, aggregator)
+            events = await workflow.run(build_programma_task(req))
+        outputs = events.get_outputs()
+        if not outputs:
+            raise RuntimeError("Programma workflow produced no outputs")
+        final = outputs[0]
+        response = getattr(final, "response", None)
+        if isinstance(response, ProgrammaResponse):
+            return response
+        # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
+        text = getattr(final, "text", None) or str(final)
+        return ProgrammaResponse.model_validate_json(text)
 
     async def run(self, query: str) -> str:
         """Fan out `query` to the enabled specialists in parallel and return the synth reply.

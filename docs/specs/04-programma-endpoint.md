@@ -123,6 +123,29 @@ class ProgrammaResponse(BaseModel):
     generato_il: datetime
 ```
 
+## Esiti implementazione (2026-06-12)
+
+- Contratto definito in `orchestrator/programma.py` (il router lo importa da
+  lì — unica fonte, niente duplicazione): `finanziamento` è un modello tipizzato
+  (`linea`/`fonte_url`/`stato`), non un dict libero; l'LLM emette solo
+  `swot+proposte+disclaimer`, il resto (comune, citazioni, generato_il) lo
+  assembla l'aggregatore. `comune` nella risposta è il codice ISTAT richiesto.
+- Guardrail aggiuntivo oltre la spec: un `finanziamento` con `fonte_url` non
+  raccolta viene rimosso (e la proposta degrada a `da_verificare`) — vietato
+  dichiarare linee inventate, non solo assenti.
+- `build_programma_aggregator` accetta `instructions_hint` parametrico: è il
+  gancio per la modalità `idee` del Pezzo 8 senza refactoring.
+- Audit: `opendata.history` append-only via il repository esistente; se il
+  database non è configurato (solo dev) l'endpoint resta usabile e il salto è
+  loggato come warning.
+- `/programma/stream` (opzionale) rimandato.
+- `programma_model` ha effetto solo col provider claude (client dedicato);
+  con ollama/foundry riusa il client di sessione.
+- Smoke con Ollama qwen2.5:32k (istat+opencoesione): scheda su Barletta con
+  voci ancorate a URL opencoesione reali, proposta senza finanziamento →
+  `da_verificare`, disclaimer presente; lo specialista ISTAT che allucina un
+  dataflow fallisce con grazia senza rompere la scheda.
+
 ## Fuori scope
 
 - Frontend (pagina `/territorio` con scheda, citazioni cliccabili + export PDF) =
