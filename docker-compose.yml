@@ -227,6 +227,8 @@ services:
       KG_AGENT_NAME: ${KG_AGENT_NAME:-kg}
       KG_NAMESPACE_PREFIX: ${KG_NAMESPACE_PREFIX:-comune-}
       KG_UI_URL: ${KG_UI_URL:-}
+      # Ambito territoriale (vuoto = nessun limite; prod = Puglia).
+      TERRITORIO_PROVINCE: ${TERRITORIO_PROVINCE:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}

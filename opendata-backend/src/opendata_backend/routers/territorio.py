@@ -19,6 +19,7 @@ from opendata_core.osm.zones import ZONA_TIPI, OverpassError
 
 from ..auth import ClerkUser
 from ..cache.store import cache_get, cache_set
+from ..config import check_territorio_scope, get_settings, province_scope
 from ..shared.ratelimit import enforce_rate_limit
 
 log = logging.getLogger("opendata-backend.territorio")
@@ -39,7 +40,8 @@ async def cerca_comuni(
     user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008, ARG001
 ) -> dict:
     """Autocomplete comune → codice ISTAT (dai confini amministrativi OSM)."""
-    key = _key("comuni", q)
+    scope = province_scope(get_settings())
+    key = _key("comuni", q, ",".join(sorted(scope)))
     cached = await cache_get(key)
     if cached is not None:
         return cached
@@ -47,6 +49,10 @@ async def cerca_comuni(
         results = await zones.lookup_comune(q)
     except OverpassError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if scope:
+        # Ambito territoriale (es. produzione = Puglia): l'autocomplete
+        # propone solo comuni delle province ammesse.
+        results = [r for r in results if (r.get("ref_istat") or "")[:3] in scope]
     payload = {"results": results, "count": len(results)}
     await cache_set(key, payload, ttl_seconds=_TTL)
     return payload
@@ -72,6 +78,10 @@ async def lista_zone(
             status_code=422,
             detail=f"tipo {tipo!r} non valido. Valori ammessi: {', '.join(ZONA_TIPI)}",
         )
+    try:
+        check_territorio_scope(cod_comune, get_settings())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     key = _key("zone", cod_comune, tipo, comune_nome or "")
     cached = await cache_get(key)
     if cached is not None:

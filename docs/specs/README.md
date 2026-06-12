@@ -37,3 +37,8 @@ Verticale minimo dimostrabile: **1 → 2 → 4 → 5**. Il 3 può girare in para
   dichiarato negli output.
 - **Nomi**: route `/territorio` (NON "esplora", già occupato), endpoint unico
   `/programma` con campo `modalita`.
+- **Ambito territoriale di produzione = PUGLIA** (12/06/2026):
+  `TERRITORIO_PROVINCE=071,072,073,074,075,110` vincola autocomplete, zone e
+  `/programma` (422 fuori ambito); il mirror OpenCoesione si sincronizza con
+  `--regione PUG`. Vuoto in dev = nessun limite. Il resto d'Italia si
+  riattiva svuotando una env, senza toccare codice.

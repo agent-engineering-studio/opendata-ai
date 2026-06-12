@@ -68,6 +68,13 @@ async def genera_programma(
     settings = session_holder.settings
     if settings is not None and not settings.enable_programma:
         raise HTTPException(status_code=404, detail="Endpoint /programma disabilitato")
+    if settings is not None:
+        from ..config import check_territorio_scope
+
+        try:
+            check_territorio_scope(req.cod_comune, settings)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if settings is not None and not settings.enable_opencoesione:
         # Visto al primo collaudo: senza la fonte cuore la scheda esce vuota
         # (guardrail corretti, configurazione no) — rendiamolo diagnosticabile.

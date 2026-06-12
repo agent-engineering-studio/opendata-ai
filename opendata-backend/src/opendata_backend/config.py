@@ -662,6 +662,14 @@ class Settings(BaseSettings):
     # col provider claude; consigliato un modello Sonnet per il JSON lungo.
     programma_model: str | None = Field(default=None)
 
+    # ── Ambito territoriale del verticale /territorio ─────────────────
+    # Lista (comma-separated) di codici provincia ISTAT a 3 cifre ammessi.
+    # Vuoto = nessun limite (dev). In produzione il verticale è focalizzato
+    # sulla Puglia: "071,072,073,074,075,110" (FG, BA, TA, BR, LE, BAT).
+    # Vincola /territorio/comuni (filtra l'autocomplete), /territorio/zone
+    # e /programma (422 fuori ambito).
+    territorio_province: str = Field(default="")
+
     # HTTP API
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
@@ -725,6 +733,28 @@ class Settings(BaseSettings):
     redis_url: str | None = Field(default=None)
     # Requests per minute per Clerk user (fixed window). Set to 0 to disable.
     rate_limit_per_minute: int = Field(default=60)
+
+
+def province_scope(settings: Settings) -> frozenset[str]:
+    """I codici provincia ammessi (3 cifre); frozenset vuoto = nessun limite."""
+    return frozenset(
+        p.strip().zfill(3)
+        for p in settings.territorio_province.split(",")
+        if p.strip()
+    )
+
+
+def check_territorio_scope(cod_comune: str, settings: Settings) -> None:
+    """Solleva ValueError se il comune è fuori dall'ambito configurato."""
+    scope = province_scope(settings)
+    if not scope:
+        return
+    prov = str(cod_comune).strip()[:3]
+    if prov not in scope:
+        raise ValueError(
+            f"Il comune {cod_comune} è fuori dall'ambito territoriale configurato "
+            f"(province ammesse: {', '.join(sorted(scope))})."
+        )
 
 
 def resolve_provider(settings: Settings) -> Provider:
