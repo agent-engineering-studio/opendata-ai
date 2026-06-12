@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any, Literal
 
+import httpx
 from cachetools import TTLCache
 
 from .client import _http, geocode
@@ -75,29 +77,62 @@ _cache: TTLCache = TTLCache(maxsize=256, ttl=CACHE_TTL)
 _MAX_RETRIES = 3
 _RETRYABLE = (429, 502, 504)
 _OVERPASS_TIMEOUT = 60
+#: Profilo "interattivo" (autocomplete UI): risposte rapide o fallisci presto.
+_SNAPPY_TIMEOUT = 12
+_SNAPPY_BACKOFF = 1.5
+
+#: Mirror di fallback (le istanze pubbliche throttlano spesso, visto live):
+#: ruotati a ogni retry. Override via env, lista separata da virgole.
+_FALLBACK_URLS = [
+    u.strip()
+    for u in os.getenv(
+        "OVERPASS_FALLBACK_URLS", "https://overpass.kumi.systems/api/interpreter"
+    ).split(",")
+    if u.strip()
+]
 
 
 class OverpassError(RuntimeError):
     """Overpass non raggiungibile o in errore dopo i retry."""
 
 
-async def _overpass(query: str) -> list[dict[str, Any]]:
-    """POST a Overpass con retry/backoff su 429/5xx (istanza pubblica throttlata)."""
+def _endpoints() -> list[str]:
+    primary = settings.OVERPASS_URL
+    return [primary] + [u for u in _FALLBACK_URLS if u != primary]
+
+
+async def _overpass(
+    query: str,
+    *,
+    timeout: float = _OVERPASS_TIMEOUT,
+    backoff_base: float = 4.0,
+    max_retries: int = _MAX_RETRIES,
+) -> list[dict[str, Any]]:
+    """POST a Overpass con retry/backoff e ROTAZIONE degli endpoint.
+
+    429/502/504 e gli errori di trasporto ruotano sul mirror successivo;
+    l'autocomplete usa il profilo snappy (timeout corto, backoff breve).
+    """
     last = ""
+    endpoints = _endpoints()
     async with await _http() as client:
-        for attempt in range(_MAX_RETRIES):
-            resp = await client.post(
-                settings.OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
-            )
+        for attempt in range(max_retries):
+            endpoint = endpoints[attempt % len(endpoints)]
+            try:
+                resp = await client.post(endpoint, data={"data": query}, timeout=timeout)
+            except httpx.HTTPError as exc:
+                last = f"transport: {type(exc).__name__}"
+                log.warning("Overpass %s su %s — provo il mirror successivo", last, endpoint)
+                continue
             if resp.status_code in _RETRYABLE:
                 last = f"HTTP {resp.status_code}"
-                delay = 4.0 * (attempt + 1)
-                log.warning("Overpass %s — retry in %.0fs", last, delay)
+                delay = backoff_base * (attempt + 1)
+                log.warning("Overpass %s su %s — retry in %.1fs", last, endpoint, delay)
                 await asyncio.sleep(delay)
                 continue
             resp.raise_for_status()
             return resp.json().get("elements", [])
-    raise OverpassError(f"Overpass non disponibile dopo {_MAX_RETRIES} tentativi ({last})")
+    raise OverpassError(f"Overpass non disponibile dopo {max_retries} tentativi ({last})")
 
 
 def _osm_url(osm_type: str, osm_id: int) -> str:
@@ -120,13 +155,17 @@ async def lookup_comune(nome: str, limit: int = 8) -> list[dict[str, Any]]:
     key = ("lookup", needle.lower())
     if key in _cache:
         return _cache[key]  # type: ignore[return-value]
+    # Profilo snappy: è un autocomplete — meglio fallire in fretta (la UI ha
+    # il fallback del codice ISTAT manuale) che far aspettare 30s+.
     query = (
-        f'[out:json][timeout:{_OVERPASS_TIMEOUT}];'
+        f'[out:json][timeout:{_SNAPPY_TIMEOUT}];'
         f'relation["boundary"="administrative"]["admin_level"="8"]'
         f'["name"~"^{needle}",i]["ref:ISTAT"];'
         f"out tags {max(1, min(limit, 20))};"
     )
-    elements = await _overpass(query)
+    elements = await _overpass(
+        query, timeout=_SNAPPY_TIMEOUT, backoff_base=_SNAPPY_BACKOFF
+    )
     out = []
     for el in elements:
         tags = el.get("tags") or {}

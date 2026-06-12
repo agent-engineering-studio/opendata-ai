@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import type { ModalitaProgramma, ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
@@ -45,6 +45,18 @@ function TerritorioInner() {
     Partial<Record<ModalitaProgramma, ProgrammaResponse>>
   >({});
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
+  const [attesaSec, setAttesaSec] = useState(0);
+
+  // Timer di attesa: /programma non ha (ancora) eventi di progresso e con un
+  // LLM locale il fan-out può durare minuti — il contatore mostra che è vivo.
+  useEffect(() => {
+    if (stato.fase !== "loading") {
+      setAttesaSec(0);
+      return;
+    }
+    const t = setInterval(() => setAttesaSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [stato.fase]);
 
   const codComune = (codManuale.trim() || selection?.cod_comune) ?? "";
 
@@ -201,8 +213,9 @@ function TerritorioInner() {
               </button>
               {stato.fase === "loading" ? (
                 <span className="small text-muted" role="status">
-                  Interrogo le fonti (ISTAT, OpenCoesione…) — può richiedere uno o
-                  due minuti.
+                  Interrogo le fonti (ISTAT, OpenCoesione…) e sintetizzo la
+                  scheda — {attesaSec}s. Con un modello locale (Ollama) possono
+                  servire diversi minuti: gli agenti si serializzano sulla GPU.
                 </span>
               ) : !codComune ? (
                 <span className="small text-muted">

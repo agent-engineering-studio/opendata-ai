@@ -169,7 +169,9 @@ async def test_list_zones_degrades_to_level_3(monkeypatch) -> None:
 
 
 async def test_lookup_comune_exact_match_first(monkeypatch) -> None:
-    async def fake_overpass(query: str):
+    async def fake_overpass(query: str, **kw):
+        # L'autocomplete usa il profilo snappy (timeout corto).
+        assert kw.get("timeout") == zones._SNAPPY_TIMEOUT
         assert '"name"~"^Bari",i' in query
         return [
             {"type": "relation", "id": 2, "tags": {"name": "Bari Sardo", "ref:ISTAT": "091009"}},

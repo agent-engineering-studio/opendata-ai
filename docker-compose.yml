@@ -111,7 +111,10 @@ services:
       PORT: "8081"
       MCP_PATH: /mcp
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
-      ISTAT_HTTP_TIMEOUT: "60"
+      # esploradati.istat.it supera regolarmente i 60s sul primo fetch del
+      # catalogo (visto live: transport error a 60.1s); la cache L2 rende
+      # veloci le chiamate successive.
+      ISTAT_HTTP_TIMEOUT: "120"
       # L2 persistent cache for the dataflow catalogue (slow + rarely changes).
       SDMX_PERSISTENT_CACHE_DIR: /var/cache/sdmx
       SDMX_PERSISTENT_CACHE_TTL_SECONDS: ${SDMX_PERSISTENT_CACHE_TTL_SECONDS:-86400}

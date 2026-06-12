@@ -51,6 +51,7 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<ComuneMatch[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [comune, setComune] = useState<ComuneMatch | null>(null);
   const [tipo, setTipo] = useState<ZonaTipo | null>(null);
   const [zones, setZones] = useState<ZoneListResponse | null>(null);
@@ -80,13 +81,21 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
     }
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
+      setSearchError(false);
       try {
         const token = await getToken();
         const res = await apiFetch(`/territorio/comuni?q=${encodeURIComponent(q)}`, { token });
         if (res.ok) {
           const data = (await res.json()) as { results: ComuneMatch[] };
           setMatches(data.results.slice(0, 8));
+        } else {
+          // 503 = OpenStreetMap/Overpass momentaneamente giù: non restare muti.
+          setMatches([]);
+          setSearchError(true);
         }
+      } catch {
+        setMatches([]);
+        setSearchError(true);
       } finally {
         setSearching(false);
       }
@@ -187,6 +196,13 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
           aria-controls="comune-results"
         />
         {searching ? <div className="form-text">Ricerca…</div> : null}
+        {searchError ? (
+          <div className="form-text text-danger">
+            Ricerca comuni momentaneamente non disponibile (OpenStreetMap non
+            risponde): riprova tra poco oppure inserisci il codice ISTAT qui
+            sotto.
+          </div>
+        ) : null}
         {matches.length > 0 ? (
           <ul
             id="comune-results"
