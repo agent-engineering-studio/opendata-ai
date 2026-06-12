@@ -141,6 +141,13 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
             if not payload:
                 continue
 
+            # ── knowledge graph: kg_query ritorna `sources` (SourceReference
+            # con doc_id/document_name/page_number) — provenienza documentale,
+            # una citazione per documento+pagina.
+            if source == "kg":
+                captured.extend(_kg_resources_from_payload(payload))
+                continue
+
             # ── fonti "citation-style" (opencoesione / osm / ispra): i tool
             # includono `source_url`, l'URL risolvibile di quella risposta.
             # Sono citazioni (format JSON), mai file — catturate anche quando
@@ -272,6 +279,47 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
 _CITATION_SOURCES = ("opencoesione", "osm", "ispra")
 
 
+def _kg_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
+    """SourceReference del kg_query → citazioni documentali (doc + pagina).
+
+    Locator: `{KG_UI_URL}/documents/{doc_id}` quando la UI del KG è
+    configurata; altrimenti un riferimento sintetico `kg://…` comunque
+    tracciabile a documento+pagina (spec 09).
+    """
+    import os
+
+    refs = payload.get("sources")
+    if not isinstance(refs, list):
+        return []
+    ui_base = (os.getenv("KG_UI_URL") or "").rstrip("/")
+    namespace = payload.get("namespace") or payload.get("thread_id") or ""
+    out: list[Resource] = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        doc_id = ref.get("doc_id")
+        if not doc_id:
+            continue
+        page = ref.get("page_number")
+        total = ref.get("total_pages")
+        if ui_base:
+            url = f"{ui_base}/documents/{doc_id}"
+        else:
+            ns = f"{namespace}/" if namespace else ""
+            url = f"kg://{ns}{doc_id}" + (f"#p={page}" if page is not None else "")
+        descr = f"p.{(page or 0) + 1}/{total or '?'}"
+        out.append(
+            Resource(
+                name=str(ref.get("document_name") or doc_id)[:120],
+                url=url,
+                format="DOC",
+                source="kg",
+                description=descr,
+            )
+        )
+    return out
+
+
 def _citation_resource_from_payload(payload: dict[str, Any], source: str) -> Resource | None:
     """Build the JSON API citation for a citation-style tool result.
 
@@ -333,9 +381,10 @@ def _normalise_source_tag(executor_id: str) -> str | None:
     Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm"):
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm", "kg"):
         # longest-first: eurostat before istat so a literal "eurostat" doesn't
-        # get matched as istat; opencoesione first for the same reason.
+        # get matched as istat; opencoesione first for the same reason. "kg"
+        # è ultimo perché cortissimo (matcherebbe dentro nomi più lunghi).
         if tag in lower:
             return tag
     return None
@@ -368,7 +417,9 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra")
+_SYNTH_SOURCE_ORDER = (
+    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg"
+)
 
 
 def _build_synth_prompt(narratives_by_source: dict[str, str]) -> str:

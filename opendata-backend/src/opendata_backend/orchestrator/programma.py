@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from .guardrails import validate_programma
 from .parsing import Resource, parse_agent_reply
@@ -48,12 +48,21 @@ class Evidenza(BaseModel):
     fonte: str
     url: str  # risolvibile, copiata VERBATIM dalle risorse raccolte
     dettaglio: str  # cosa dice il dato (no interpretazione)
+    # Tier (spec 09): "certificato" = dato aperto ufficiale; "documentale" =
+    # fatto da documenti comunali ingeriti nel KG (delibere, piani, bilanci).
+    # DERIVATO dalla fonte, mai dall'LLM: kg → documentale, il resto certificato.
+    tier: Literal["certificato", "documentale"] = "certificato"
 
     @field_validator("fonte")
     @classmethod
     def _normalise_fonte(cls, v: str) -> str:
         # i modelli piccoli copiano il tag con la decorazione ("[opencoesione]")
         return v.strip().strip("[]()").strip().lower()
+
+    @model_validator(mode="after")
+    def _derive_tier(self) -> "Evidenza":
+        self.tier = "documentale" if self.fonte == "kg" else "certificato"
+        return self
 
 
 class VoceSwot(BaseModel):

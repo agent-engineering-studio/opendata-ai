@@ -29,6 +29,7 @@ function sourceBadgeColor(source: string): string {
   if (source === "oecd") return "bg-danger text-white";
   if (source === "opencoesione") return "bg-success text-white";
   if (source === "osm") return "bg-info text-white";
+  if (source === "kg") return "bg-secondary text-white";
   return "bg-slate-100 text-slate-700";
 }
 
@@ -39,6 +40,7 @@ function sourceTooltip(source: string): string {
   if (source === "oecd") return "OCSE / OECD — statistica internazionale (SDMX)";
   if (source === "opencoesione") return "OpenCoesione — progetti delle politiche di coesione";
   if (source === "osm") return "OpenStreetMap — dati geografici (ODbL)";
+  if (source === "kg") return "Knowledge Graph — documenti comunali (evidenza documentale)";
   return source;
 }
 

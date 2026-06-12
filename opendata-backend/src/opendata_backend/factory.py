@@ -30,6 +30,7 @@ from .config import (
     IDEE_INSTRUCTIONS,
     ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
+    KG_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
@@ -160,13 +161,14 @@ class OrchestratorSession:
                 ("opencoesione", s.enable_opencoesione),
                 ("osm", s.enable_osm),
                 ("ispra", s.enable_ispra),
+                ("kg", s.enable_kg),
             )
             if on
         ]
         if not enabled:
             raise RuntimeError(
                 "At least one source must be enabled "
-                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra)"
+                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra / kg)"
             )
         self._enabled_sources = enabled
         log.info(
@@ -239,6 +241,22 @@ class OrchestratorSession:
                 chat_client, OSM_INSTRUCTIONS, s.osm_agent_name, [osm_mcp], default_options,
             )
             participants.append(osm_agent)
+
+        # Knowledge Graph (deployment esterno): evidenza documentale da
+        # delibere/piani/bilanci ingeriti. Il server kg-mcp espone anche tool
+        # di scrittura (kg_ingest/kg_delete_document) — qui montiamo il suo
+        # endpoint read e le KG_INSTRUCTIONS NON menzionano i tool write; la
+        # protezione vera (esporre solo i read) sta nel deployment del KG.
+        if s.enable_kg:
+            kg_mcp = await self._enter_mcp_tool(
+                s.kg_agent_name,
+                s.kg_mcp_url,
+                "Read-only Knowledge Graph tools over ingested PA documents.",
+            )
+            kg_agent = await self._enter_agent(
+                chat_client, KG_INSTRUCTIONS, s.kg_agent_name, [kg_mcp], default_options,
+            )
+            participants.append(kg_agent)
 
         # ISPRA IdroGEO specialist (environmental constraints).
         if s.enable_ispra:

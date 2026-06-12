@@ -80,6 +80,48 @@ namespace `comune-{cod_comune}`. Governance: caricare solo documenti pubblici/le
 attenzione GDPR (atti con dati personali) — definire chi carica e cosa. Fuori dallo
 scope implementativo di questo pezzo, ma da presidiare prima dell'uso reale.
 
+## Esiti implementazione (2026-06-12)
+
+Implementato sul codice post-Pezzi 6–8 (la spec era stata scritta prima):
+
+- Il contratto vive in `orchestrator/programma.py` (non nel router) e i
+  componenti UI in `components/territorio/` (non `components/programma/`).
+- `Evidenza.tier` è **derivato e non falsificabile**: un `model_validator`
+  lo rideriva sempre dalla fonte (`kg` → documentale), anche se l'LLM lo
+  emette diverso. `fonte` resta `str` normalizzato (pattern dei Pezzi 7–8).
+- Guardrail fattibilità: `alta` con SOLE evidenze documentali → degradata a
+  `media` (con un riscontro certificato accanto, `alta` sopravvive). Ordine:
+  dopo il check finanziamento, quindi vale per proposte già finanziate.
+- Cattura: branch `source=="kg"` dedicato in `_capture_tool_resources`
+  (shape `sources[]`, diversa dalle fonti `source_url`-style): una Resource
+  `DOC` per SourceReference con `description="p.X/Y"`; locator
+  `{KG_UI_URL}/documents/{doc_id}` o sintetico
+  `kg://{namespace}/{doc_id}#p={page}` (letto da env `KG_UI_URL`, lo stesso
+  del campo Settings).
+- UI: chip "documento comunale" su `CitationLink` per il tier documentale;
+  i locator `kg://` non navigabili sono resi come riferimento testuale, non
+  come link rotto. Il tier NON è mostrato su `FeasibilityBadge` (la spec lo
+  suggeriva: confonderebbe fattibilità e provenienza — il badge resta solo
+  fattibilità).
+- "kg" è ultimo nella tupla di `_normalise_source_tag` (tag cortissimo,
+  match substring).
+- Nessun servizio compose: il KG è un deployment esterno, il backend riceve
+  solo `KG_MCP_URL` & co. via env.
+- **Smoke rimandato**: richiede un deployment knowledge-graph raggiungibile
+  con documenti ingeriti — coperto dai test con kg_query mockato (provenienza
+  doc+pagina, tier derivato, fattibilità conservativa).
+
+### ⚠️ Coordinamento repo `knowledge-graph` (da fare lì, non qui)
+
+Il `knowledge-graph-mcp` oggi gira stdio/SSE: serve l'**opzione transport
+streamable-http su `/mcp`** (FastMCP la supporta nativamente — stessa forma
+degli MCP di questo repo: env `TRANSPORT=streamable-http`, `PORT`,
+`MCP_PATH=/mcp`) perché `_enter_mcp_tool` lo monti senza modifiche. Inoltre
+il deployment dovrebbe esporre all'orchestratore **solo i tool read**
+(`kg_query`, `kg_search_nodes`, `kg_traverse`, `kg_cypher`, `kg_health`):
+le KG_INSTRUCTIONS non menzionano i write, ma la protezione vera va fatta
+lato server (filtro tool o endpoint dedicato read-only).
+
 ## Fuori scope
 
 - UI di ingestion (esiste nel prodotto KG). `opendata-ai` qui **consuma**, non ingerisce.

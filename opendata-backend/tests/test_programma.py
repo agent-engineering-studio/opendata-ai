@@ -414,6 +414,46 @@ def test_idee_task_asks_for_generator_inputs() -> None:
     assert "gap_by_tema" not in build_programma_task(_REQ, None)
 
 
+# ───────────────────── tier documentale (Pezzo 9) ──────────────────────────
+
+
+def test_evidenza_tier_is_derived_from_fonte() -> None:
+    kg = Evidenza(fonte="kg", url="kg://comune-110002/d1#p=3", dettaglio="d")
+    assert kg.tier == "documentale"
+    oc = Evidenza(fonte="opencoesione", url=_OC_URL, dettaglio="d")
+    assert oc.tier == "certificato"
+    # Il tier non è falsificabile dall'LLM: viene riderivato dal validator.
+    forged = Evidenza(fonte="kg", url="kg://x/d", dettaglio="d", tier="certificato")
+    assert forged.tier == "documentale"
+
+
+def test_feasibility_never_high_on_documentary_evidence_alone() -> None:
+    kg_url = "https://kg.example.org/documents/doc-123"
+    prop = Proposta(
+        titolo="Riuso area da PUG",
+        descrizione="d",
+        evidenze=[Evidenza(fonte="kg", url=kg_url, dettaglio="PUG p.12")],
+        finanziamento=Finanziamento(linea="PR FESR", fonte_url=kg_url, stato="aperto"),
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([prop]), {kg_url})
+    assert out.proposte[0].fattibilita.livello == "media"  # mai alta su solo documentale
+
+    # Con un riscontro certificato accanto, "alta" sopravvive.
+    prop2 = Proposta(
+        titolo="Riuso con riscontro",
+        descrizione="d",
+        evidenze=[
+            Evidenza(fonte="kg", url=kg_url, dettaglio="PUG p.12"),
+            Evidenza(fonte="opencoesione", url=_OC_URL, dettaglio="ratio 0.8"),
+        ],
+        finanziamento=Finanziamento(linea="PR FESR", fonte_url=_OC_URL, stato="aperto"),
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out2 = validate_programma(_resp([prop2]), {kg_url, _OC_URL})
+    assert out2.proposte[0].fattibilita.livello == "alta"
+
+
 def test_router_audit_summary_is_informative() -> None:
     from opendata_backend.orchestrator.parsing import Resource
     from opendata_backend.routers.programma import _summary

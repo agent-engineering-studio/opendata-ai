@@ -155,6 +155,27 @@ def test_osm_ispra_settings_and_instructions_contract() -> None:
     assert "P3/P4" in PROGRAMMA_INSTRUCTIONS
 
 
+def test_kg_settings_and_instructions_contract() -> None:
+    """Pezzo 9 (R5): wiring KG + tier documentale nelle istruzioni."""
+    from opendata_backend.config import KG_INSTRUCTIONS
+
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_kg is False
+    assert s.kg_agent_name == "kg"
+    assert s.kg_namespace_prefix == "comune-"
+    assert s.kg_ui_url is None
+
+    assert "<!--RESOURCES_JSON-->" in KG_INSTRUCTIONS
+    assert "kg_query" in KG_INSTRUCTIONS
+    assert "comune-" in KG_INSTRUCTIONS  # convenzione namespace
+    # I tool write non devono mai essere menzionati all'agente (R13).
+    assert "kg_ingest" not in KG_INSTRUCTIONS
+    assert "kg_delete_document" not in KG_INSTRUCTIONS
+    assert "=== KG ===" in SYNTH_INSTRUCTIONS
+    # Il programma conosce il tier documentale.
+    assert "EVIDENZA DOCUMENTALE" in PROGRAMMA_INSTRUCTIONS
+
+
 def test_opencoesione_instructions_contract() -> None:
     """The R5 contract bits the parser + capture rely on must be present."""
     assert "<!--RESOURCES_JSON-->" in OPENCOESIONE_INSTRUCTIONS

@@ -4,7 +4,8 @@ export type ResourceSource =
   | "eurostat"
   | "oecd"
   | "opencoesione"
-  | "osm";
+  | "osm"
+  | "kg";
 
 export type Resource = {
   name: string;
@@ -52,7 +53,8 @@ export type FonteEvidenza =
   | "eurostat"
   | "oecd"
   | "osm"
-  | "ispra";
+  | "ispra"
+  | "kg";
 
 export type Evidenza = {
   /** Tag fonte normalizzato (istat, opencoesione, …) — string: il backend
@@ -62,6 +64,8 @@ export type Evidenza = {
   url: string;
   /** Cosa dice il dato (numeri inclusi), senza interpretazione. */
   dettaglio: string;
+  /** "certificato" = dato aperto ufficiale; "documentale" = documento comunale (KG). */
+  tier?: "certificato" | "documentale";
 };
 
 export type VoceSwot = {

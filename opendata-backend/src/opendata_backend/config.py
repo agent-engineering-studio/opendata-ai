@@ -346,8 +346,47 @@ ISPRA_INSTRUCTIONS = (
 )
 
 
+# Knowledge Graph (repo `knowledge-graph`, deployment esterno): evidenza
+# DOCUMENTALE — delibere, PUG, bilanci, verbali ingeriti nel KG sotto il
+# namespace `comune-{cod_comune}`. RAG retrieval-only: i fatti vengono dai
+# chunk con provenienza documento+pagina, mai generati.
+KG_INSTRUCTIONS = (
+    "You provide DOCUMENTARY evidence from the municipal Knowledge Graph "
+    "(deliberations, urban plans, budgets, minutes ingested as documents). "
+    "You MUST USE the tools — never write tool calls as text. Report facts "
+    "ONLY if present in the retrieved chunks: the KG retrieval is "
+    "deterministic, your job is to relay it faithfully, never to extend it.\n\n"
+    "=== MANDATORY ACTION SEQUENCE ===\n"
+    "The task reads 'comune con codice ISTAT NNNNNN (Nome)'. Call `kg_query` "
+    "with your question and the namespace/thread_id 'comune-NNNNNN' (e.g. "
+    "'comune-110002') so documents of different administrations never mix. "
+    "Ask about what the request needs (the zone, the theme, planning acts, "
+    "budgets). One or two focused queries are enough; optionally "
+    "`kg_search_nodes`/`kg_traverse` for targeted exploration. If the "
+    "namespace has no documents, say exactly that in one line.\n\n"
+    "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) with the "
+    "facts found in the documents, each attributed to its document and page "
+    "(e.g. 'la delibera X, p. 12, destina …'). These are DOCUMENTARY facts "
+    "from municipal papers, not certified open data — present them as such>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"DOC\","
+    "\"content\":null}.\n"
+    "Emit one resource per document you relied on; the system also captures "
+    "the kg_query `sources` automatically, so keep this list short (≤3) and "
+    "never invent doc ids.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names in your final response.\n"
+    "- NEVER report a fact that is not in a retrieved chunk; NEVER invent "
+    "documents, pages or numbers.\n"
+    "- The narrative paragraph must NEVER be empty."
+)
+
+
 SYNTH_INSTRUCTIONS = (
-    "You are a synthesiser that merges the outputs of up to SEVEN open-data "
+    "You are a synthesiser that merges the outputs of up to EIGHT open-data "
     "specialists into a single coherent narrative:\n"
     "  - CKAN         — generic open-data portals (national + regional)\n"
     "  - ISTAT        — official Italian statistics (SDMX)\n"
@@ -359,12 +398,17 @@ SYNTH_INSTRUCTIONS = (
     "  - OSM          — OpenStreetMap: accessibility and territorial context "
     "(transport nodes, services, recognised zones)\n"
     "  - ISPRA        — environmental constraints: landslide / hydraulic "
-    "hazard and exposed population (IdroGEO)\n\n"
-    "INPUT: a structured prompt with up to seven sections labelled "
+    "hazard and exposed population (IdroGEO)\n"
+    "  - KG           — DOCUMENTARY evidence from ingested municipal papers "
+    "(deliberations, plans, budgets): facts with document+page provenance, "
+    "NOT certified open data — when you use them, attribute them to the "
+    "document ('secondo la delibera…')\n\n"
+    "INPUT: a structured prompt with up to eight sections labelled "
     "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, "
-    "`=== OPENCOESIONE ===`, `=== OSM ===`, `=== ISPRA ===`, each containing a "
-    "short narrative produced by the respective specialist. Any section can "
-    "be empty (the specialist may have found nothing or errored).\n\n"
+    "`=== OPENCOESIONE ===`, `=== OSM ===`, `=== ISPRA ===`, `=== KG ===`, "
+    "each containing a short narrative produced by the respective specialist. "
+    "Any section can be empty (the specialist may have found nothing or "
+    "errored).\n\n"
     "OUTPUT: ONE paragraph (3–6 sentences), written in the SAME LANGUAGE as the "
     "original user query, that:\n"
     "  - integrates the available perspectives without duplicating information;\n"
@@ -430,6 +474,12 @@ PROGRAMMA_INSTRUCTIONS = (
     "`fattibilita.motivazione` (es. 'area in classe di pericolosità frana "
     "elevata → priorità a messa in sicurezza prima dell'espansione') e citare "
     "l'evidenza ISPRA.\n"
+    "- EVIDENZA DOCUMENTALE: i fatti dalla sezione KG (documenti comunali: "
+    "delibere, piani, bilanci) sono evidenza DOCUMENTALE, non dato aperto "
+    "certificato — nel `dettaglio` cita documento e pagina. Una voce o "
+    "proposta può poggiarvi, ma la `fattibilita.livello` non può essere "
+    "'alta' su sola base documentale senza riscontro certificato (usa "
+    "'media' o 'da_verificare').\n"
     "- VIETATO il linguaggio da campagna: niente slogan, esortazioni al voto, "
     "attacchi ad avversari, superlativi non supportati, promesse in prima "
     "persona. Tono da relazione tecnica.\n"
@@ -594,6 +644,17 @@ class Settings(BaseSettings):
     enable_osm: bool = Field(default=False)
     # ISPRA IdroGEO specialist (environmental constraints) — opt-in.
     enable_ispra: bool = Field(default=False)
+    # Knowledge Graph (deployment ESTERNO, repo knowledge-graph): evidenza
+    # documentale (delibere, PUG, bilanci). Richiede il knowledge-graph-mcp
+    # raggiungibile in streamable-http su /mcp.
+    enable_kg: bool = Field(default=False)
+    kg_mcp_url: str = Field(default="http://localhost:8087/mcp")
+    kg_agent_name: str = Field(default="kg")
+    # Convenzione namespace per non mescolare documenti tra amministrazioni.
+    kg_namespace_prefix: str = Field(default="comune-")
+    # Base URL della UI del KG per i locator delle citazioni
+    # ({kg_ui_url}/documents/{doc_id}); vuoto → riferimento sintetico kg://.
+    kg_ui_url: str | None = Field(default=None)
 
     # ── Programma evidence-based (POST /programma, verticale PA) ─────
     enable_programma: bool = Field(default=True)

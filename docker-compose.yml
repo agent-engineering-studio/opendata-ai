@@ -217,6 +217,13 @@ services:
       ENABLE_ISPRA: ${ENABLE_ISPRA:-false}
       ISPRA_MCP_URL: ${ISPRA_MCP_URL:-http://ispra-mcp:8083/mcp}
       ISPRA_AGENT_NAME: ${ISPRA_AGENT_NAME:-ispra}
+      # Knowledge Graph: deployment esterno (repo knowledge-graph), nessun
+      # servizio in questo compose — solo il puntatore.
+      ENABLE_KG: ${ENABLE_KG:-false}
+      KG_MCP_URL: ${KG_MCP_URL:-}
+      KG_AGENT_NAME: ${KG_AGENT_NAME:-kg}
+      KG_NAMESPACE_PREFIX: ${KG_NAMESPACE_PREFIX:-comune-}
+      KG_UI_URL: ${KG_UI_URL:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}

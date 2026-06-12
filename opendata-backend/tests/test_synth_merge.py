@@ -417,6 +417,57 @@ async def test_osm_and_ispra_participants_tag_section_and_capture() -> None:
 
 
 @pytest.mark.asyncio
+async def test_kg_participant_captures_document_provenance(monkeypatch) -> None:
+    """KG (spec 09): le SourceReference del kg_query diventano citazioni DOC
+    con provenienza documento+pagina; con KG_UI_URL il locator è navigabile."""
+    monkeypatch.setenv("KG_UI_URL", "https://kg.example.org")
+    synth = _StubAgent("Sintesi con evidenza documentale.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    kg_payload = {
+        "answer": "Il PUG destina l'area a servizi.",
+        "namespace": "comune-110002",
+        "sources": [
+            {"doc_id": "doc-123", "document_name": "PUG Barletta 2024",
+             "page_number": 11, "total_pages": 240, "text_preview": "…"},
+            {"doc_id": "doc-456", "document_name": "Delibera CC 45/2025",
+             "page_number": 2, "total_pages": 8, "text_preview": "…"},
+        ],
+    }
+    msgs = [_StubMessage(contents=[
+        _StubFunctionResult(type="function_result", result=json.dumps(kg_payload))
+    ])]
+    raw = "Dal PUG risulta…\n<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"
+    result = _StubResult(
+        executor_id="kg",
+        agent_response=_StubInnerResponseWithMessages(text=raw, messages=msgs),
+    )
+    out = await aggregate([result, _result("ckan", _ckan_reply([]))])
+    block = _extract_block(out.text)
+    kg_res = [r for r in block if r["source"] == "kg"]
+    assert {r["name"] for r in kg_res} == {"PUG Barletta 2024", "Delibera CC 45/2025"}
+    by_name = {r["name"]: r for r in kg_res}
+    assert by_name["PUG Barletta 2024"]["url"] == "https://kg.example.org/documents/doc-123"
+    assert by_name["PUG Barletta 2024"]["format"] == "DOC"
+    assert by_name["PUG Barletta 2024"]["description"] == "p.12/240"
+    assert "=== KG ===" in (synth.last_prompt or "")
+
+
+@pytest.mark.asyncio
+async def test_kg_synthetic_locator_without_ui_url(monkeypatch) -> None:
+    monkeypatch.delenv("KG_UI_URL", raising=False)
+    from opendata_backend.orchestrator.synth import _kg_resources_from_payload
+
+    res = _kg_resources_from_payload(
+        {"namespace": "comune-110002",
+         "sources": [{"doc_id": "d1", "document_name": "Delibera", "page_number": 3,
+                      "total_pages": 10}]}
+    )
+    assert res[0].url == "kg://comune-110002/d1#p=3"
+    assert res[0].source == "kg" and res[0].description == "p.4/10"
+
+
+@pytest.mark.asyncio
 async def test_geo_filter_keeps_osm_entity_for_comune_query() -> None:
     """Le risorse OSM (osm.org/way|relation) non portano nomi di comuni →
     il filtro geografico non deve scartarle."""

@@ -165,6 +165,18 @@ def validate_programma(
                 prop.titolo[:40],
             )
             prop.fattibilita.livello = "da_verificare"
+        # Tier documentale (spec 09): fattibilità mai "alta" su SOLA base
+        # documentale — serve almeno un riscontro certificato.
+        if (
+            prop.fattibilita.livello == "alta"
+            and prop.evidenze
+            and all(e.tier == "documentale" for e in prop.evidenze)
+        ):
+            log.info(
+                "guardrail: proposta %r solo documentale → fattibilità degradata a media",
+                prop.titolo[:40],
+            )
+            prop.fattibilita.livello = "media"
         kept_proposte.append(prop)
     resp.proposte = kept_proposte
 
