@@ -29,6 +29,7 @@ from .config import (
     EUROSTAT_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
+    OPENCOESIONE_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
     resolve_provider,
@@ -144,11 +145,15 @@ class OrchestratorSession:
                 ("istat", s.enable_istat),
                 ("eurostat", s.enable_eurostat),
                 ("oecd", s.enable_oecd),
+                ("opencoesione", s.enable_opencoesione),
             )
             if on
         ]
         if not enabled:
-            raise RuntimeError("At least one source must be enabled (enable_ckan / istat / eurostat / oecd)")
+            raise RuntimeError(
+                "At least one source must be enabled "
+                "(enable_ckan / istat / eurostat / oecd / opencoesione)"
+            )
         self._enabled_sources = enabled
         log.info(
             "OrchestratorSession starting | provider=%s sources=%s",
@@ -189,6 +194,23 @@ class OrchestratorSession:
                 chat_client, instructions, name, [tool], default_options,
             )
             participants.append(agent)
+
+        # OpenCoesione is a standalone specialist (like CKAN, outside the SDMX
+        # loop): financial/feasibility evidence, citations via `source_url`.
+        if s.enable_opencoesione:
+            oc_mcp = await self._enter_mcp_tool(
+                s.opencoesione_agent_name,
+                s.opencoesione_mcp_url,
+                "Tools to query OpenCoesione (Italian cohesion-policy funded projects).",
+            )
+            oc_agent = await self._enter_agent(
+                chat_client,
+                OPENCOESIONE_INSTRUCTIONS,
+                s.opencoesione_agent_name,
+                [oc_mcp],
+                default_options,
+            )
+            participants.append(oc_agent)
 
         # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
         # orchestrator fans out to a remote A2A-compliant agent as a peer. It

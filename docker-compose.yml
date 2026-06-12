@@ -177,6 +177,7 @@ services:
       ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}
       OECD_MCP_URL: ${OECD_MCP_URL:-}
+      OPENCOESIONE_MCP_URL: ${OPENCOESIONE_MCP_URL:-http://opencoesione-mcp:8082/mcp}
       OSM_MCP_URL: ${OSM_MCP_URL:-http://osm-mcp:8080/mcp}
       ENABLE_OSM_MAPS: ${ENABLE_OSM_MAPS:-true}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
@@ -187,6 +188,8 @@ services:
       ENABLE_ISTAT: ${ENABLE_ISTAT:-true}
       ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-false}
       ENABLE_OECD: ${ENABLE_OECD:-false}
+      ENABLE_OPENCOESIONE: ${ENABLE_OPENCOESIONE:-false}
+      OPENCOESIONE_AGENT_NAME: ${OPENCOESIONE_AGENT_NAME:-opencoesione}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}

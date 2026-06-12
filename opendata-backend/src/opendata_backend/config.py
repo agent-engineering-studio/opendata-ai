@@ -203,17 +203,85 @@ OECD_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
 )
 
 
+# Instructions for the OpenCoesione specialist. Unlike CKAN (datasets) or the
+# SDMX trio (statistics), OpenCoesione is a FINANCIAL evidence source: which
+# public projects were funded on a territory, for how much, and how much was
+# actually spent. Its resources are resolvable API citations (format JSON),
+# never files to download. Contract per R5: narrative + <!--RESOURCES_JSON-->.
+OPENCOESIONE_INSTRUCTIONS = (
+    "You query OpenCoesione (Italian cohesion-policy funded projects, "
+    "opencoesione.gov.it) via MCP tools. You MUST USE the tools — never write "
+    "tool calls as JSON or markdown text. You have NO knowledge of these "
+    "projects from memory: every number in your answer MUST come from a tool "
+    "call you executed in THIS turn.\n\n"
+    "=== WHAT THIS SOURCE IS ===\n"
+    "OpenCoesione is FINANCIAL evidence: which projects were funded on a "
+    "territory, for how much, and how much was actually spent. It is NOT a "
+    "catalogue of downloadable datasets. Your citations are resolvable API "
+    "URLs (the `source_url` field every tool returns).\n\n"
+    "=== MANDATORY ACTION SEQUENCE ===\n"
+    "STEP 1 — territorial scope. When the query names an Italian comune / "
+    "provincia / regione, call `opencoesione_resolve_territorio` with "
+    "nome=<place name> (add tipo='C'|'P'|'R' if ambiguous) to get the "
+    "territory slug and ISTAT codes. If the query already carries an ISTAT "
+    "code, pass cod_comune directly to the other tools instead. If the query "
+    "names no Italian territory, return an empty resources array and a "
+    "one-line narrative saying OpenCoesione covers Italian territories only.\n"
+    "STEP 2 — call `opencoesione_search_projects` scoped to the resolved "
+    "territory, adding tema / ciclo / natura / stato filters when the query "
+    "implies them (call `opencoesione_reference_values` if unsure about the "
+    "valid slugs).\n"
+    "STEP 3 — ALWAYS call `opencoesione_funding_capacity` on the same "
+    "territory (same tema/ciclo if you filtered): the spend ratio and "
+    "completed/total counts are the delivery-capacity evidence this source "
+    "exists for.\n"
+    "STEP 4 — optionally call `opencoesione_territorial_aggregates` for "
+    "theme-level totals, or `opencoesione_get_project` when the user asks "
+    "about one specific project (CLP).\n\n"
+    "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (in the same language as the user query) with: how many "
+    "projects insist on the territory, total funded vs actually paid, the spend "
+    "ratio and completed/total projects, and the most relevant projects by "
+    "funding (cite their CLP codes) — numbers ONLY from tool results, no URLs "
+    "in the narrative>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"JSON\","
+    "\"content\":null}.\n"
+    "Emit ONE resource per distinct tool result you used (search, capacity, "
+    "aggregates, project detail), with `url` set to that result's `source_url` "
+    "field VERBATIM and a short descriptive `name` (e.g. 'OpenCoesione — "
+    "capacità di spesa Barletta'). These are API citations: format is always "
+    "\"JSON\" and content is always null.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names like 'opencoesione_search_projects' in "
+    "your final response. Tools are executed by the framework, not written in text.\n"
+    "- NEVER output Python code blocks, JSON code blocks, or step-by-step plans.\n"
+    "- NEVER invent URLs, CLP codes or amounts. Only use values returned by tools.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- If you find no projects, the array is [] but the narrative still reports "
+    "the (verified) absence and the spend-capacity figures if available.\n"
+    "- Data licence is CC BY-SA 3.0: mention 'OpenCoesione' as the source in "
+    "the narrative."
+)
+
+
 SYNTH_INSTRUCTIONS = (
-    "You are a synthesiser that merges the outputs of up to FOUR open-data "
+    "You are a synthesiser that merges the outputs of up to FIVE open-data "
     "specialists into a single coherent narrative:\n"
-    "  - CKAN     — generic open-data portals (national + regional)\n"
-    "  - ISTAT    — official Italian statistics (SDMX)\n"
-    "  - EUROSTAT — European Union statistical office (SDMX)\n"
-    "  - OECD     — international economic statistics (SDMX)\n\n"
-    "INPUT: a structured prompt with up to four sections labelled "
-    "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, each "
-    "containing a short narrative produced by the respective specialist. Any "
-    "section can be empty (the specialist may have found nothing or errored).\n\n"
+    "  - CKAN         — generic open-data portals (national + regional)\n"
+    "  - ISTAT        — official Italian statistics (SDMX)\n"
+    "  - EUROSTAT     — European Union statistical office (SDMX)\n"
+    "  - OECD         — international economic statistics (SDMX)\n"
+    "  - OPENCOESIONE — Italian cohesion-policy funded projects: funding "
+    "evidence on a territory (financed vs spent, spend ratio, delivery "
+    "capacity)\n\n"
+    "INPUT: a structured prompt with up to five sections labelled "
+    "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, "
+    "`=== OPENCOESIONE ===`, each containing a short narrative produced by the "
+    "respective specialist. Any section can be empty (the specialist may have "
+    "found nothing or errored).\n\n"
     "OUTPUT: ONE paragraph (3–6 sentences), written in the SAME LANGUAGE as the "
     "original user query, that:\n"
     "  - integrates the available perspectives without duplicating information;\n"
@@ -221,7 +289,11 @@ SYNTH_INSTRUCTIONS = (
     "    appended by the orchestrator after your response);\n"
     "  - never mentions the words 'specialist', 'agent', 'section' — speak "
     "    naturally about the sources by their real names ('i dati ISTAT', "
-    "    'Eurostat', 'l'OCSE', 'il portale dati.gov.it', etc.);\n"
+    "    'Eurostat', 'l'OCSE', 'il portale dati.gov.it', 'OpenCoesione', etc.);\n"
+    "  - when the OPENCOESIONE section carries funding evidence (amounts, "
+    "    spend ratio, completed/total projects), weave it into the narrative "
+    "    as delivery-capacity context — NEVER invent or extrapolate numbers "
+    "    not present in the section;\n"
     "  - is honest about gaps: if a source returned nothing for this query, "
     "    omit it from the narrative rather than restating that it was empty;\n"
     "  - if ALL sources returned nothing, say so in one sentence.\n\n"
@@ -254,6 +326,9 @@ class Settings(BaseSettings):
     istat_mcp_url: str = Field(default="http://localhost:8081/mcp")
     eurostat_mcp_url: str = Field(default="http://localhost:8082/mcp")
     oecd_mcp_url: str = Field(default="http://localhost:8083/mcp")
+    # opencoesione-mcp wraps the OpenCoesione API (cohesion-policy projects).
+    # 8084 host-side: 8082 is taken by the eurostat host-debug convention.
+    opencoesione_mcp_url: str = Field(default="http://localhost:8084/mcp")
     # osm-mcp renders self-contained Leaflet+OSM HTML maps for GeoJSON resources.
     osm_mcp_url: str = Field(default="http://localhost:8085/mcp")
     enable_osm_maps: bool = Field(default=True)
@@ -292,6 +367,7 @@ class Settings(BaseSettings):
     istat_agent_name: str = Field(default="istat")
     eurostat_agent_name: str = Field(default="eurostat")
     oecd_agent_name: str = Field(default="oecd")
+    opencoesione_agent_name: str = Field(default="opencoesione")
     synth_agent_name: str = Field(default="synth")
 
     # Source enable flags — let operators turn off expensive sources per env.
@@ -301,6 +377,8 @@ class Settings(BaseSettings):
     enable_istat: bool = Field(default=True)
     enable_eurostat: bool = Field(default=False)
     enable_oecd: bool = Field(default=False)
+    # OpenCoesione adds 1 specialist LLM call per query — opt-in like the others.
+    enable_opencoesione: bool = Field(default=False)
 
     # HTTP API
     api_host: str = Field(default="0.0.0.0")

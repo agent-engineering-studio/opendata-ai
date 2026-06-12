@@ -221,6 +221,58 @@ def register_tools(mcp: FastMCP) -> None:
         return _with_sources(out, cap.source_url)
 
     @mcp.tool(annotations=_READ_ONLY)
+    async def opencoesione_resolve_territorio(
+        nome: str | None = None,
+        cod_comune: str | None = None,
+        cod_provincia: str | None = None,
+        cod_regione: str | None = None,
+        tipo: str | None = None,
+    ) -> dict[str, Any]:
+        """Resolve a place name or ISTAT code to the OpenCoesione territory record.
+
+        Returns the territory slug (used by every other filter), its type and
+        ISTAT codes. Call this FIRST when the query names a place and you do
+        not have its ISTAT code.
+
+        Args:
+            nome: Place name as written by the user (e.g. "Barletta", "Puglia").
+            cod_comune: ISTAT comune code, alternative to nome.
+            cod_provincia: ISTAT province code, alternative to nome.
+            cod_regione: ISTAT region code, alternative to nome.
+            tipo: Restrict name matches to C (comune) | P (provincia) | R (regione).
+        """
+        async with OpenCoesioneClient() as c:
+            t = await c.resolve_territorio(
+                cod_comune=cod_comune,
+                cod_provincia=cod_provincia,
+                cod_regione=cod_regione,
+                nome=nome,
+                tipo=tipo,
+            )
+            params: dict[str, Any] = {}
+            if nome:
+                params["denominazione"] = nome
+            if tipo:
+                params["tipo"] = tipo
+            src = c.source_url("territori.json", params or None)
+        if t is None:
+            return _with_sources(
+                {
+                    "found": False,
+                    "hint": (
+                        "Nessun territorio corrispondente. Verifica il nome o il codice "
+                        "ISTAT (es. comune '072006')."
+                    ),
+                    "source_url": src,
+                },
+                src,
+            )
+        out = t.model_dump()
+        out["found"] = True
+        out["source_url"] = src
+        return _with_sources(out, src)
+
+    @mcp.tool(annotations=_READ_ONLY)
     async def opencoesione_reference_values() -> dict[str, Any]:
         """Valid filter values discovered on the live API (themes, natures, states, cycles).
 

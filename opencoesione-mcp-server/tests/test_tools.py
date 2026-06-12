@@ -238,6 +238,24 @@ async def test_funding_capacity_unknown_tema_lists_available(httpx_mock: HTTPXMo
             await c.funding_capacity("072006", tema="trasporti")
 
 
+async def test_resolve_territorio_tool_found_and_not_found(httpx_mock: HTTPXMock) -> None:
+    from opencoesione_mcp.server import build_server
+
+    mcp = build_server()
+    httpx_mock.add_response(url=re.compile(r".*/territori\.json.*"), json=TERRITORI_BARI)
+    result = await mcp.call_tool("opencoesione_resolve_territorio", {"nome": "Bari", "tipo": "C"})
+    payload = result[1].get("result", result[1])
+    assert payload["found"] is True and payload["slug"] == "bari-comune"
+
+    OpenCoesioneClient.cache_clear()
+    httpx_mock.add_response(
+        url=re.compile(r".*/territori\.json.*"), json={"count": 0, "results": []}
+    )
+    result = await mcp.call_tool("opencoesione_resolve_territorio", {"nome": "Atlantide"})
+    payload = result[1].get("result", result[1])
+    assert payload["found"] is False and "sources" in payload
+
+
 # ─────────────────────────────── MCP server ────────────────────────────────
 
 
@@ -253,6 +271,7 @@ async def test_server_registers_all_tools() -> None:
         "opencoesione_territorial_aggregates",
         "opencoesione_search_soggetti",
         "opencoesione_funding_capacity",
+        "opencoesione_resolve_territorio",
         "opencoesione_reference_values",
     }
     for t in tools:

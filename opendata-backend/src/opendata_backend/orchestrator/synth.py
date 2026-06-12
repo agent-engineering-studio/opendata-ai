@@ -128,6 +128,7 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
     based on the result *shape* (not a fragile name match), builds resources:
       - {"csv": ...}                 → istat_get_data    → CSV resource (content)
       - {"content": ..., "url": ...} → ckan_resource_download → resource (content)
+      - {"source_url": ...} + source == "opencoesione" → JSON API citation (no content)
     """
     captured: list[Resource] = []
     base = _SOURCE_BASE_URL.get(source or "", None)
@@ -138,6 +139,16 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
                 continue
             payload = _coerce_tool_result(getattr(content, "result", None))
             if not payload:
+                continue
+
+            # ── opencoesione_*: every tool result carries `source_url`, the
+            # resolvable API URL of that exact response. These are citations
+            # (format JSON), never files — capture them even when the LLM
+            # omits them from its RESOURCES_JSON block.
+            if source == "opencoesione":
+                oc = _opencoesione_resource_from_payload(payload)
+                if oc is not None:
+                    captured.append(oc)
                 continue
 
             # ── istat_get_data: SDMX-CSV observations ──
@@ -257,6 +268,37 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     return out
 
 
+def _opencoesione_resource_from_payload(payload: dict[str, Any]) -> Resource | None:
+    """Build the JSON API citation for an OpenCoesione tool result.
+
+    Every opencoesione_* tool returns a `source_url` field (the resolvable URL
+    of that exact API response). The name is derived from the payload shape so
+    the citation reads meaningfully in the UI. Territory-resolution lookups
+    (shape `{"found": ...}`) are infrastructure, not evidence — skipped.
+    """
+    source_url = payload.get("source_url")
+    if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
+        return None
+    if "found" in payload:  # opencoesione_resolve_territorio — not a citation
+        return None
+
+    if "spend_ratio" in payload:
+        where = payload.get("territorio") or payload.get("slug") or ""
+        name = f"OpenCoesione — capacità di spesa {where}".strip()
+    elif "aggregati" in payload:
+        ctx = payload.get("contesto") or {}
+        where = ctx.get("nome_territorio") or ""
+        name = f"OpenCoesione — aggregati territoriali {where}".strip()
+    elif "cod_locale_progetto" in payload:
+        name = f"OpenCoesione — progetto {payload['cod_locale_progetto']}"
+    elif "results" in payload:
+        kind = "soggetti" if "/soggetti" in source_url else "progetti"
+        name = f"OpenCoesione — ricerca {kind} ({payload.get('total', '?')} risultati)"
+    else:
+        name = "OpenCoesione — risposta API"
+    return Resource(name=name[:120], url=source_url, format="JSON", source="opencoesione")
+
+
 _PLACEHOLDER_SEGMENTS = ("uuid", "example", "your-", "path", "<", "{", "...")
 
 
@@ -273,13 +315,14 @@ def _is_placeholder_url(url: str) -> bool:
 def _normalise_source_tag(executor_id: str) -> str | None:
     """Map the participant's executor_id to a clean source tag.
 
-    Recognised tags: 'ckan', 'istat', 'eurostat', 'oecd'. Match is substring-based
-    against a lowercased executor_id so renames at the Settings level (e.g.
-    `ckan_agent_name="ckan-it"`) keep working.
+    Recognised tags: 'ckan', 'istat', 'eurostat', 'oecd', 'opencoesione'.
+    Match is substring-based against a lowercased executor_id so renames at the
+    Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("eurostat", "oecd", "istat", "ckan"):
-        # eurostat before istat so a literal "eurostat" doesn't get matched as istat
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan"):
+        # longest-first: eurostat before istat so a literal "eurostat" doesn't
+        # get matched as istat; opencoesione first for the same reason.
         if tag in lower:
             return tag
     return None
@@ -312,7 +355,7 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd")
+_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd", "opencoesione")
 
 
 def _build_synth_prompt(narratives_by_source: dict[str, str]) -> str:

@@ -14,6 +14,7 @@ MCP server exposing **OpenCoesione** (Italian cohesion-policy funded projects,
 | `opencoesione_territorial_aggregates` | programmed/paid resources per territory (+ per state/theme/year breakdowns, population) |
 | `opencoesione_search_soggetti` | involved bodies by territory/role/theme/nature |
 | `opencoesione_funding_capacity` | **workflow tool**: spend ratio (payments/public cost) + completed/total projects → historical delivery capacity |
+| `opencoesione_resolve_territorio` | place name / ISTAT code → territory slug + codes (call first when only a name is known) |
 | `opencoesione_reference_values` | valid filter slugs (themes, natures, states, cycles) discovered on the live API |
 
 All tools are read-only/idempotent; every result includes `source_url` (the

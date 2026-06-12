@@ -250,3 +250,122 @@ async def test_eurostat_substring_does_not_get_tagged_as_istat() -> None:
     assert _normalise_source_tag("istat-agent") == "istat"
     assert _normalise_source_tag("oecd-agent") == "oecd"
     assert _normalise_source_tag("ckan-it") == "ckan"
+    assert _normalise_source_tag("opencoesione") == "opencoesione"
+    assert _normalise_source_tag("OpenCoesione-agent") == "opencoesione"
+
+
+# ───────────────────── opencoesione participant ─────────────────────
+
+
+@dataclass
+class _StubFunctionResult:
+    type: str
+    result: Any
+
+
+@dataclass
+class _StubMessage:
+    contents: list[Any]
+
+
+@dataclass
+class _StubInnerResponseWithMessages:
+    text: str
+    messages: list[Any]
+
+
+_OC_CAPACITY_PAYLOAD = {
+    "territorio": "Barletta",
+    "slug": "barletta-comune",
+    "spend_ratio": 0.3841,
+    "progetti_totali": 2616,
+    "progetti_conclusi": 2152,
+    "source_url": "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comune.json",
+}
+
+_OC_SEARCH_PAYLOAD = {
+    "total": 26,
+    "results": [{"clp": "X1"}],
+    "source_url": (
+        "https://opencoesione.gov.it/it/api/progetti.json"
+        "?page=1&page_size=3&tema=ambiente&territorio=barletta-comune"
+    ),
+}
+
+_OC_RESOLVE_PAYLOAD = {
+    "found": True,
+    "slug": "barletta-comune",
+    "source_url": "https://opencoesione.gov.it/it/api/territori.json?denominazione=Barletta",
+}
+
+
+def _oc_result(raw_text: str, payloads: list[dict[str, Any]]) -> _StubResult:
+    messages = [
+        _StubMessage(contents=[_StubFunctionResult(type="function_result", result=json.dumps(p))])
+        for p in payloads
+    ]
+    return _StubResult(
+        executor_id="opencoesione",
+        agent_response=_StubInnerResponseWithMessages(text=raw_text, messages=messages),
+    )
+
+
+@pytest.mark.asyncio
+async def test_opencoesione_participant_tags_section_and_captures_source_urls() -> None:
+    """OpenCoesione: tag, synth section, and deterministic source_url capture
+    even when the LLM omits the citations from its RESOURCES_JSON block."""
+    synth = _StubAgent("Sintesi con evidenza finanziaria.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    oc_raw = (
+        "A Barletta insistono 26 progetti sul tema ambiente; spend ratio 0,38.\n"
+        "<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"  # LLM omitted citations
+    )
+    results = [
+        _result("ckan", _ckan_reply([])),
+        _oc_result(oc_raw, [_OC_RESOLVE_PAYLOAD, _OC_SEARCH_PAYLOAD, _OC_CAPACITY_PAYLOAD]),
+    ]
+    out = await aggregate(results)
+    block = _extract_block(out.text)
+
+    oc_resources = [r for r in block if r["source"] == "opencoesione"]
+    urls = {r["url"] for r in oc_resources}
+    # Search + capacity captured from tool results; the resolve lookup is
+    # infrastructure and must NOT become a citation.
+    assert _OC_CAPACITY_PAYLOAD["source_url"] in urls
+    assert _OC_SEARCH_PAYLOAD["source_url"] in urls
+    assert _OC_RESOLVE_PAYLOAD["source_url"] not in urls
+    # Citations are API links: JSON format, no content to download.
+    assert all(r["format"] == "JSON" and r["content"] is None for r in oc_resources)
+    # Capacity citation carries a meaningful name.
+    cap = next(r for r in oc_resources if r["url"] == _OC_CAPACITY_PAYLOAD["source_url"])
+    assert "capacità di spesa" in cap["name"] and "Barletta" in cap["name"]
+
+    # The synth prompt has the OPENCOESIONE section with the narrative.
+    prompt = synth.last_prompt or ""
+    assert "=== OPENCOESIONE ===" in prompt
+    assert "spend ratio 0,38" in prompt
+
+
+@pytest.mark.asyncio
+async def test_geo_filter_keeps_matching_opencoesione_resources() -> None:
+    """OpenCoesione URLs carry the comune slug — the geographic post-filter must
+    keep the queried comune and drop a different one."""
+    from opendata_backend.orchestrator.geo_filter import filter_resources
+
+    barletta = Resource(
+        name="OpenCoesione — ricerca progetti",
+        url=_OC_SEARCH_PAYLOAD["source_url"],
+        format="JSON",
+        source="opencoesione",
+    )
+    taranto = Resource(
+        name="OpenCoesione — capacità di spesa Taranto",
+        url="https://opencoesione.gov.it/it/api/aggregati/territori/taranto-comune.json",
+        format="JSON",
+        source="opencoesione",
+    )
+    kept = filter_resources([barletta, taranto], "zona industriale a Barletta")
+    urls = {r.url for r in kept}
+    assert barletta.url in urls
+    assert taranto.url not in urls

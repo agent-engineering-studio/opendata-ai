@@ -97,6 +97,24 @@ SourceTag = Literal["ckan", "istat", "eurostat", "oecd", "opencoesione"]
   narrativa + blocco risorse + `source_url` nei tool result → verificare tag,
   ordine sezione synth, e cattura deterministica della citazione.
 
+## Esiti implementazione (2026-06-12)
+
+- Aggiunto il tool `opencoesione_resolve_territorio` all'MCP server (previsto
+  dalla clausola "se il Pezzo 1 non lo espone ancora"): l'agente parte dal nome
+  del luogo, non deve conoscere i codici ISTAT. La cattura citazioni **salta**
+  i risultati di resolve (shape `{"found": ...}`) — sono infrastruttura, non
+  evidenza.
+- Default `enable_opencoesione=false` (come eurostat/oecd: +1 chiamata LLM per
+  query, opt-in). `opencoesione_mcp_url` default host-side `:8084` perché
+  `:8082` è la convenzione host-debug di eurostat; nel compose la porta interna
+  resta 8082 (URL passata esplicitamente).
+- Vincolo preesistente scoperto: `ConcurrentBuilder` del framework richiede
+  **≥2 partecipanti** — una config con una sola fonte abilitata fallisce su
+  `run()` ma funziona su `run_streaming()` (fan-out proprio, è il percorso UI).
+- Smoke superato con **Ollama qwen2.5:32k locale** (oltre che coi test mockati):
+  query "zona industriale di Barletta" → narrativa con spend ratio 0.38,
+  82% conclusi, progetti reali citati, 2 risorse `opencoesione` nel blocco JSON.
+
 ## Fuori scope (pezzi successivi)
 
 L'output "programma elettorale / SWOT zona industriale" è una **sintesi di livello

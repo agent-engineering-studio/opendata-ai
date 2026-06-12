@@ -69,7 +69,7 @@ _BINARY_MAGIC = (
 )
 
 
-SourceTag = Literal["ckan", "istat", "eurostat", "oecd"]
+SourceTag = Literal["ckan", "istat", "eurostat", "oecd", "opencoesione"]
 
 
 class Resource(BaseModel):
