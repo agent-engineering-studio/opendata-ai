@@ -55,8 +55,11 @@ CACHE_MAXSIZE = int(os.getenv("OPENCOESIONE_CACHE_MAXSIZE", "512"))
 #: page_size is capped server-side at 500 (verified: page_size=1000 → 500).
 MAX_PAGE_SIZE = 500
 MAX_RETRIES = 4
-#: Never honour a throttle suggestion longer than this (seconds).
-MAX_THROTTLE_WAIT = 15.0
+#: Never honour a throttle suggestion longer than this (seconds). Il server
+#: dice esattamente quando torna capacità ("Expected available in N seconds",
+#: visto live fino a 43s a throttle accumulato): aspettare batte fallire —
+#: il cap serve solo contro suggerimenti assurdi.
+MAX_THROTTLE_WAIT = float(os.getenv("OPENCOESIONE_MAX_THROTTLE_WAIT", "90"))
 
 _THROTTLE_SECONDS = re.compile(r"(\d+)\s*second")
 
