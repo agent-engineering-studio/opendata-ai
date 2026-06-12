@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     Text,
     UniqueConstraint,
     func,
@@ -120,6 +121,54 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="api_keys")
+
+
+class OcProgetto(Base):
+    """Local mirror of the OpenCoesione bulk dataset (progetti_esteso CSV).
+
+    One row per (project, comune): discovery on the real tracciato showed
+    COD_COMUNE is MULTI-VALUED (':::'-joined — a project can insist on several
+    comuni), so the spec's `clp unique` becomes `(clp, cod_comune)` unique and
+    the ingest explodes the localisation. Per-comune aggregations stay correct
+    (each project appears once per comune, full amounts — same convention as
+    the OpenCoesione territorial navigation); cross-comune sums would double
+    count multi-comune projects, so the query tools are comune-scoped.
+
+    Codes are normalised to ISTAT form at ingest: cod_comune 6-digit
+    ('072006'), cod_provincia 3-digit ('072'), cod_regione without leading
+    zeros ('16'). `tema`/`natura`/`stato` carry the CSV labels verbatim.
+    `raw` keeps the full 202-column record for audit on the FIRST comune row
+    of each project only (it would otherwise be duplicated per comune).
+    """
+
+    __tablename__ = "oc_progetti"
+    __table_args__ = (
+        UniqueConstraint("clp", "cod_comune", name="uq_oc_progetti_clp_comune"),
+        Index("ix_oc_progetti_comune_tema_ciclo", "cod_comune", "tema", "ciclo"),
+        Index("ix_oc_progetti_provincia", "cod_provincia"),
+        Index("ix_oc_progetti_regione", "cod_regione"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    clp: Mapped[str] = mapped_column(Text, nullable=False)
+    # '' (not NULL) when the project has no comune-level localisation, so the
+    # (clp, cod_comune) unique constraint still bites (NULLs compare distinct).
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    cod_provincia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cod_regione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tema: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ciclo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    natura: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stato: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finanziamento_totale: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    pagamenti: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    titolo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    soggetto_attuatore: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class Classification(Base):

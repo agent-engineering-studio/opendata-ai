@@ -137,6 +137,9 @@ services:
       OPENCOESIONE_BASE_URL: ${OPENCOESIONE_BASE_URL:-https://opencoesione.gov.it/it/api}
       OPENCOESIONE_HTTP_TIMEOUT: "60"
       OPENCOESIONE_CACHE_TTL_SECONDS: ${OPENCOESIONE_CACHE_TTL_SECONDS:-3600}
+      # Local-aggregates tool (opencoesione_query_local): read-only mirror of
+      # opendata.oc_progetti, populated by `make oc-sync`. Empty = tool off.
+      OPENCOESIONE_DB_URL: ${OPENCOESIONE_DB_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 

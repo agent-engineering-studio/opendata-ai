@@ -108,6 +108,38 @@ predefiniti con parametri validati Pydantic.
   `opencoesione_query_local` per le domande aggregate e tenere i tool live per il
   dettaglio puntuale.
 
+## Esiti implementazione (2026-06-12)
+
+Divergenze dalla spec, verificate sui file bulk reali:
+
+- **`COD_COMUNE` è multivalore** (`:::`-separato, codici a 9 cifre
+  regione+provincia+progressivo): un progetto può insistere su più comuni.
+  Quindi la chiave non è `clp` unique ma **`(clp, cod_comune)` unique**, con
+  esplosione in ingest e codici normalizzati ISTAT (`016071059` → comune
+  `071059`, provincia `071`, regione `16`). Le aggregazioni **per comune**
+  restano corrette; somme cross-comune duplicherebbero i progetti multi-comune
+  → i `kind` del tool sono tutti territorio-scoped.
+- URL bulk reali: nazionale `/it/opendata/progetti_esteso[_<ciclo>].zip` (ciclo
+  in forma dash), regionale `/it/opendata/regioni/progetti_esteso_<SIGLA>[_<ciclo>].zip`.
+  Il membro CSV dentro lo zip è datato → si prende il primo `*.csv`.
+- CSV: `;`, UTF-8 con BOM, 202 colonne; importi con virgola italiana;
+  `OC_DENOM_ATTUATORE` per il soggetto attuatore; `tema`/`stato` sono label
+  ("Trasporti e mobilità", "Concluso"), non slug → il filtro `tema` del tool fa
+  match substring case-insensitive coi trattini trattati come spazi (così gli
+  slug API matchano le label).
+- `raw` (202 colonne) è salvato **solo sul primo record** di ogni progetto
+  (sui successivi comuni sarebbe duplicato); CLI `--no-raw` per risparmiare
+  spazio sui sync nazionali.
+- Upsert portabile = **delete+insert per batch** sulle chiavi in arrivo
+  (niente ON CONFLICT dialect-specific), idempotente per costruzione.
+- `OPENCOESIONE_INSTRUCTIONS` (Pezzo 2) **non** è stato modificato, per scelta:
+  la preferenza "usa query_local per gli aggregati" vive nella docstring del
+  tool, che l'LLM vede solo quando il tool è effettivamente registrato
+  (env-gated) — istruirlo su un tool assente confonderebbe l'agente.
+- Smoke su dati reali: bulk PUG 2021-2027 → 4.644 righe CSV → 5.955 record;
+  `capacity("072006")` = 507 progetti, spend ratio 0.116 (ciclo giovane,
+  coerente col portale); `alembic upgrade head` verificato su Postgres 16.
+
 ## Definition of Done
 
 - [ ] Modello `OcProgetto` + indice composito; migrazione canonica (submodule) + stub

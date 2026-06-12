@@ -15,13 +15,24 @@ or an explicit ``territorio`` slug (e.g. "bari-comune").
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from opendata_core.opencoesione import OpenCoesioneClient
-from opendata_core.opencoesione.mapping import CICLI, LICENZA_API, NATURE, STATI, TEMI
+from opendata_core.opencoesione.mapping import (
+    CICLI,
+    LICENZA_API,
+    LICENZA_BULK,
+    NATURE,
+    STATI,
+    TEMI,
+)
+
+from . import local_db
+
+_BULK_DATASET_URL = "https://opencoesione.gov.it/it/opendata/"
 
 _READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
@@ -287,3 +298,92 @@ def register_tools(mcp: FastMCP) -> None:
             "cicli": list(CICLI),
             "licenza": LICENZA_API,
         }
+
+    # ── local aggregates — registered ONLY when OPENCOESIONE_DB_URL is set ──
+    if local_db.db_url():
+        register_local_tools(mcp)
+
+
+def register_local_tools(mcp: FastMCP) -> None:
+    """Register `opencoesione_query_local` (requires the populated local mirror)."""
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def opencoesione_query_local(
+        kind: Literal["spend_by_tema", "capacity", "top_soggetti", "compare_comuni"],
+        cod_comune: str | None = None,
+        cod_comuni: list[str] | None = None,
+        cod_provincia: str | None = None,
+        cod_regione: str | None = None,
+        tema: str | None = None,
+        ciclo: str | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        """Heavy aggregate queries on the LOCAL OpenCoesione mirror (full bulk dataset).
+
+        Prefer this over the live-API tools for aggregate questions (spend per
+        theme, full-dataset capacity, top implementers, comparing comuni): it
+        scans the entire dataset, which the paginated API cannot. Use the live
+        tools for puntual detail (single project, fresh search).
+
+        Kinds:
+          - spend_by_tema: funding/payments per theme for one comune.
+            Requires cod_comune; optional ciclo.
+          - capacity: spend ratio + completed/total projects for one comune
+            over the whole local dataset. Requires cod_comune; optional ciclo.
+          - top_soggetti: most recurrent implementing bodies in a territory.
+            Requires one of cod_comune / cod_provincia / cod_regione; `limit`.
+          - compare_comuni: side-by-side totals for several comuni.
+            Requires cod_comuni (list of ISTAT codes); optional tema, ciclo.
+
+        Args:
+            kind: One of the four query kinds above (no free-form SQL).
+            cod_comune: ISTAT comune code, e.g. "072006" (spend_by_tema, capacity).
+            cod_comuni: List of ISTAT comune codes (compare_comuni).
+            cod_provincia: ISTAT province code, e.g. "072" (top_soggetti).
+            cod_regione: ISTAT region code without leading zeros, e.g. "16".
+            tema: Theme filter — accepts API slugs ('trasporti') or label
+                fragments ('Trasporti e mobilità'), case-insensitive.
+            ciclo: Programming cycle, e.g. "2014-2020".
+            limit: Max rows for top_soggetti (1-50).
+        """
+        if kind == "spend_by_tema":
+            if not cod_comune:
+                raise ValueError("spend_by_tema richiede cod_comune")
+            rows: Any = await local_db.spend_by_tema(cod_comune, ciclo)
+        elif kind == "capacity":
+            if not cod_comune:
+                raise ValueError("capacity richiede cod_comune")
+            rows = await local_db.capacity(cod_comune, ciclo)
+        elif kind == "top_soggetti":
+            rows = await local_db.top_soggetti(
+                cod_comune=cod_comune,
+                cod_provincia=cod_provincia,
+                cod_regione=cod_regione,
+                limit=limit,
+            )
+        elif kind == "compare_comuni":
+            if not cod_comuni:
+                raise ValueError("compare_comuni richiede cod_comuni (lista di codici ISTAT)")
+            rows = await local_db.compare_comuni(cod_comuni, tema=tema, ciclo=ciclo)
+        else:  # pragma: no cover — Literal already guards this
+            raise ValueError(f"kind {kind!r} non supportato")
+
+        info = await local_db.dataset_info()
+        # NB: don't call this key "result" — FastMCP wraps non-dict returns
+        # under a top-level "result" and clients unwrap it; a same-named key
+        # here would be swallowed by that unwrapping.
+        out: dict[str, Any] = {
+            "kind": kind,
+            "rows": rows,
+            "dataset": info,
+            "source_url": _BULK_DATASET_URL,
+            "licenza": LICENZA_BULK,
+        }
+        out["sources"] = [
+            {
+                "url": _BULK_DATASET_URL,
+                "estratto_il": str(info.get("ingested_at") or date.today().isoformat()),
+                "licenza": LICENZA_BULK,
+            }
+        ]
+        return out

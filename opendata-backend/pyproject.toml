@@ -48,6 +48,7 @@ dev = [
 [project.scripts]
 opendata-agent = "opendata_backend.cli:cli"
 opendata-backend-api = "opendata_backend.main:run"
+opendata-opencoesione-sync = "opendata_backend.ingest.opencoesione:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -16,7 +16,7 @@ OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
 
 # Custom-built compose services (skip the Ollama service — it uses a pre-built image
 # managed by `make build-ollama` / `make pull-models`, not by `docker compose build`).
-CUSTOM_SERVICES := ckan-mcp istat-mcp osm-mcp opendata-backend opendata-ai-ui
+CUSTOM_SERVICES := ckan-mcp istat-mcp opencoesione-mcp osm-mcp opendata-backend opendata-ai-ui
 
 # `make agent` launches the unified backend REPL against the running stack.
 SOURCE ?= backend
@@ -139,6 +139,10 @@ mcp-stdio-istat: ## Smoke-test the ISTAT MCP server over stdio
 mcp-stdio-opencoesione: ## Smoke-test the OpenCoesione MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio opencoesione-mcp-server:local
+
+.PHONY: oc-sync
+oc-sync: ## Ingest the OpenCoesione bulk into Postgres (vars: OC_SYNC_ARGS="--regione PUG --ciclo 2014-2020")
+	docker compose exec opendata-backend opendata-opencoesione-sync $(OC_SYNC_ARGS)
 
 mcp-stdio-osm: ## Smoke-test the OSM MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
