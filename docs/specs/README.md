@@ -18,6 +18,7 @@ Pezzo 8). Ogni spec ha il prompt operativo gemello in
 | 6 | `06-zone-osm.md` | selezione zona via tag OSM (niente PostGIS) | 5 |
 | 7 | `07-arricchimento-osm-ispra.md` | accessibilità OSM + vincoli ISPRA nella SWOT | 2 (7a), 1-pattern (7b) |
 | 8 | `08-idee-territorio.md` | modalità brainstorming (4 generatori) | 3, 4, 5; meglio con 6, 7 |
+| 9 | `09-knowledge-graph-source.md` | KG (repo `knowledge-graph`) come fonte: tier "evidenza documentale" (delibere, PUG, bilanci) | 2-pattern; arricchisce 4 e 8 |
 
 Verticale minimo dimostrabile: **1 → 2 → 4 → 5**. Il 3 può girare in parallelo al
 4–5; il 6 e il 7 sono indipendenti tra loro; l'8 chiude.
