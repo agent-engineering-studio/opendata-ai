@@ -148,6 +148,10 @@ mcp-stdio-ispra: ## Smoke-test the ISPRA MCP server over stdio
 oc-sync: ## Ingest the OpenCoesione bulk into Postgres (vars: OC_SYNC_ARGS="--regione PUG --ciclo 2014-2020")
 	docker compose exec opendata-backend opendata-opencoesione-sync $(OC_SYNC_ARGS)
 
+.PHONY: comuni-sync
+comuni-sync: ## Popola l'anagrafica comuni (peer group della modalità idee)
+	docker compose exec opendata-backend opendata-comuni-sync
+
 mcp-stdio-osm: ## Smoke-test the OSM MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e MCP_TRANSPORT=stdio osm-mcp:local
@@ -160,6 +164,7 @@ lint: ## Run ruff on all Python packages
 	cd ckan-mcp-server && ruff check src
 	cd istat-mcp-server && ruff check src
 	cd opencoesione-mcp-server && ruff check src
+	cd ispra-mcp-server && ruff check src
 	cd osm-mcp && ruff check src
 	cd opendata-backend && ruff check src
 
@@ -168,5 +173,6 @@ test: ## Run pytest on all Python packages
 	cd ckan-mcp-server && pytest -q
 	cd istat-mcp-server && pytest -q
 	cd opencoesione-mcp-server && pytest -q
+	cd ispra-mcp-server && pytest -q
 	cd osm-mcp && pytest -q
 	cd opendata-backend && pytest -q

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import type { ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
+import type { ModalitaProgramma, ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
 import { DashboardGate } from "@/components/DashboardGate";
 import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
 import { ProposalCard } from "@/components/territorio/ProposalCard";
@@ -39,6 +39,11 @@ function TerritorioInner() {
   const [codManuale, setCodManuale] = useState("");
   const [zona, setZona] = useState("");
   const [tema, setTema] = useState("");
+  const [modalita, setModalita] = useState<ModalitaProgramma>("scheda");
+  // Cache per modalità: il toggle Scheda|Idee non ributta via il lavoro fatto.
+  const [risultati, setRisultati] = useState<
+    Partial<Record<ModalitaProgramma, ProgrammaResponse>>
+  >({});
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
 
   const codComune = (codManuale.trim() || selection?.cod_comune) ?? "";
@@ -57,6 +62,7 @@ function TerritorioInner() {
         zona_tipo: selection?.zona_tipo ?? null,
         zona_osm_id: selection?.zona_osm_id ?? null,
         tema: tema.trim() || null,
+        modalita,
       };
       const token = await getToken();
       const res = await apiFetch("/programma", {
@@ -69,6 +75,7 @@ function TerritorioInner() {
         throw new Error(`HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
       }
       const scheda = (await res.json()) as ProgrammaResponse;
+      setRisultati((prev) => ({ ...prev, [modalita]: scheda }));
       setStato({ fase: "risultato", scheda });
     } catch (err) {
       setStato({
@@ -78,7 +85,14 @@ function TerritorioInner() {
     }
   }
 
+  function cambiaModalita(m: ModalitaProgramma) {
+    setModalita(m);
+    const cached = risultati[m];
+    setStato(cached ? { fase: "risultato", scheda: cached } : { fase: "idle" });
+  }
+
   const scheda = stato.fase === "risultato" ? stato.scheda : null;
+  const isIdee = modalita === "idee";
 
   return (
     <main className="container py-4" style={{ maxWidth: 960 }}>
@@ -146,13 +160,44 @@ function TerritorioInner() {
               </div>
             </details>
 
+            <fieldset className="mt-3">
+              <legend className="form-label fw-semibold fs-6 mb-1">Modalità</legend>
+              <div className="btn-group" role="group" aria-label="Modalità di analisi">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${!isIdee ? "btn-primary" : "btn-outline-primary"}`}
+                  aria-pressed={!isIdee}
+                  onClick={() => cambiaModalita("scheda")}
+                >
+                  Scheda
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${isIdee ? "btn-primary" : "btn-outline-primary"}`}
+                  aria-pressed={isIdee}
+                  onClick={() => cambiaModalita("idee")}
+                >
+                  Idee
+                </button>
+              </div>
+              <p className="form-text mb-0">
+                {isIdee
+                  ? "Brainstorming evidence-based: idee nuove per il territorio dai confronti con comuni simili, bisogni scoperti, progetti fermi e risorse disponibili."
+                  : "Fotografia SWOT del territorio con proposte ancorate alle fonti."}
+              </p>
+            </fieldset>
+
             <div className="mt-3 d-flex align-items-center gap-3">
               <button
                 type="submit"
                 className="btn btn-primary"
                 disabled={stato.fase === "loading" || !codComune}
               >
-                {stato.fase === "loading" ? "Generazione in corso…" : "Genera scheda"}
+                {stato.fase === "loading"
+                  ? "Generazione in corso…"
+                  : isIdee
+                    ? "Genera idee"
+                    : "Genera scheda"}
               </button>
               {stato.fase === "loading" ? (
                 <span className="small text-muted" role="status">
@@ -181,7 +226,7 @@ function TerritorioInner() {
           <div className="d-flex align-items-start justify-content-between gap-2 mb-3">
             <div>
               <h2 className="h4 mb-0">
-                Scheda — comune {scheda.comune}
+                {isIdee ? "Idee per il territorio" : "Scheda"} — comune {scheda.comune}
                 {scheda.zona ? ` · ${scheda.zona}` : ""}
               </h2>
               <p className="small text-muted mb-0">
@@ -199,14 +244,20 @@ function TerritorioInner() {
 
           <DisclaimerBanner text={scheda.disclaimer} />
 
-          <h2 className="h5 mb-3">Analisi SWOT</h2>
-          <SwotGrid swot={scheda.swot} />
+          {/* In modalità idee la SWOT è facoltativa: mostrata solo se non vuota. */}
+          {Object.values(scheda.swot).some((v) => v.length > 0) ? (
+            <>
+              <h2 className="h5 mb-3">Analisi SWOT</h2>
+              <SwotGrid swot={scheda.swot} />
+            </>
+          ) : null}
 
-          <h2 className="h5 mt-4 mb-3">Proposte</h2>
+          <h2 className="h5 mt-4 mb-3">{isIdee ? "Idee" : "Proposte"}</h2>
           {scheda.proposte.length === 0 ? (
             <p className="text-muted">
-              Nessuna proposta ha superato la verifica delle fonti per questa
-              richiesta. Prova ad allargare il tema o a omettere la zona.
+              {isIdee
+                ? "Nessuna idea ha superato la verifica delle premesse. Il generatore comparativo richiede il mirror locale e l'anagrafica comuni (make oc-sync + make comuni-sync)."
+                : "Nessuna proposta ha superato la verifica delle fonti per questa richiesta. Prova ad allargare il tema o a omettere la zona."}
             </p>
           ) : (
             <div className="d-flex flex-column gap-3">

@@ -84,13 +84,23 @@ export type Finanziamento = {
   stato?: string | null;
 };
 
+export type Generatore =
+  | "gap_comparativo"
+  | "fabbisogno"
+  | "incompiuto"
+  | "finestra_finanziamento";
+
 export type Proposta = {
   titolo: string;
   descrizione: string;
   evidenze: Evidenza[];
   finanziamento?: Finanziamento | null;
   fattibilita: Fattibilita;
+  /** Modalità idee: da quale scarto nasce l'idea (assente in modalità scheda). */
+  generatore?: Generatore | (string & {}) | null;
 };
+
+export type ModalitaProgramma = "scheda" | "idee";
 
 export type ProgrammaRequest = {
   /** Codice ISTAT del comune, es. "072006". */
@@ -103,6 +113,8 @@ export type ProgrammaRequest = {
   zona_osm_id?: string | null;
   tema?: string | null;
   cicli?: string[] | null;
+  /** "scheda" (default) = SWOT; "idee" = brainstorming a 4 generatori. */
+  modalita?: ModalitaProgramma;
 };
 
 /* ── Selezione zona via tag OSM (Pezzo 6 — GET /territorio/*) ─────────── */

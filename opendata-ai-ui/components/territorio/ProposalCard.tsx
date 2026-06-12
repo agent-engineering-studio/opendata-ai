@@ -7,14 +7,36 @@ function ratioPct(ratio: number | null | undefined): string | null {
   return `${Math.round(ratio * 100)}%`;
 }
 
+/* Etichette UI dei quattro generatori della modalità idee (spec 08). */
+const GENERATORE_LABEL: Record<string, string> = {
+  gap_comparativo: "Fatto altrove",
+  fabbisogno: "Bisogno scoperto",
+  incompiuto: "Da completare",
+  finestra_finanziamento: "Finanziabile ora",
+};
+
 export function ProposalCard({ proposta }: { proposta: Proposta }) {
   const ratio = ratioPct(proposta.fattibilita.spend_ratio_storico);
+  const generatore = proposta.generatore
+    ? GENERATORE_LABEL[proposta.generatore] ?? proposta.generatore
+    : null;
   return (
     <article className="card shadow-sm">
       <div className="card-body">
         <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
           <h3 className="h6 fw-bold mb-0">{proposta.titolo}</h3>
-          <FeasibilityBadge livello={proposta.fattibilita.livello} />
+          <span className="d-flex gap-1 flex-shrink-0">
+            {generatore ? (
+              <span
+                className="badge text-white"
+                style={{ backgroundColor: "var(--color-primary-700)" }}
+                title="Da quale scarto tra dati e attuato nasce l'idea"
+              >
+                {generatore}
+              </span>
+            ) : null}
+            <FeasibilityBadge livello={proposta.fattibilita.livello} />
+          </span>
         </div>
 
         <p className="mb-2">{proposta.descrizione}</p>
@@ -44,6 +66,9 @@ export function ProposalCard({ proposta }: { proposta: Proposta }) {
           </p>
         )}
 
+        {generatore ? (
+          <p className="small fw-semibold mb-1">Premesse verificabili:</p>
+        ) : null}
         <div className="d-flex flex-column gap-1">
           {proposta.evidenze.map((e, i) => (
             <CitationLink key={i} evidenza={e} />

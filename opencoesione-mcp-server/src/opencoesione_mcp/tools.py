@@ -309,7 +309,10 @@ def register_local_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(annotations=_READ_ONLY)
     async def opencoesione_query_local(
-        kind: Literal["spend_by_tema", "capacity", "top_soggetti", "compare_comuni"],
+        kind: Literal[
+            "spend_by_tema", "capacity", "top_soggetti", "compare_comuni",
+            "similar_projects", "gap_by_tema", "stalled_projects",
+        ],
         cod_comune: str | None = None,
         cod_comuni: list[str] | None = None,
         cod_provincia: str | None = None,
@@ -317,34 +320,41 @@ def register_local_tools(mcp: FastMCP) -> None:
         tema: str | None = None,
         ciclo: str | None = None,
         limit: int = 10,
+        min_peers: int = 3,
+        soglia_ratio: float = 0.2,
     ) -> dict[str, Any]:
         """Heavy aggregate queries on the LOCAL OpenCoesione mirror (full bulk dataset).
 
-        Prefer this over the live-API tools for aggregate questions (spend per
-        theme, full-dataset capacity, top implementers, comparing comuni): it
-        scans the entire dataset, which the paginated API cannot. Use the live
-        tools for puntual detail (single project, fresh search).
+        Prefer this over the live-API tools for aggregate questions: it scans
+        the entire dataset, which the paginated API cannot. Use the live tools
+        for puntual detail (single project, fresh search).
 
         Kinds:
           - spend_by_tema: funding/payments per theme for one comune.
-            Requires cod_comune; optional ciclo.
-          - capacity: spend ratio + completed/total projects for one comune
-            over the whole local dataset. Requires cod_comune; optional ciclo.
-          - top_soggetti: most recurrent implementing bodies in a territory.
-            Requires one of cod_comune / cod_provincia / cod_regione; `limit`.
-          - compare_comuni: side-by-side totals for several comuni.
-            Requires cod_comuni (list of ISTAT codes); optional tema, ciclo.
+          - capacity: spend ratio + completed/total projects for one comune.
+          - top_soggetti: most recurrent implementing bodies in a territory
+            (one of cod_comune / cod_provincia / cod_regione).
+          - compare_comuni: side-by-side totals for several comuni (cod_comuni).
+          - similar_projects: projects funded by COMPARABLE comuni (same
+            region, population 0.5×–2×) — the "done elsewhere" idea generator.
+            Requires cod_comune + the comuni registry (`make comuni-sync`).
+          - gap_by_tema: themes where ≥min_peers comparable comuni funded
+            projects and this comune has ZERO — the "gap" idea generator.
+          - stalled_projects: local non-completed projects with spend ratio
+            below soglia_ratio — the "unfinished" idea generator.
 
         Args:
-            kind: One of the four query kinds above (no free-form SQL).
-            cod_comune: ISTAT comune code, e.g. "072006" (spend_by_tema, capacity).
+            kind: One of the seven query kinds above (no free-form SQL).
+            cod_comune: ISTAT comune code, e.g. "072006".
             cod_comuni: List of ISTAT comune codes (compare_comuni).
             cod_provincia: ISTAT province code, e.g. "072" (top_soggetti).
             cod_regione: ISTAT region code without leading zeros, e.g. "16".
             tema: Theme filter — accepts API slugs ('trasporti') or label
-                fragments ('Trasporti e mobilità'), case-insensitive.
+                fragments, case-insensitive.
             ciclo: Programming cycle, e.g. "2014-2020".
-            limit: Max rows for top_soggetti (1-50).
+            limit: Max rows for top_soggetti / similar_projects (1-50).
+            min_peers: gap_by_tema — min comparable comuni active on a theme.
+            soglia_ratio: stalled_projects — spend-ratio threshold (default 0.2).
         """
         if kind == "spend_by_tema":
             if not cod_comune:
@@ -365,6 +375,20 @@ def register_local_tools(mcp: FastMCP) -> None:
             if not cod_comuni:
                 raise ValueError("compare_comuni richiede cod_comuni (lista di codici ISTAT)")
             rows = await local_db.compare_comuni(cod_comuni, tema=tema, ciclo=ciclo)
+        elif kind == "similar_projects":
+            if not cod_comune:
+                raise ValueError("similar_projects richiede cod_comune")
+            rows = await local_db.similar_projects(cod_comune, tema=tema, ciclo=ciclo,
+                                                   limit=limit)
+        elif kind == "gap_by_tema":
+            if not cod_comune:
+                raise ValueError("gap_by_tema richiede cod_comune")
+            rows = await local_db.gap_by_tema(cod_comune, ciclo=ciclo, min_peers=min_peers)
+        elif kind == "stalled_projects":
+            if not cod_comune:
+                raise ValueError("stalled_projects richiede cod_comune")
+            rows = await local_db.stalled_projects(cod_comune, soglia_ratio=soglia_ratio,
+                                                   ciclo=ciclo)
         else:  # pragma: no cover — Literal already guards this
             raise ValueError(f"kind {kind!r} non supportato")
 

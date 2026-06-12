@@ -63,8 +63,54 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
     return any((e.url or "").strip() in evidence_urls for e in evidenze)
 
 
-def validate_programma(resp: "ProgrammaResponse", evidence_urls: set[str]) -> "ProgrammaResponse":
-    """Applica i guardrail in place e ritorna la risposta ripulita."""
+# ── Requisiti per generatore (modalità idee, Pezzo 8) ──
+# Verifiche deterministiche basate sui DOMINI delle evidenze (semplificazione
+# dichiarata rispetto alla spec: il controllo "comune ≠ quello in esame" via
+# URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
+GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento")
+
+_OC_HOST = "opencoesione.gov.it"
+_INDICATORE_HOSTS = ("istat.it", "isprambiente.it", "openstreetmap.org", "overpass-api.de")
+
+
+def _evidence_hosts(evidenze: list) -> list[str]:
+    from urllib.parse import urlparse
+
+    out = []
+    for e in evidenze:
+        try:
+            out.append(urlparse((e.url or "").strip()).netloc.lower())
+        except Exception:
+            out.append("")
+    return out
+
+
+def _generatore_ok(prop) -> bool:
+    """La proposta soddisfa i requisiti minimi di evidenza del suo generatore?"""
+    hosts = _evidence_hosts(prop.evidenze)
+    urls = [(e.url or "").lower() for e in prop.evidenze]
+    has_oc = any(_OC_HOST in h for h in hosts)
+    if prop.generatore == "gap_comparativo":
+        return has_oc
+    if prop.generatore == "fabbisogno":
+        has_indic = any(any(d in h for d in _INDICATORE_HOSTS) for h in hosts)
+        return has_indic and has_oc
+    if prop.generatore == "incompiuto":
+        return has_oc
+    if prop.generatore == "finestra_finanziamento":
+        return any(_OC_HOST in h and "aggregati" in u for h, u in zip(hosts, urls))
+    return False  # generatore mancante o sconosciuto
+
+
+def validate_programma(
+    resp: "ProgrammaResponse", evidence_urls: set[str], *, modalita: str = "scheda"
+) -> "ProgrammaResponse":
+    """Applica i guardrail in place e ritorna la risposta ripulita.
+
+    In modalità "idee" si aggiungono i requisiti per generatore: una proposta
+    senza `generatore` valido o senza le premesse minime del suo generatore
+    viene SCARTATA (la premessa mancante invalida l'inferenza, non la degrada).
+    """
     urls = {u.strip() for u in evidence_urls}
 
     # ── SWOT: scarta voci orfane o persuasive ──
@@ -96,6 +142,12 @@ def validate_programma(resp: "ProgrammaResponse", evidence_urls: set[str]) -> "P
         if not prop.evidenze:
             log.warning(
                 "guardrail: proposta %r senza evidenza risolvibile scartata", prop.titolo[:60]
+            )
+            continue
+        if modalita == "idee" and not _generatore_ok(prop):
+            log.warning(
+                "guardrail idee: proposta %r scartata (generatore %r senza premesse minime)",
+                prop.titolo[:40], prop.generatore,
             )
             continue
         # Linea di finanziamento dichiarabile solo con fonte raccolta davvero.

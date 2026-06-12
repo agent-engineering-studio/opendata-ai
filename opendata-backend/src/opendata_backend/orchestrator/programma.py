@@ -52,7 +52,8 @@ class Evidenza(BaseModel):
     @field_validator("fonte")
     @classmethod
     def _normalise_fonte(cls, v: str) -> str:
-        return v.strip().lower()
+        # i modelli piccoli copiano il tag con la decorazione ("[opencoesione]")
+        return v.strip().strip("[]()").strip().lower()
 
 
 class VoceSwot(BaseModel):
@@ -78,6 +79,17 @@ class Proposta(BaseModel):
     evidenze: list[Evidenza]  # ≥1 obbligatoria
     finanziamento: Finanziamento | None = None
     fattibilita: Fattibilita
+    # Modalità "idee" (Pezzo 8): da quale scarto nasce l'idea. Obbligatorio in
+    # modalità idee (i guardrail scartano le proposte senza generatore valido);
+    # assente in modalità scheda. str normalizzato, non Literal (lezione del
+    # campo `fonte`: un typo non deve invalidare il parse — lo gestisce il
+    # guardrail).
+    generatore: str | None = None
+
+    @field_validator("generatore")
+    @classmethod
+    def _normalise_generatore(cls, v: str | None) -> str | None:
+        return v.strip().lower() if isinstance(v, str) and v.strip() else None
 
 
 class ProgrammaRequest(BaseModel):
@@ -91,6 +103,9 @@ class ProgrammaRequest(BaseModel):
     zona_osm_id: str | None = None  # entità OSM selezionata, es. "way/123" (Pezzo 6)
     tema: str | None = None
     cicli: list[str] | None = None
+    # "scheda" = fotografia SWOT (Pezzo 4); "idee" = brainstorming a quattro
+    # generatori (Pezzo 8) — stesso contratto, guardrail estesi per generatore.
+    modalita: Literal["scheda", "idee"] = "scheda"
 
 
 class ProgrammaResponse(BaseModel):
@@ -163,6 +178,16 @@ def build_programma_task(
         "— servono: indicatori socioeconomici, progetti pubblici finanziati, "
         "capacità di spesa storica e dataset rilevanti."
     )
+    if req.modalita == "idee":
+        parts.append(
+            "MODALITÀ BRAINSTORMING: oltre a quanto sopra, raccogli anche — se i "
+            "tuoi tool lo permettono — i temi dove comuni comparabili hanno "
+            "finanziato e questo comune no (kind gap_by_tema), i progetti di "
+            "comuni simili (kind similar_projects), i progetti locali fermi "
+            "(kind stalled_projects), le risorse programmate e non ancora spese "
+            "per tema (aggregati territoriali), gli indicatori critici e "
+            "l'accessibilità della zona."
+        )
     return " ".join(parts)
 
 
@@ -305,7 +330,7 @@ def build_programma_aggregator(
             disclaimer=parsed.disclaimer,
             generato_il=datetime.now(timezone.utc),
         )
-        response = validate_programma(response, evidence_urls)
+        response = validate_programma(response, evidence_urls, modalita=req.modalita)
         return ProgrammaOutput(
             text=response.model_dump_json(),
             response=response,

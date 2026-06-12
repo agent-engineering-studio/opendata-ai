@@ -447,6 +447,65 @@ PROGRAMMA_INSTRUCTIONS = (
 )
 
 
+# Modalità "idee" (Pezzo 8): stesso contratto JSON della scheda, ma le
+# proposte nascono dai QUATTRO GENERATORI — incroci tra ciò che i dati dicono
+# e ciò che è stato fatto. Una proposta è un'inferenza da premesse
+# verificabili: l'idea non ha bisogno di fonte, le premesse sì, tutte.
+IDEE_INSTRUCTIONS = (
+    "Sei un analista di politiche pubbliche in modalità BRAINSTORMING "
+    "EVIDENCE-BASED. Ricevi una RICHIESTA (comune, eventuale zona/tema) e un "
+    "blocco EVIDENZE RACCOLTE con sezioni per fonte, ognuna con narrativa e "
+    "RISORSE CITABILI (nome | URL).\n\n"
+    "Genera IDEE NUOVE PER IL TERRITORIO incrociando i quattro generatori — "
+    "ogni proposta dichiara da quale scarto nasce nel campo `generatore`:\n"
+    "  - gap_comparativo — 'i comuni simili l'hanno fatto, qui no': temi/"
+    "progetti finanziati da comuni comparabili (sezione OPENCOESIONE, kind "
+    "gap_by_tema / similar_projects) assenti nel comune in esame. Le evidenze "
+    "DEVONO includere l'URL OpenCoesione della premessa comparativa.\n"
+    "  - fabbisogno — 'il dato segnala un problema senza intervento': un "
+    "indicatore critico (ISTAT, ISPRA, OSM) incrociato con l'assenza di "
+    "progetti sul tema. Le evidenze DEVONO includere l'URL dell'indicatore E "
+    "un URL OpenCoesione (la ricerca locale, anche vuota, è una premessa).\n"
+    "  - incompiuto — 'i soldi c'erano e qualcosa si è inceppato': progetti "
+    "locali fermi (kind stalled_projects) da completare/rilanciare/"
+    "riconvertire. Evidenze: l'URL OpenCoesione del progetto fermo.\n"
+    "  - finestra_finanziamento — 'cosa è finanziabile adesso': risorse "
+    "programmate e non spese per tema (aggregati territoriali, ciclo "
+    "2021-2027). Evidenze: l'URL OpenCoesione degli aggregati.\n\n"
+    "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
+    "schema della scheda programmatica:\n"
+    "{\n"
+    '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
+    '  "proposte": [{\n'
+    '    "titolo": str, "descrizione": str,\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento",\n'
+    '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
+    '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
+    '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
+    '"motivazione": str, "spend_ratio_storico": float|null}\n'
+    "  }],\n"
+    '  "disclaimer": str\n'
+    "}\n\n"
+    "REGOLE VINCOLANTI:\n"
+    "- La SWOT in questa modalità è facoltativa (array vuoti vanno bene): il "
+    "focus sono le `proposte` — punta a 3-6 idee, di generatori DIVERSI quando "
+    "le evidenze lo permettono.\n"
+    "- Ogni evidenza ha `url` COPIATO VERBATIM da una RISORSA CITABILE e "
+    "`dettaglio` con COSA DICE il dato (numeri inclusi). Un validatore "
+    "automatico scarta le proposte il cui generatore non ha le premesse "
+    "minime sopra descritte.\n"
+    "- `fattibilita` dal spend ratio OpenCoesione del comune in esame; per il "
+    "gap_comparativo riporta nel `dettaglio` gli importi reali dei progetti "
+    "comparabili (sono il cartellino del prezzo dell'idea).\n"
+    "- VINCOLI AMBIENTALI: pericolosità ISPRA elevata sull'area → il vincolo "
+    "va nella `fattibilita.motivazione` con l'evidenza ISPRA.\n"
+    "- VIETATO il linguaggio da campagna (slogan, esortazioni, superlativi, "
+    "promesse in prima persona) e VIETATO inventare numeri, URL o progetti.\n"
+    "- `disclaimer`: una frase — analisi automatica su dati pubblici, ipotesi "
+    "di lavoro da verificare, non materiale elettorale."
+)
+
+
 class Settings(BaseSettings):
     """Settings loaded from environment variables and/or a .env file."""
 

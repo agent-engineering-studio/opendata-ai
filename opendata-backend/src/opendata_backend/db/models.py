@@ -171,6 +171,31 @@ class OcProgetto(Base):
     )
 
 
+class ComuneAnagrafica(Base):
+    """Anagrafica comuni con popolazione — base del peer group (spec 08).
+
+    Popolata da `opendata-comuni-sync` (dataset comuni-json, dati ISTAT,
+    censimento 2011 — per la fascia 0.5×–2× la stalenza è irrilevante e i
+    criteri sono sempre dichiarati negli output). Niente geometria (R4).
+    """
+
+    __tablename__ = "comuni_anagrafica"
+    __table_args__ = (
+        Index("ix_comuni_anagrafica_regione", "cod_regione"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    nome: Mapped[str] = mapped_column(Text, nullable=False)
+    cod_provincia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cod_regione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    popolazione: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Classification(Base):
     __tablename__ = "classifications"
     __table_args__ = (

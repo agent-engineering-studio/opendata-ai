@@ -334,6 +334,86 @@ async def test_duplicate_tool_citations_are_deduped() -> None:
     assert [r.url for r in resp.citazioni].count(_OC_URL) == 1
 
 
+# ───────────────────────── modalità idee (Pezzo 8) ─────────────────────────
+
+_AGG_URL = "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comune.json"
+_SEARCH_URL = (
+    "https://opencoesione.gov.it/it/api/progetti.json?territorio=barletta-comune"
+)
+_IDEE_REQ = ProgrammaRequest(cod_comune="110002", comune_nome="Barletta", modalita="idee")
+
+
+def _idea(generatore: str | None, evidenze: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "titolo": f"Idea {generatore}",
+        "descrizione": "d",
+        "generatore": generatore,
+        "evidenze": evidenze,
+        "finanziamento": None,
+        "fattibilita": {"livello": "media", "motivazione": "m", "spend_ratio_storico": None},
+    }
+
+
+@pytest.mark.asyncio
+async def test_idee_mode_enforces_generator_premises() -> None:
+    """Per generatore: premesse minime o la proposta è SCARTATA (non degradata)."""
+    # NB: _OC_URL è esso stesso un URL "aggregati" → per i casi che devono
+    # fallire il check finestra serve un URL OpenCoesione di RICERCA.
+    ev_oc = {"fonte": "opencoesione", "url": _SEARCH_URL, "dettaglio": "x"}
+    ev_agg = {"fonte": "opencoesione", "url": _AGG_URL, "dettaglio": "x"}
+    ev_istat = {"fonte": "istat", "url": _ISTAT_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("gap_comparativo", [ev_oc]),              # ok
+                _idea("fabbisogno", [ev_istat, ev_oc]),          # ok (indicatore + locale)
+                _idea("fabbisogno", [ev_istat]),                 # manca la ricerca locale → out
+                _idea("incompiuto", [ev_oc]),                    # ok
+                _idea("finestra_finanziamento", [ev_agg]),       # ok (aggregati)
+                _idea("finestra_finanziamento", [ev_oc]),        # non è un URL aggregati → out
+                _idea(None, [ev_oc]),                            # senza generatore → out
+                _idea("GAP_COMPARATIVO ", [ev_oc]),              # normalizzato → ok
+            ],
+        )
+    )
+    # Il bundle deve contenere anche l'URL aggregati perché superi il check URL.
+    parts = _participants()
+    parts[0] = _participant(
+        "opencoesione",
+        "Narrativa.",
+        [
+            {"name": "ricerca", "url": _SEARCH_URL, "format": "JSON", "content": None},
+            {"name": "aggregati", "url": _AGG_URL, "format": "JSON", "content": None},
+        ],
+    )
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    generatori = [p.generatore for p in resp.proposte]
+    assert generatori == [
+        "gap_comparativo", "fabbisogno", "incompiuto",
+        "finestra_finanziamento", "gap_comparativo",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
+    """Regressione: la modalità scheda ignora i requisiti per generatore."""
+    agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(_participants())).response
+    assert resp is not None and len(resp.proposte) == 1
+
+
+def test_idee_task_asks_for_generator_inputs() -> None:
+    task = build_programma_task(_IDEE_REQ, None)
+    assert "gap_by_tema" in task and "stalled_projects" in task
+    assert "similar_projects" in task
+    # La modalità scheda non chiede i kind comparativi.
+    assert "gap_by_tema" not in build_programma_task(_REQ, None)
+
+
 def test_router_audit_summary_is_informative() -> None:
     from opendata_backend.orchestrator.parsing import Resource
     from opendata_backend.routers.programma import _summary

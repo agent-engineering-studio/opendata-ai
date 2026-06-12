@@ -27,6 +27,7 @@ from agent_framework import Agent, MCPStreamableHTTPTool
 from .config import (
     CKAN_INSTRUCTIONS,
     EUROSTAT_INSTRUCTIONS,
+    IDEE_INSTRUCTIONS,
     ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
@@ -119,6 +120,7 @@ class OrchestratorSession:
         self._participants: list[Agent] = []
         self._synth_agent: Agent | None = None
         self._programma_agent: Agent | None = None
+        self._idee_agent: Agent | None = None
         self._enabled_sources: list[str] = []
         # agent-framework workflows reject concurrent .run() on the same instance,
         # and the participant Agents are shared — serialise requests with a lock.
@@ -290,6 +292,11 @@ class OrchestratorSession:
                 programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
                 None, default_options,
             )
+            # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
+            self._idee_agent = await self._enter_agent(
+                programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
+                None, default_options,
+            )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
         # per request in run() / run_streaming() because (a) agent-framework
@@ -306,6 +313,7 @@ class OrchestratorSession:
         self._participants = []
         self._synth_agent = None
         self._programma_agent = None
+        self._idee_agent = None
         await self._stack.aclose()
 
     @staticmethod
@@ -361,11 +369,12 @@ class OrchestratorSession:
         """
         if not self._participants:
             raise RuntimeError("OrchestratorSession not entered")
-        if self._programma_agent is None:
+        agent = self._idee_agent if req.modalita == "idee" else self._programma_agent
+        if agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
         async with self._lock:
-            aggregator = build_programma_aggregator(self._programma_agent, req)
+            aggregator = build_programma_aggregator(agent, req)
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(build_programma_task(req, zona_info))
         outputs = events.get_outputs()

@@ -220,3 +220,205 @@ async def compare_comuni(
             }
         )
     return out
+
+
+# ── Peer group + kind comparativi (spec 08 — generatori del brainstorming) ──
+#
+# Richiedono ANCHE la tabella opendata.comuni_anagrafica (popolata dal backend
+# con `make comuni-sync`). Il peer group è deterministico e dichiarato:
+# stessa regione + popolazione tra PEER_FACTOR_LOW× e PEER_FACTOR_HIGH×.
+
+PEER_FACTOR_LOW = float(os.getenv("OPENCOESIONE_PEER_FACTOR_LOW", "0.5"))
+PEER_FACTOR_HIGH = float(os.getenv("OPENCOESIONE_PEER_FACTOR_HIGH", "2.0"))
+_MAX_PEERS = 80
+
+
+def _anagrafica_table(url: str) -> str:
+    return "comuni_anagrafica" if url.startswith("sqlite") else "opendata.comuni_anagrafica"
+
+
+class AnagraficaMissing(RuntimeError):
+    """comuni_anagrafica assente o vuota — i kind comparativi non sono disponibili."""
+
+
+async def peer_group(cod_comune: str) -> dict[str, Any]:
+    """Comuni comparabili: stessa regione, popolazione 0.5×–2× (criteri dichiarati)."""
+    eng = get_engine()
+    a = _anagrafica_table(db_url() or "")
+    try:
+        async with eng.connect() as conn:
+            me = (
+                await conn.execute(
+                    text(f"SELECT nome, cod_regione, popolazione FROM {a} "  # noqa: S608
+                         "WHERE cod_comune = :c"),
+                    {"c": cod_comune},
+                )
+            ).mappings().one_or_none()
+    except Exception as exc:  # tabella assente → errore actionable
+        raise AnagraficaMissing(
+            "Anagrafica comuni non disponibile: esegui `make comuni-sync` "
+            "(CLI opendata-comuni-sync) per abilitare i kind comparativi."
+        ) from exc
+    if me is None or not me["popolazione"] or not me["cod_regione"]:
+        raise AnagraficaMissing(
+            f"Comune {cod_comune!r} assente dall'anagrafica (o senza popolazione): "
+            "esegui `make comuni-sync` o verifica il codice ISTAT."
+        )
+    pop = int(me["popolazione"])
+    lo, hi = int(pop * PEER_FACTOR_LOW), int(pop * PEER_FACTOR_HIGH)
+    async with eng.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    f"SELECT cod_comune, nome, popolazione FROM {a} "  # noqa: S608
+                    "WHERE cod_regione = :reg AND popolazione BETWEEN :lo AND :hi "
+                    "AND cod_comune != :c ORDER BY popolazione DESC LIMIT :lim"
+                ),
+                {"reg": me["cod_regione"], "lo": lo, "hi": hi, "c": cod_comune,
+                 "lim": _MAX_PEERS},
+            )
+        ).mappings().all()
+    return {
+        "comune": {"cod_comune": cod_comune, "nome": me["nome"], "popolazione": pop},
+        "criteri": (
+            f"stessa regione (cod {me['cod_regione']}), popolazione tra {lo:,} e {hi:,} "
+            f"abitanti ({PEER_FACTOR_LOW}×–{PEER_FACTOR_HIGH}× di {me['nome']})"
+        ),
+        "peers": [dict(r) for r in rows],
+    }
+
+
+async def similar_projects(
+    cod_comune: str, tema: str | None = None, ciclo: str | None = None, limit: int = 15
+) -> dict[str, Any]:
+    """Progetti dei comuni peer (ordinati per spend ratio): le idee 'fatte altrove'."""
+    pg = await peer_group(cod_comune)
+    codes = [p["cod_comune"] for p in pg["peers"]]
+    if not codes:
+        return {**pg, "progetti": []}
+    eng = get_engine()
+    t = _table(db_url() or "")
+    tf, tp = _tema_filter(tema)
+    cf, cp = _ciclo_filter(ciclo)
+    placeholders = ", ".join(f":p{i}" for i in range(len(codes)))
+    sql = (
+        f"SELECT clp, cod_comune, titolo, tema, ciclo, soggetto_attuatore, "  # noqa: S608
+        f"finanziamento_totale AS finanziato, pagamenti "
+        f"FROM {t} WHERE cod_comune IN ({placeholders}){tf}{cf} "
+        f"AND finanziamento_totale > 0 "
+        f"ORDER BY (pagamenti * 1.0 / finanziamento_totale) DESC, finanziamento_totale DESC "
+        f"LIMIT :lim"
+    )
+    params: dict[str, Any] = {f"p{i}": c for i, c in enumerate(codes)}
+    params.update(tp)
+    params.update(cp)
+    params["lim"] = max(1, min(int(limit), 50))
+    nomi = {p["cod_comune"]: p["nome"] for p in pg["peers"]}
+    async with eng.connect() as conn:
+        rows = (await conn.execute(text(sql), params)).mappings().all()
+    progetti = []
+    for r in rows:
+        fin = float(r["finanziato"] or 0)
+        pag = float(r["pagamenti"] or 0)
+        progetti.append(
+            {
+                "clp": r["clp"],
+                "comune": nomi.get(r["cod_comune"], r["cod_comune"]),
+                "cod_comune": r["cod_comune"],
+                "titolo": r["titolo"],
+                "tema": r["tema"],
+                "ciclo": r["ciclo"],
+                "soggetto_attuatore": r["soggetto_attuatore"],
+                "finanziato": fin,
+                "pagamenti": pag,
+                "spend_ratio": round(pag / fin, 4) if fin else None,
+            }
+        )
+    return {**pg, "progetti": progetti}
+
+
+async def gap_by_tema(
+    cod_comune: str, ciclo: str | None = None, min_peers: int = 3
+) -> dict[str, Any]:
+    """Temi dove ≥min_peers comuni peer hanno finanziato e il comune è a zero.
+
+    Semplificazione dichiarata rispetto alla spec (che prevedeva anche il
+    25° percentile): il gap è "zero progetti sul tema" — il segnale più
+    difendibile e il SQL resta portabile.
+    """
+    pg = await peer_group(cod_comune)
+    codes = [p["cod_comune"] for p in pg["peers"]]
+    if not codes:
+        return {**pg, "gap": []}
+    eng = get_engine()
+    t = _table(db_url() or "")
+    cf, cp = _ciclo_filter(ciclo)
+    placeholders = ", ".join(f":p{i}" for i in range(len(codes)))
+    sql = (
+        f"SELECT tema, COUNT(DISTINCT cod_comune) AS comuni_attivi, "  # noqa: S608
+        f"COUNT(*) AS progetti, AVG(finanziamento_totale) AS finanziato_medio "
+        f"FROM {t} WHERE cod_comune IN ({placeholders}){cf} AND tema IS NOT NULL "
+        f"AND tema NOT IN (SELECT DISTINCT tema FROM {t} "
+        f"WHERE cod_comune = :me{cf.replace(':ciclo', ':ciclo2') if cf else ''} "
+        f"AND tema IS NOT NULL) "
+        f"GROUP BY tema HAVING COUNT(DISTINCT cod_comune) >= :minp "
+        f"ORDER BY comuni_attivi DESC, finanziato_medio DESC"
+    )
+    params: dict[str, Any] = {f"p{i}": c for i, c in enumerate(codes)}
+    params.update(cp)
+    if cf:
+        params["ciclo2"] = cp["ciclo"]
+    params["me"] = cod_comune
+    params["minp"] = max(1, int(min_peers))
+    async with eng.connect() as conn:
+        rows = (await conn.execute(text(sql), params)).mappings().all()
+    gap = [
+        {
+            "tema": r["tema"],
+            "comuni_peer_attivi": int(r["comuni_attivi"]),
+            "progetti_peer": int(r["progetti"]),
+            "finanziato_medio": round(float(r["finanziato_medio"] or 0), 2),
+        }
+        for r in rows
+    ]
+    return {**pg, "gap": gap, "nota": "gap = zero progetti del comune sul tema"}
+
+
+async def stalled_projects(
+    cod_comune: str, soglia_ratio: float = 0.2, ciclo: str | None = None
+) -> dict[str, Any]:
+    """Progetti locali non conclusi con spend ratio sotto soglia: gli 'incompiuti'."""
+    eng = get_engine()
+    t = _table(db_url() or "")
+    cf, cp = _ciclo_filter(ciclo)
+    placeholders = ", ".join(f":s{i}" for i in range(len(STATI_CONCLUSI_LABELS)))
+    sql = (
+        f"SELECT clp, titolo, tema, ciclo, stato, soggetto_attuatore, "  # noqa: S608
+        f"finanziamento_totale AS finanziato, pagamenti "
+        f"FROM {t} WHERE cod_comune = :c{cf} AND finanziamento_totale > 0 "
+        f"AND (stato IS NULL OR stato NOT IN ({placeholders})) "
+        f"AND (pagamenti * 1.0 / finanziamento_totale) < :soglia "
+        f"ORDER BY finanziamento_totale DESC LIMIT 25"
+    )
+    params: dict[str, Any] = {"c": cod_comune, "soglia": float(soglia_ratio), **cp}
+    params.update({f"s{i}": s for i, s in enumerate(STATI_CONCLUSI_LABELS)})
+    async with eng.connect() as conn:
+        rows = (await conn.execute(text(sql), params)).mappings().all()
+    out = []
+    for r in rows:
+        fin = float(r["finanziato"] or 0)
+        pag = float(r["pagamenti"] or 0)
+        out.append(
+            {
+                "clp": r["clp"],
+                "titolo": r["titolo"],
+                "tema": r["tema"],
+                "ciclo": r["ciclo"],
+                "stato": r["stato"],
+                "soggetto_attuatore": r["soggetto_attuatore"],
+                "finanziato": fin,
+                "pagamenti": pag,
+                "spend_ratio": round(pag / fin, 4) if fin else None,
+            }
+        )
+    return {"cod_comune": cod_comune, "soglia_ratio": soglia_ratio, "progetti": out}

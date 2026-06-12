@@ -128,6 +128,38 @@ parametrico, stessi guardrail). Modifiche:
 - Badge non solo-colore (accessibilità), disclaimer sempre visibile, stesso
   `@media print`.
 
+## Esiti implementazione (2026-06-12)
+
+- **Fonte anagrafica (discovery)**: nessun CSV ISTAT unico porta codici E
+  popolazione; l'elenco completo di IdroGEO non ha la popolazione. Adottato
+  `comuni-json` (github.com/matteocontrini/comuni-json, dati ISTAT,
+  popolazione censimento 2011): 7.904 comuni, codici zero-padded, un solo
+  JSON. Per il banding 0.5×–2× la stalenza è irrilevante; URL sovrascrivibile
+  via `COMUNI_ANAGRAFICA_URL`.
+- **Semplificazioni dichiarate**: `gap_by_tema` = zero progetti del comune
+  sul tema (il 25° percentile della spec è rimandato — il segnale "zero" è il
+  più difendibile e il SQL resta portabile); i requisiti per generatore nei
+  guardrail sono **domain-based** sulle evidenze (host opencoesione /
+  indicatori; per `finestra_finanziamento` serve un URL `aggregati`) — il
+  controllo "comune ≠ in esame" via URL sarebbe fragile.
+- **Due agenti tool-less** (`programma` e `programma-idee`, stesso client):
+  con agent-framework le instructions sono fisse per Agent, quindi la scelta
+  per `modalita` avviene in `run_programma` — niente hint runtime.
+- `Proposta.generatore` è `str` normalizzato, non Literal (lezione del campo
+  `fonte`): un typo non rompe il parse, il guardrail scarta i non validi.
+  Il normalizzatore di `fonte` ora strippa anche la decorazione
+  ("[opencoesione]" visto in smoke).
+- IdeaCard non è un componente separato: `ProposalCard` mostra il badge
+  generatore ("Fatto altrove" / "Bisogno scoperto" / "Da completare" /
+  "Finanziabile ora") e l'header "Premesse verificabili" quando `generatore`
+  è presente.
+- **Smoke con dati reali** (mirror PUG 2021-2027 + anagrafica reale, Ollama):
+  5 idee su Barletta — 4 `gap_comparativo` dai gap veri del mirror
+  (capacità amministrativa, ambiente, energia, cultura/turismo) e 1
+  `fabbisogno` con doppia premessa (ISPRA 17,6% area a rischio idraulico +
+  ricerca OpenCoesione senza progetti sul tema), tutte `da_verificare`
+  (nessuna evidenza di finanziamento → degradazione corretta).
+
 ## Ordine e dipendenze
 
 Richiede: Pezzo 3 (DB locale) per i generatori 1 e 3; Pezzo 4 (programma); Pezzo 5
