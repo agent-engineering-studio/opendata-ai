@@ -12,6 +12,7 @@ analisi verificabile, non propaganda.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -113,13 +114,18 @@ class ProgrammaRequest(BaseModel):
     tema: str | None = None
     cicli: list[str] | None = None
     # "scheda" = fotografia SWOT (Pezzo 4); "idee" = brainstorming a quattro
-    # generatori (Pezzo 8) — stesso contratto, guardrail estesi per generatore.
-    modalita: Literal["scheda", "idee"] = "scheda"
+    # generatori (Pezzo 8); "completa" = UN solo fan-out che alimenta ENTRAMBI
+    # gli agenti → report unico (sintesi + SWOT + proposte + idee).
+    modalita: Literal["scheda", "idee", "completa"] = "scheda"
 
 
 class ProgrammaResponse(BaseModel):
     comune: str
     zona: str | None = None
+    # Quadro descrittivo di apertura (prosa, 8-12 frasi): il "racconto" del
+    # territorio coi numeri del bundle — risponde al feedback "troppo
+    # schematica" del primo collaudo. Vuota se l'LLM non la produce.
+    sintesi: str = ""
     swot: dict[str, list[VoceSwot]]  # chiavi: forze/debolezze/opportunita/minacce
     proposte: list[Proposta]
     citazioni: list[Resource]  # tutte le fonti risolvibili raccolte dagli specialisti
@@ -130,6 +136,7 @@ class ProgrammaResponse(BaseModel):
 class _LlmProgramma(BaseModel):
     """Il sottoinsieme che l'LLM emette — il resto lo assembla l'aggregatore."""
 
+    sintesi: str = ""
     swot: dict[str, list[VoceSwot]] = Field(default_factory=dict)
     proposte: list[Proposta] = Field(default_factory=list)
     disclaimer: str = ""
@@ -187,7 +194,7 @@ def build_programma_task(
         "— servono: indicatori socioeconomici, progetti pubblici finanziati, "
         "capacità di spesa storica e dataset rilevanti."
     )
-    if req.modalita == "idee":
+    if req.modalita in ("idee", "completa"):
         parts.append(
             "MODALITÀ BRAINSTORMING: oltre a quanto sopra, raccogli anche — se i "
             "tuoi tool lo permettono — i temi dove comuni comparabili hanno "
@@ -243,7 +250,10 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
     if not isinstance(data, dict):
         raise ValueError("La risposta del programma_agent non è un oggetto JSON")
 
-    out = _LlmProgramma(disclaimer=str(data.get("disclaimer") or ""))
+    out = _LlmProgramma(
+        sintesi=str(data.get("sintesi") or ""),
+        disclaimer=str(data.get("disclaimer") or ""),
+    )
     swot_raw = data.get("swot") if isinstance(data.get("swot"), dict) else {}
     for key in SWOT_KEYS:
         items = swot_raw.get(key) if isinstance(swot_raw.get(key), list) else []
@@ -270,14 +280,22 @@ def build_programma_aggregator(
     programma_agent: Agent,
     req: ProgrammaRequest,
     *,
+    idee_agent: Agent | None = None,
     instructions_hint: str | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
-    `instructions_hint` è il gancio parametrico per il Pezzo 8 (modalità
-    "idee"): testo aggiuntivo anteposto alla richiesta, senza toccare
-    l'impianto. Per la modalità scheda resta None.
+    Con `modalita="completa"` il bundle di evidenze (la parte costosa: UN solo
+    fan-out) alimenta ENTRAMBI gli agenti — `programma_agent` per sintesi+SWOT+
+    proposte e `idee_agent` per le idee dei quattro generatori — e le proposte
+    vengono fuse nello stesso report, ciascuna validata con le regole della
+    propria modalità.
+
+    `instructions_hint` è il gancio parametrico residuo: testo aggiuntivo
+    anteposto alla richiesta, senza toccare l'impianto.
     """
+    if req.modalita == "completa" and idee_agent is None:
+        raise ValueError("modalita='completa' richiede anche idee_agent")
 
     async def aggregate(results: list[Any]) -> ProgrammaOutput:
         log.info("programma aggregator: %d participant results", len(results))
@@ -321,25 +339,50 @@ def build_programma_aggregator(
         prompt_parts.append("EVIDENZE RACCOLTE:\n\n" + bundle)
         prompt = "\n\n".join(prompt_parts)
 
-        llm_raw = ""
-        try:
-            llm_result = await programma_agent.run(prompt)
-            llm_raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
-            parsed = _parse_llm_json(llm_raw)
-        except Exception:
-            log.exception("programma_agent failed; returning empty scheda")
-            parsed = _LlmProgramma()
+        async def _run(agent: Agent, label: str) -> _LlmProgramma:
+            try:
+                llm_result = await agent.run(prompt)
+                raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
+                return _parse_llm_json(raw)
+            except Exception:
+                log.exception("%s agent failed; sezione vuota", label)
+                return _LlmProgramma()
 
-        response = ProgrammaResponse(
-            comune=req.cod_comune,
-            zona=req.zona,
-            swot={k: parsed.swot.get(k, []) for k in SWOT_KEYS},
-            proposte=parsed.proposte,
-            citazioni=all_resources,
-            disclaimer=parsed.disclaimer,
-            generato_il=datetime.now(timezone.utc),
-        )
-        response = validate_programma(response, evidence_urls, modalita=req.modalita)
+        def _build(parsed: _LlmProgramma, modalita: str) -> ProgrammaResponse:
+            resp = ProgrammaResponse(
+                comune=req.cod_comune,
+                zona=req.zona,
+                sintesi=parsed.sintesi,
+                swot={k: parsed.swot.get(k, []) for k in SWOT_KEYS},
+                proposte=parsed.proposte,
+                citazioni=all_resources,
+                disclaimer=parsed.disclaimer,
+                generato_il=datetime.now(timezone.utc),
+            )
+            return validate_programma(resp, evidence_urls, modalita=modalita)
+
+        if req.modalita == "completa":
+            # Un solo fan-out (già pagato), due sintesi in parallelo: la
+            # scheda (sintesi+SWOT+proposte) e le idee dei generatori — ogni
+            # parte validata con le regole della propria modalità, poi fuse.
+            parsed_scheda, parsed_idee = await asyncio.gather(
+                _run(programma_agent, "programma"),
+                _run(idee_agent, "idee"),  # type: ignore[arg-type]
+            )
+            response = _build(parsed_scheda, "scheda")
+            response_idee = _build(parsed_idee, "idee")
+            # Le idee si riconoscono dal `generatore`; niente duplicati per titolo.
+            titoli = {p.titolo.strip().lower() for p in response.proposte}
+            response.proposte += [
+                p for p in response_idee.proposte
+                if p.titolo.strip().lower() not in titoli
+            ]
+            if not response.disclaimer.strip() and response_idee.disclaimer.strip():
+                response.disclaimer = response_idee.disclaimer
+        else:
+            agent = idee_agent if (req.modalita == "idee" and idee_agent) else programma_agent
+            response = _build(await _run(agent, req.modalita), req.modalita)
+
         return ProgrammaOutput(
             text=response.model_dump_json(),
             response=response,

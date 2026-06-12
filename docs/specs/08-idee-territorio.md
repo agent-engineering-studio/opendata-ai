@@ -160,6 +160,32 @@ parametrico, stessi guardrail). Modifiche:
   ricerca OpenCoesione senza progetti sul tema), tutte `da_verificare`
   (nessuna evidenza di finanziamento → degradazione corretta).
 
+### Secondo giro di collaudo (feedback utente, 12/06 sera)
+
+Dal primo report reale ("troppo schematico, idee senza i progetti degli
+altri comuni"):
+
+- **Modalità `completa`** (ora il default della UI, tasto unico "Genera
+  analisi"): UN solo fan-out di specialisti alimenta ENTRAMBI gli agenti
+  (scheda + idee) in parallelo sullo stesso evidence bundle — report unico
+  con sintesi, SWOT, proposte e idee, al costo di una sola raccolta evidenze.
+  Le proposte si distinguono dal campo `generatore`; ogni parte è validata
+  con le regole della propria modalità.
+- **`ProgrammaResponse.sintesi`**: quadro descrittivo di apertura (8-12
+  frasi, prosa coi numeri del bundle) — risponde a "poco descrittiva".
+  Anti-persuasione applicata anche alla sintesi.
+- **Citazioni per progetto**: `similar_projects`/`stalled_projects` ora
+  includono l'URL risolvibile di OGNI progetto (detail API per CLP) e la
+  cattura li registra come citazioni nominate ("OpenCoesione — <titolo>
+  (<comune>)"). I guardrail di `gap_comparativo`/`incompiuto` ora esigono
+  un link a **progetto specifico** (`/api/progetti/{clp}`), non la pagina
+  del dataset: "cosa hanno fatto gli altri comuni" è verificabile progetto
+  per progetto.
+- Istruzioni rinforzate: progetti sempre PER NOME (titolo+CLP+importo+stato),
+  voci SWOT di 2-4 frasi, descrizioni di 5-10 frasi, idee = interventi
+  concreti ("comunità energetica nei capannoni del PIP sul modello del
+  progetto X di <comune>"), mai auspici generici.
+
 ## Ordine e dipendenze
 
 Richiede: Pezzo 3 (DB locale) per i generatori 1 e 3; Pezzo 4 (programma); Pezzo 5

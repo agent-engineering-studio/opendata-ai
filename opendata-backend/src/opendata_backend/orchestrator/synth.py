@@ -156,6 +156,10 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
                 cit = _citation_resource_from_payload(payload, source)
                 if cit is not None:
                     captured.append(cit)
+                # query_local comparativi: ogni progetto dei comuni simili /
+                # fermo ha il SUO url → una citazione PER PROGETTO, così le
+                # idee possono linkare "cosa hanno fatto gli altri comuni".
+                captured.extend(_project_citations_from_rows(payload))
                 continue
 
             # ── istat_get_data: SDMX-CSV observations ──
@@ -277,6 +281,34 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
 
 #: Fonti i cui tool emettono citazioni API (`source_url`) invece di file.
 _CITATION_SOURCES = ("opencoesione", "osm", "ispra")
+
+#: Quanti progetti per risultato comparativo diventano citazioni nominate.
+_MAX_PROJECT_CITATIONS = 10
+
+
+def _project_citations_from_rows(payload: dict[str, Any]) -> list[Resource]:
+    """Righe-progetto dei kind comparativi → citazioni nominate per progetto.
+
+    `opencoesione_query_local` (similar_projects / stalled_projects) ritorna
+    `rows.progetti[]` con `url` risolvibile per CLP: senza queste citazioni le
+    idee del brainstorming non potrebbero linkare i progetti dei comuni simili
+    (i guardrail scarterebbero URL mai raccolti).
+    """
+    rows = payload.get("rows")
+    if not isinstance(rows, dict) or not isinstance(rows.get("progetti"), list):
+        return []
+    out: list[Resource] = []
+    for proj in rows["progetti"][:_MAX_PROJECT_CITATIONS]:
+        if not isinstance(proj, dict):
+            continue
+        url = proj.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            continue
+        titolo = str(proj.get("titolo") or proj.get("clp") or "progetto")[:80]
+        comune = proj.get("comune")
+        name = f"OpenCoesione — {titolo}" + (f" ({comune})" if comune else "")
+        out.append(Resource(name=name[:120], url=url, format="JSON", source="opencoesione"))
+    return out
 
 
 def _kg_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:

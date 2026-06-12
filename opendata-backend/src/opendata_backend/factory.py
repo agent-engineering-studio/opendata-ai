@@ -387,12 +387,15 @@ class OrchestratorSession:
         """
         if not self._participants:
             raise RuntimeError("OrchestratorSession not entered")
-        agent = self._idee_agent if req.modalita == "idee" else self._programma_agent
-        if agent is None:
+        if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
         async with self._lock:
-            aggregator = build_programma_aggregator(agent, req)
+            # L'aggregatore riceve entrambi gli agenti: la modalità decide se
+            # usarne uno solo (scheda/idee) o fonderli (completa).
+            aggregator = build_programma_aggregator(
+                self._programma_agent, req, idee_agent=self._idee_agent
+            )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(build_programma_task(req, zona_info))
         outputs = events.get_outputs()

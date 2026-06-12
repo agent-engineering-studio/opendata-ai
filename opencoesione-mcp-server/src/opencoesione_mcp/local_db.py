@@ -32,6 +32,16 @@ _engine: AsyncEngine | None = None
 _engine_url: str | None = None
 
 
+def _project_url(clp: str | None) -> str | None:
+    """URL risolvibile del progetto (detail API, pattern verificato live).
+
+    Serve alle idee comparative: "cosa hanno fatto i comuni simili" deve
+    essere citabile PER PROGETTO, non con la pagina generica del bulk."""
+    if not clp:
+        return None
+    return f"https://opencoesione.gov.it/it/api/progetti/{str(clp).strip().lower()}.json"
+
+
 def db_url() -> str | None:
     """The configured mirror DSN, or None when the local tool must stay off."""
     return os.getenv(DB_URL_ENV) or None
@@ -323,6 +333,7 @@ async def similar_projects(
         progetti.append(
             {
                 "clp": r["clp"],
+                "url": _project_url(r["clp"]),
                 "comune": nomi.get(r["cod_comune"], r["cod_comune"]),
                 "cod_comune": r["cod_comune"],
                 "titolo": r["titolo"],
@@ -411,6 +422,7 @@ async def stalled_projects(
         out.append(
             {
                 "clp": r["clp"],
+                "url": _project_url(r["clp"]),
                 "titolo": r["titolo"],
                 "tema": r["tema"],
                 "ciclo": r["ciclo"],

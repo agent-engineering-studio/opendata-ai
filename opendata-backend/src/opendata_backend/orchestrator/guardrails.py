@@ -86,17 +86,26 @@ def _evidence_hosts(evidenze: list) -> list[str]:
 
 
 def _generatore_ok(prop) -> bool:
-    """La proposta soddisfa i requisiti minimi di evidenza del suo generatore?"""
+    """La proposta soddisfa i requisiti minimi di evidenza del suo generatore?
+
+    Per gap_comparativo e incompiuto serve un link a PROGETTO SPECIFICO
+    (`/api/progetti/{clp}`), non la pagina generica del dataset: "cosa hanno
+    fatto gli altri comuni" deve essere verificabile progetto per progetto
+    (feedback del primo collaudo).
+    """
     hosts = _evidence_hosts(prop.evidenze)
     urls = [(e.url or "").lower() for e in prop.evidenze]
     has_oc = any(_OC_HOST in h for h in hosts)
+    has_oc_project = any(
+        _OC_HOST in h and "/progetti/" in u for h, u in zip(hosts, urls)
+    )
     if prop.generatore == "gap_comparativo":
-        return has_oc
+        return has_oc_project
     if prop.generatore == "fabbisogno":
         has_indic = any(any(d in h for d in _INDICATORE_HOSTS) for h in hosts)
         return has_indic and has_oc
     if prop.generatore == "incompiuto":
-        return has_oc
+        return has_oc_project
     if prop.generatore == "finestra_finanziamento":
         return any(_OC_HOST in h and "aggregati" in u for h, u in zip(hosts, urls))
     return False  # generatore mancante o sconosciuto
@@ -179,6 +188,12 @@ def validate_programma(
             prop.fattibilita.livello = "media"
         kept_proposte.append(prop)
     resp.proposte = kept_proposte
+
+    # ── Sintesi: stessa euristica anti-persuasione delle voci ──
+    hit = _persuasion_hit(resp.sintesi or "")
+    if hit:
+        log.warning("guardrail: sintesi rimossa (marcatore %r)", hit)
+        resp.sintesi = ""
 
     # ── Disclaimer obbligatorio ──
     if not (resp.disclaimer or "").strip():

@@ -104,7 +104,7 @@ export type Proposta = {
   generatore?: Generatore | (string & {}) | null;
 };
 
-export type ModalitaProgramma = "scheda" | "idee";
+export type ModalitaProgramma = "scheda" | "idee" | "completa";
 
 export type ProgrammaRequest = {
   /** Codice ISTAT del comune, es. "072006". */
@@ -165,6 +165,8 @@ export type ZoneListResponse = {
 export type ProgrammaResponse = {
   comune: string;
   zona?: string | null;
+  /** Quadro descrittivo di apertura (prosa coi numeri chiave). */
+  sintesi?: string;
   /** Chiavi: forze / debolezze / opportunita / minacce. */
   swot: Record<string, VoceSwot[]>;
   proposte: Proposta[];

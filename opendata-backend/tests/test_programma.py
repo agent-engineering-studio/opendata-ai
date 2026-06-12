@@ -340,6 +340,8 @@ _AGG_URL = "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comu
 _SEARCH_URL = (
     "https://opencoesione.gov.it/it/api/progetti.json?territorio=barletta-comune"
 )
+#: URL di PROGETTO SPECIFICO — richiesto da gap_comparativo/incompiuto.
+_PROJ_URL = "https://opencoesione.gov.it/it/api/progetti/peer1clp.json"
 _IDEE_REQ = ProgrammaRequest(cod_comune="110002", comune_nome="Barletta", modalita="idee")
 
 
@@ -357,32 +359,34 @@ def _idea(generatore: str | None, evidenze: list[dict[str, Any]]) -> dict[str, A
 @pytest.mark.asyncio
 async def test_idee_mode_enforces_generator_premises() -> None:
     """Per generatore: premesse minime o la proposta è SCARTATA (non degradata)."""
-    # NB: _OC_URL è esso stesso un URL "aggregati" → per i casi che devono
-    # fallire il check finestra serve un URL OpenCoesione di RICERCA.
-    ev_oc = {"fonte": "opencoesione", "url": _SEARCH_URL, "dettaglio": "x"}
+    # gap_comparativo/incompiuto esigono il link al PROGETTO SPECIFICO
+    # (/api/progetti/{clp}); la ricerca generica non basta più.
+    ev_proj = {"fonte": "opencoesione", "url": _PROJ_URL, "dettaglio": "x"}
+    ev_search = {"fonte": "opencoesione", "url": _SEARCH_URL, "dettaglio": "x"}
     ev_agg = {"fonte": "opencoesione", "url": _AGG_URL, "dettaglio": "x"}
     ev_istat = {"fonte": "istat", "url": _ISTAT_URL, "dettaglio": "x"}
     agent = _StubProgrammaAgent(
         _llm_json(
             swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
             proposte=[
-                _idea("gap_comparativo", [ev_oc]),              # ok
-                _idea("fabbisogno", [ev_istat, ev_oc]),          # ok (indicatore + locale)
+                _idea("gap_comparativo", [ev_proj]),             # ok (progetto specifico)
+                _idea("gap_comparativo", [ev_search]),           # solo ricerca → out
+                _idea("fabbisogno", [ev_istat, ev_search]),      # ok (indicatore + locale)
                 _idea("fabbisogno", [ev_istat]),                 # manca la ricerca locale → out
-                _idea("incompiuto", [ev_oc]),                    # ok
+                _idea("incompiuto", [ev_proj]),                  # ok
                 _idea("finestra_finanziamento", [ev_agg]),       # ok (aggregati)
-                _idea("finestra_finanziamento", [ev_oc]),        # non è un URL aggregati → out
-                _idea(None, [ev_oc]),                            # senza generatore → out
-                _idea("GAP_COMPARATIVO ", [ev_oc]),              # normalizzato → ok
+                _idea("finestra_finanziamento", [ev_search]),    # non è un URL aggregati → out
+                _idea(None, [ev_proj]),                          # senza generatore → out
+                _idea("GAP_COMPARATIVO ", [ev_proj]),            # normalizzato → ok
             ],
         )
     )
-    # Il bundle deve contenere anche l'URL aggregati perché superi il check URL.
     parts = _participants()
     parts[0] = _participant(
         "opencoesione",
         "Narrativa.",
         [
+            {"name": "progetto peer", "url": _PROJ_URL, "format": "JSON", "content": None},
             {"name": "ricerca", "url": _SEARCH_URL, "format": "JSON", "content": None},
             {"name": "aggregati", "url": _AGG_URL, "format": "JSON", "content": None},
         ],
@@ -412,6 +416,88 @@ def test_idee_task_asks_for_generator_inputs() -> None:
     assert "similar_projects" in task
     # La modalità scheda non chiede i kind comparativi.
     assert "gap_by_tema" not in build_programma_task(_REQ, None)
+
+
+# ───────────────── modalità completa: report unico (feedback collaudo) ─────
+
+
+@pytest.mark.asyncio
+async def test_completa_merges_scheda_and_idee_from_one_fanout() -> None:
+    """UN fan-out alimenta entrambi gli agenti: SWOT+sintesi dalla scheda,
+    idee taggate col generatore fuse nello stesso report."""
+    scheda_agent = _StubProgrammaAgent(
+        _llm_json(sintesi="Quadro descrittivo del territorio con numeri chiave.")
+    )
+    idee_agent = _StubProgrammaAgent(
+        _llm_json(
+            sintesi="",
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("gap_comparativo", [
+                    {"fonte": "opencoesione", "url": _PROJ_URL, "dettaglio": "x"}
+                ]),
+            ],
+        )
+    )
+    req = ProgrammaRequest(cod_comune="110002", comune_nome="Barletta", modalita="completa")
+    parts = _participants()
+    parts[0] = _participant(
+        "opencoesione", "Narrativa.",
+        [{"name": "progetto peer", "url": _PROJ_URL, "format": "JSON", "content": None},
+         {"name": "capacità", "url": _OC_URL, "format": "JSON", "content": None}],
+    )
+    aggregate = build_programma_aggregator(
+        scheda_agent, req, idee_agent=idee_agent  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert resp.sintesi.startswith("Quadro descrittivo")
+    assert len(resp.swot["forze"]) == 1  # dalla scheda
+    senza_gen = [p for p in resp.proposte if not p.generatore]
+    con_gen = [p for p in resp.proposte if p.generatore]
+    assert len(senza_gen) == 1 and len(con_gen) == 1
+    assert con_gen[0].generatore == "gap_comparativo"
+    # Entrambi gli agenti hanno ricevuto lo STESSO bundle (un solo fan-out).
+    assert scheda_agent.last_prompt == idee_agent.last_prompt
+
+
+def test_completa_requires_idee_agent() -> None:
+    req = ProgrammaRequest(cod_comune="110002", modalita="completa")
+    with pytest.raises(ValueError, match="idee_agent"):
+        build_programma_aggregator(_StubProgrammaAgent("{}"), req)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_project_rows_become_named_citations() -> None:
+    """similar_projects: ogni progetto peer diventa citazione nominata —
+    indispensabile perché le idee possano linkare cosa hanno fatto i simili."""
+    from opendata_backend.orchestrator.synth import _project_citations_from_rows
+
+    payload = {
+        "kind": "similar_projects",
+        "rows": {"progetti": [
+            {"clp": "PEER1", "url": _PROJ_URL, "titolo": "Comunità energetica PIP",
+             "comune": "Bisceglie", "finanziato": 1000.0},
+            {"clp": "NOURL", "titolo": "senza url"},
+        ]},
+        "source_url": "https://opencoesione.gov.it/it/opendata/",
+    }
+    cits = _project_citations_from_rows(payload)
+    assert len(cits) == 1
+    assert cits[0].url == _PROJ_URL
+    assert "Comunità energetica PIP" in cits[0].name and "Bisceglie" in cits[0].name
+
+
+def test_sintesi_passes_guardrails_but_persuasion_is_stripped() -> None:
+    resp = _resp([])
+    resp.sintesi = "Il comune conta 92.798 residenti e 753 progetti di coesione."
+    out = validate_programma(resp, set())
+    assert out.sintesi.startswith("Il comune conta")
+
+    resp2 = _resp([])
+    resp2.sintesi = "Votate per noi: risultati straordinari garantiti!"
+    out2 = validate_programma(resp2, set())
+    assert out2.sintesi == ""
 
 
 # ───────────────────── tier documentale (Pezzo 9) ──────────────────────────

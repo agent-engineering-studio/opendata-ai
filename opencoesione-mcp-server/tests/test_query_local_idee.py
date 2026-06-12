@@ -99,6 +99,11 @@ async def test_similar_projects_orders_by_ratio(mirror_with_anagrafica: Path) ->
     assert titoli == ["Comunità energetica PIP", "Fotovoltaico capannoni"]
     assert out["progetti"][0]["spend_ratio"] == pytest.approx(0.95)
     assert out["progetti"][0]["comune"] == "Bisceglie"
+    # Ogni progetto peer ha il SUO url risolvibile: è ciò che permette alle
+    # idee di linkare "cosa hanno fatto gli altri comuni".
+    assert out["progetti"][0]["url"] == (
+        "https://opencoesione.gov.it/it/api/progetti/peer1.json"
+    )
     assert "criteri" in out  # i criteri del peer group sono dichiarati
 
 
