@@ -183,6 +183,45 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── SearXNG — meta-search backend per la fonte web (marketing P10) ─────
+  # Profilo "web": opt-in (start con COMPOSE_PROFILES=web o `--profile web`),
+  # serve solo quando ENABLE_WEB=true. JSON API abilitata in infra/searxng.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: opendata-ai-searxng
+    profiles: ["web"]
+    ports:
+      - "${SEARXNG_PORT:-18099}:8080"
+    volumes:
+      - ./infra/searxng:/etc/searxng:ro
+    environment:
+      SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-18099}/
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── Web MCP — web_search/web_fetch su SearXNG (ispirazioni marketing) ─────
+  web-mcp:
+    build:
+      context: .
+      dockerfile: web-mcp/Dockerfile
+    image: web-mcp:local
+    container_name: web-mcp
+    profiles: ["web"]
+    ports:
+      - "${WEB_MCP_PORT:-18088}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-searxng}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+      WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-8}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - searxng
+    restart: unless-stopped
+
   # ───── Unified backend (multi-source fan-out + /datasets/* + stubs) — main UI entry on :8000 ─────
   opendata-backend:
     build:
@@ -233,6 +272,11 @@ services:
       # documenti disabilitato (endpoint 503).
       KG_API_URL: ${KG_API_URL:-}
       KG_UPLOAD_DIR: ${KG_UPLOAD_DIR:-/data/kg-uploads}
+      # Fonte web (marketing P10): opt-in. Con ENABLE_WEB=true avvia anche il
+      # profilo "web" (searxng + web-mcp): COMPOSE_PROFILES=web make up.
+      ENABLE_WEB: ${ENABLE_WEB:-false}
+      WEB_MCP_URL: ${WEB_MCP_URL:-http://web-mcp:8080/mcp}
+      WEB_AGENT_NAME: ${WEB_AGENT_NAME:-web}
       # Ambito territoriale (vuoto = nessun limite; prod = Puglia).
       TERRITORIO_PROVINCE: ${TERRITORIO_PROVINCE:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

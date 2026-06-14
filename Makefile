@@ -16,7 +16,7 @@ OLLAMA_IMAGE     ?= ghcr.io/agent-engineering-studio/opendata-ai-ollama:latest
 
 # Custom-built compose services (skip the Ollama service — it uses a pre-built image
 # managed by `make build-ollama` / `make pull-models`, not by `docker compose build`).
-CUSTOM_SERVICES := ckan-mcp istat-mcp opencoesione-mcp ispra-mcp osm-mcp opendata-backend opendata-ai-ui
+CUSTOM_SERVICES := ckan-mcp istat-mcp opencoesione-mcp ispra-mcp osm-mcp web-mcp opendata-backend opendata-ai-ui
 
 # `make agent` launches the unified backend REPL against the running stack.
 SOURCE ?= backend

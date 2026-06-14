@@ -1,0 +1,17 @@
+# SearXNG — backend di meta-ricerca per la fonte web del marketing territoriale
+# (consumata da web-mcp → opendata_core.web). Solo uso interno alla rete compose.
+#
+# - `formats: [html, json]`: la JSON API è OBBLIGATORIA (opendata_core.web la
+#   interroga con format=json); di default SearXNG espone solo html.
+# - `limiter: false`: niente rate-limit/bot-detection sul consumo server↔server.
+# - `secret_key`: firma token interni; cambiala in produzione (istanza interna,
+#   rischio basso). Montato read-only.
+use_default_settings: true
+server:
+  secret_key: "opendata-ai-searxng-internal-change-me"
+  limiter: false
+  image_proxy: false
+search:
+  formats:
+    - html
+    - json
