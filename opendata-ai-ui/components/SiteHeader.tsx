@@ -112,13 +112,23 @@ export function SiteHeader() {
             {/* Brand (left) */}
             <Link
               href="/"
-              className="text-decoration-none text-reset"
+              className="text-decoration-none text-reset d-flex align-items-center gap-2"
               style={{ minWidth: 0 }}
             >
-              <h1 className="h4 mb-0">OpenData AI</h1>
-              <p className="small text-muted mb-0 d-none d-md-block">
-                Open data CKAN + statistiche ufficiali
-              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-mark.svg"
+                alt=""
+                width={40}
+                height={40}
+                className="flex-shrink-0"
+              />
+              <span style={{ minWidth: 0 }}>
+                <h1 className="h4 mb-0">OpenData AI</h1>
+                <p className="small text-muted mb-0 d-none d-md-block">
+                  Open data CKAN + statistiche ufficiali
+                </p>
+              </span>
             </Link>
 
             {/* Nav (centered) — pushed to center via flex-grow on both sides */}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { ComuneMatch, ZonaTipo, ZoneCandidate, ZoneListResponse } from "@/lib/types";
+import type { ComuneMatch } from "@/lib/types";
 import type { GeoLayer } from "@/components/GeoMap";
 
 const GeoMap = dynamic(() => import("@/components/GeoMap").then((m) => m.GeoMap), {
@@ -16,35 +16,17 @@ const GeoMap = dynamic(() => import("@/components/GeoMap").then((m) => m.GeoMap)
   ),
 });
 
-const TIPI: { value: ZonaTipo; label: string }[] = [
-  { value: "industriale", label: "Industriale" },
-  { value: "commerciale", label: "Commerciale" },
-  { value: "portuale", label: "Portuale" },
-  { value: "centro_storico", label: "Centro storico" },
-  { value: "verde", label: "Verde" },
-  { value: "agricola", label: "Agricola" },
-];
-
 const BASE_COLOR = "#0066cc";
-const SELECTED_COLOR = "#d9364f";
 
 export type ZoneSelection = {
   cod_comune: string;
   comune_nome: string;
-  zona_tipo: ZonaTipo | null;
-  zona_osm_id: string | null;
-  zona_label: string | null;
 };
 
-function areaLabel(m2: number): string | null {
-  if (!m2) return null;
-  if (m2 >= 1_000_000) return `${(m2 / 1_000_000).toFixed(1)} km²`;
-  return `${(m2 / 10_000).toFixed(1)} ha`;
-}
-
 /**
- * Selettore "comune → tipo zona → zona riconosciuta OSM" (spec 06).
- * Nessun disegno a mano libera: le zone sono entità OSM citabili.
+ * Selettore del comune per lo studio del territorio.
+ * L'unità di analisi è l'INTERO comune: niente zone, la mappa mostra il
+ * confine comunale (geometria OSM via /territorio/confine).
  */
 export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => void }) {
   const { getToken } = useAuth();
@@ -53,23 +35,9 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [comune, setComune] = useState<ComuneMatch | null>(null);
-  const [tipo, setTipo] = useState<ZonaTipo | null>(null);
-  const [zones, setZones] = useState<ZoneListResponse | null>(null);
-  const [loadingZones, setLoadingZones] = useState(false);
-  const [zoneError, setZoneError] = useState<string | null>(null);
-  const [selectedZone, setSelectedZone] = useState<ZoneCandidate | null>(null);
+  const [confine, setConfine] = useState<GeoJSON.Feature | null>(null);
+  const [loadingConfine, setLoadingConfine] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function emit(c: ComuneMatch | null, t: ZonaTipo | null, z: ZoneCandidate | null) {
-    if (!c) return;
-    onChange({
-      cod_comune: c.ref_istat,
-      comune_nome: c.nome,
-      zona_tipo: z ? t : null,
-      zona_osm_id: z ? z.osm_id : null,
-      zona_label: z ? (z.name ?? `${TIPI.find((x) => x.value === t)?.label} senza nome`) : null,
-    });
-  }
 
   // Autocomplete comune (debounced).
   useEffect(() => {
@@ -89,7 +57,6 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
           const data = (await res.json()) as { results: ComuneMatch[] };
           setMatches(data.results.slice(0, 8));
         } else {
-          // 503 = OpenStreetMap/Overpass momentaneamente giù: non restare muti.
           setMatches([]);
           setSearchError(true);
         }
@@ -105,73 +72,51 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
     };
   }, [query, comune, getToken]);
 
-  // Carica le zone quando comune + tipo sono scelti.
+  // Carica il confine del comune selezionato (per la mappa).
   useEffect(() => {
-    if (!comune || !tipo) {
-      setZones(null);
+    if (!comune?.osm_id) {
+      setConfine(null);
       return;
     }
     let cancelled = false;
     (async () => {
-      setLoadingZones(true);
-      setZoneError(null);
-      setSelectedZone(null);
+      setLoadingConfine(true);
       try {
         const token = await getToken();
-        const params = new URLSearchParams({
-          cod_comune: comune.ref_istat,
-          tipo,
-          comune_nome: comune.nome,
-        });
-        const res = await apiFetch(`/territorio/zone?${params}`, { token });
+        const params = new URLSearchParams({ osm_id: comune.osm_id, cod_comune: comune.ref_istat });
+        const res = await apiFetch(`/territorio/confine?${params}`, { token });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as ZoneListResponse;
-        if (!cancelled) setZones(data);
-      } catch (err) {
-        if (!cancelled)
-          setZoneError(err instanceof Error ? err.message : String(err));
+        const data = (await res.json()) as { feature: GeoJSON.Feature };
+        if (!cancelled) setConfine(data.feature ?? null);
+      } catch {
+        if (!cancelled) setConfine(null); // la mappa è un di più: l'analisi procede comunque
       } finally {
-        if (!cancelled) setLoadingZones(false);
+        if (!cancelled) setLoadingConfine(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [comune, tipo, getToken]);
+  }, [comune, getToken]);
 
   const layers: GeoLayer[] = useMemo(() => {
-    if (!zones) return [];
-    return zones.candidates
-      .filter((c) => c.geometry && (c.geometry as { type?: string }).type !== "Point")
-      .map((c) => ({
-        id: c.osm_id,
-        name: c.name ?? c.osm_id,
-        geojson: { type: "Feature", geometry: c.geometry, properties: { name: c.name } },
-        color: selectedZone?.osm_id === c.osm_id ? SELECTED_COLOR : BASE_COLOR,
+    if (!confine || !comune) return [];
+    return [
+      {
+        id: comune.osm_id,
+        name: comune.nome,
+        geojson: confine,
+        color: BASE_COLOR,
         visible: true,
-      }));
-  }, [zones, selectedZone]);
+      },
+    ];
+  }, [confine, comune]);
 
   function pickComune(m: ComuneMatch) {
     setComune(m);
     setQuery(m.nome);
     setMatches([]);
-    setZones(null);
-    setSelectedZone(null);
-    emit(m, tipo, null);
-  }
-
-  function pickTipo(t: ZonaTipo) {
-    const next = tipo === t ? null : t;
-    setTipo(next);
-    setSelectedZone(null);
-    if (comune) emit(comune, next, null);
-  }
-
-  function pickZone(c: ZoneCandidate) {
-    const next = selectedZone?.osm_id === c.osm_id ? null : c;
-    setSelectedZone(next);
-    if (comune) emit(comune, tipo, next);
+    onChange({ cod_comune: m.ref_istat, comune_nome: m.nome });
   }
 
   return (
@@ -189,7 +134,7 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
             setQuery(e.target.value);
             if (comune && e.target.value !== comune.nome) setComune(null);
           }}
-          placeholder="es. Barletta"
+          placeholder="es. Bari"
           autoComplete="off"
           role="combobox"
           aria-expanded={matches.length > 0}
@@ -227,109 +172,30 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
         {comune ? (
           <div className="form-text">
             Selezionato: <strong>{comune.nome}</strong> (ISTAT {comune.ref_istat})
+            {" "}— l&apos;analisi riguarda l&apos;intero comune.
           </div>
         ) : null}
       </div>
 
-      {/* Tipo zona */}
-      <fieldset className="mb-3" disabled={!comune}>
-        <legend className="form-label fw-semibold fs-6">
-          Tipo di zona <span className="fw-normal text-muted">(opzionale — senza, analisi a livello comune)</span>
-        </legend>
-        <div className="d-flex flex-wrap gap-2">
-          {TIPI.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              className={`btn btn-sm ${tipo === t.value ? "btn-primary" : "btn-outline-primary"}`}
-              aria-pressed={tipo === t.value}
-              onClick={() => pickTipo(t.value)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* Candidati */}
-      {comune && tipo ? (
-        <div className="mb-2">
-          {loadingZones ? (
-            <p className="small text-muted">Cerco le zone su OpenStreetMap…</p>
-          ) : zoneError ? (
-            <div className="alert alert-warning py-2 small mb-2">
-              Ricerca zone non disponibile ({zoneError}) — l&apos;analisi procede a
-              livello comunale.
+      {/* Mappa del confine comunale */}
+      {comune ? (
+        <div
+          className="border rounded overflow-hidden mb-2"
+          style={{ height: 300 }}
+          aria-label={`Mappa del comune di ${comune.nome}`}
+        >
+          {loadingConfine ? (
+            <div className="d-flex h-100 align-items-center justify-content-center text-muted small">
+              Carico il confine del comune…
             </div>
-          ) : zones ? (
-            <>
-              {zones.fallback_level === 2 ? (
-                <div className="alert alert-warning py-2 small mb-2">
-                  Nessuna zona taggata su OSM: risultati dalla ricerca per nome
-                  (meno precisi).
-                </div>
-              ) : null}
-              {zones.fallback_level === 3 || zones.candidates.length === 0 ? (
-                <div className="alert alert-info py-2 small mb-2">
-                  Nessuna zona di questo tipo mappata nel comune: l&apos;analisi
-                  procede a livello comunale. Puoi descrivere la zona nel campo
-                  testuale qui sotto.
-                </div>
-              ) : (
-                <div className="row g-2">
-                  <div className="col-12 col-md-5">
-                    <ul
-                      className="list-group overflow-auto"
-                      style={{ maxHeight: 280 }}
-                      aria-label="Zone candidate"
-                    >
-                      {zones.candidates.map((c) => {
-                        const active = selectedZone?.osm_id === c.osm_id;
-                        const area = areaLabel(c.area_m2);
-                        return (
-                          <li key={c.osm_id}>
-                            <button
-                              type="button"
-                              className={`list-group-item list-group-item-action ${active ? "active" : ""}`}
-                              aria-pressed={active}
-                              onClick={() => pickZone(c)}
-                            >
-                              <span className="fw-semibold">
-                                {c.name ?? "(senza nome)"}
-                              </span>
-                              {area ? (
-                                <span className={`small ms-2 ${active ? "" : "text-muted"}`}>
-                                  {area}
-                                </span>
-                              ) : null}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <p className="form-text mb-0">
-                      {selectedZone
-                        ? "Zona selezionata — la scheda sarà mirata su quest'area."
-                        : "Seleziona una zona (o nessuna per l'intero comune)."}
-                    </p>
-                  </div>
-                  <div className="col-12 col-md-7">
-                    <div
-                      className="border rounded overflow-hidden"
-                      style={{ height: 280 }}
-                      aria-label="Mappa delle zone candidate"
-                    >
-                      <GeoMap
-                        layers={layers}
-                        focusLayerIds={selectedZone ? [selectedZone.osm_id] : undefined}
-                        focusKey={selectedZone ? 1 : 0}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : null}
+          ) : layers.length > 0 ? (
+            <GeoMap layers={layers} focusLayerIds={[comune.osm_id]} focusKey={1} />
+          ) : (
+            <div className="d-flex h-100 align-items-center justify-content-center text-muted small text-center px-3">
+              Confine non disponibile in mappa (OpenStreetMap non risponde) —
+              l&apos;analisi procede comunque a livello comunale.
+            </div>
+          )}
         </div>
       ) : null}
     </div>

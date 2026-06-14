@@ -167,6 +167,8 @@ export type ProgrammaResponse = {
   zona?: string | null;
   /** Quadro descrittivo di apertura (prosa coi numeri chiave). */
   sintesi?: string;
+  /** Lettura d'insieme delle idee: leve principali + idee più promettenti. */
+  idee_sintesi?: string;
   /** Chiavi: forze / debolezze / opportunita / minacce. */
   swot: Record<string, VoceSwot[]>;
   proposte: Proposta[];

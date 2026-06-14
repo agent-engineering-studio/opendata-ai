@@ -10,13 +10,15 @@ import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
 import { ZoneSelector, type ZoneSelection } from "@/components/territorio/ZoneSelector";
+import { downloadSchedaMarkdown } from "@/lib/programmaMarkdown";
+import { downloadSchedaPdf } from "@/lib/programmaPdf";
 
 /*
  * Studio del territorio — la UI del verticale PA (spec 05 + 06).
  *
- * Selezione del territorio: comune (autocomplete OSM→ISTAT) → tipo zona →
- * zona riconosciuta OSM (niente disegno a mano libera). L'area risultati
- * ospiterà il toggle Scheda | Idee (Pezzo 8).
+ * Selezione del territorio: comune (autocomplete OSM→ISTAT) con mappa del
+ * confine comunale. L'unità di analisi è l'intero comune; la strategia per le
+ * città grandi (modalità macro: aggregati + top-N) è decisa dal backend.
  */
 
 type Stato =
@@ -85,7 +87,6 @@ function TerritorioInner() {
   const { getToken } = useAuth();
   const [selection, setSelection] = useState<ZoneSelection | null>(null);
   const [codManuale, setCodManuale] = useState("");
-  const [zona, setZona] = useState("");
   const [tema, setTema] = useState("");
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
   const [attesaSec, setAttesaSec] = useState(0);
@@ -130,10 +131,8 @@ function TerritorioInner() {
       const body: ProgrammaRequest = {
         cod_comune: cod,
         comune_nome: selection?.comune_nome ?? null,
-        // La zona OSM selezionata vince sul testo libero (che resta il fallback).
-        zona: selection?.zona_label ?? (zona.trim() || null),
-        zona_tipo: selection?.zona_tipo ?? null,
-        zona_osm_id: selection?.zona_osm_id ?? null,
+        // Analisi a livello di INTERO comune: niente zona (la popolazione e la
+        // strategia macro per le città grandi le decide il backend).
         tema: tema.trim() || null,
         // Un solo fan-out alimenta scheda E idee: report completo in un colpo.
         modalita: "completa" satisfies ModalitaProgramma,
@@ -210,7 +209,7 @@ function TerritorioInner() {
 
   return (
     <main className="container py-4" style={{ maxWidth: 960 }}>
-      {/* ── Header di selezione (qui arriverà il selettore zona OSM, Pezzo 6) ── */}
+      {/* ── Header di selezione: comune + mappa del confine comunale ── */}
       <div className="no-print">
         <h1 className="h3 mb-1">Studio del territorio</h1>
         <p className="text-muted mb-4">
@@ -225,22 +224,7 @@ function TerritorioInner() {
             <ZoneSelector onChange={setSelection} />
 
             <div className="row g-3 mt-1">
-              {!selection?.zona_osm_id ? (
-                <div className="col-12 col-md-4">
-                  <label htmlFor="zona" className="form-label fw-semibold">
-                    Descrizione zona{" "}
-                    <span className="fw-normal text-muted">(opzionale)</span>
-                  </label>
-                  <input
-                    id="zona"
-                    className="form-control"
-                    value={zona}
-                    onChange={(e) => setZona(e.target.value)}
-                    placeholder="es. area industriale"
-                  />
-                </div>
-              ) : null}
-              <div className="col-12 col-md-4">
+              <div className="col-12 col-md-5">
                 <label htmlFor="tema" className="form-label fw-semibold">
                   Tema <span className="fw-normal text-muted">(opzionale)</span>
                 </label>
@@ -251,6 +235,10 @@ function TerritorioInner() {
                   onChange={(e) => setTema(e.target.value)}
                   placeholder="es. energia, trasporti"
                 />
+                <div className="form-text">
+                  Per le città grandi, indicare un tema rende l&apos;analisi più
+                  mirata (altrimenti si concentra sui temi a maggiore dotazione).
+                </div>
               </div>
             </div>
 
@@ -347,13 +335,22 @@ function TerritorioInner() {
                 Generata il {formatGeneratoIl(scheda.generato_il)}
               </p>
             </div>
-            <button
-              type="button"
-              className="btn btn-outline-primary btn-sm no-print"
-              onClick={() => window.print()}
-            >
-              Esporta PDF
-            </button>
+            <div className="d-flex gap-2 no-print">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => downloadSchedaPdf(scheda)}
+              >
+                Esporta PDF
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-primary btn-sm"
+                onClick={() => downloadSchedaMarkdown(scheda)}
+              >
+                Esporta Markdown
+              </button>
+            </div>
           </div>
 
           <DisclaimerBanner text={scheda.disclaimer} />
@@ -378,7 +375,7 @@ function TerritorioInner() {
           {proposte.length === 0 ? (
             <p className="text-muted">
               Nessuna proposta ha superato la verifica delle fonti per questa
-              richiesta. Prova ad allargare il tema o a omettere la zona.
+              richiesta. Prova ad allargare o a cambiare il tema.
             </p>
           ) : (
             <div className="d-flex flex-column gap-3">
@@ -389,9 +386,15 @@ function TerritorioInner() {
           )}
 
           <h2 className="h5 mt-4 mb-3">Idee per il territorio</h2>
+          {scheda.idee_sintesi?.trim() ? (
+            <p className="mb-2" style={{ whiteSpace: "pre-line" }}>
+              {scheda.idee_sintesi}
+            </p>
+          ) : null}
           <p className="small text-muted">
             Spunti nuovi generati dagli scarti tra dati e attuato: confronti con
             comuni simili, bisogni scoperti, progetti fermi, risorse disponibili.
+            Elencate dalla più promettente.
           </p>
           {idee.length === 0 ? (
             <p className="text-muted">

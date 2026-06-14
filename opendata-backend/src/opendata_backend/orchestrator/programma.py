@@ -117,6 +117,16 @@ class ProgrammaRequest(BaseModel):
     # generatori (Pezzo 8); "completa" = UN solo fan-out che alimenta ENTRAMBI
     # gli agenti → report unico (sintesi + SWOT + proposte + idee).
     modalita: Literal["scheda", "idee", "completa"] = "scheda"
+    # Popolazione del comune, arricchita SERVER-SIDE dal router (anagrafica
+    # locale) — NON arriva dal client. Sopra MACRO_POPULATION l'analisi passa
+    # in "modalità macro" (aggregati + top-N, niente enumerazione) per evitare
+    # report sterminati sulle città grandi (es. Milano, ~2600 progetti).
+    popolazione: int | None = None
+
+
+# Soglia "città grande": sopra questa popolazione l'analisi è guidata dagli
+# aggregati territoriali e dai top progetti per tema, mai dall'enumerazione.
+MACRO_POPULATION = 150_000
 
 
 class ProgrammaResponse(BaseModel):
@@ -126,6 +136,11 @@ class ProgrammaResponse(BaseModel):
     # territorio coi numeri del bundle — risponde al feedback "troppo
     # schematica" del primo collaudo. Vuota se l'LLM non la produce.
     sintesi: str = ""
+    # Lettura d'insieme delle IDEE (2-4 frasi): le leve principali del
+    # territorio e quali idee sono più promettenti (impatto × fattibilità).
+    # Risponde al feedback "sembra un report, non un'analisi" — apre la sezione
+    # idee inquadrandole invece di elencarle. Vuota in modalità "scheda".
+    idee_sintesi: str = ""
     swot: dict[str, list[VoceSwot]]  # chiavi: forze/debolezze/opportunita/minacce
     proposte: list[Proposta]
     citazioni: list[Resource]  # tutte le fonti risolvibili raccolte dagli specialisti
@@ -194,6 +209,28 @@ def build_programma_task(
         "— servono: indicatori socioeconomici, progetti pubblici finanziati, "
         "capacità di spesa storica e dataset rilevanti."
     )
+    # Sintesi generale a livello comune che si confronta coi pari: chiedi
+    # SEMPRE gli aggregati territoriali (totali per tema, non l'elenco) e il
+    # confronto con comuni simili — è la spina dorsale di un'analisi sobria.
+    parts.append(
+        "Usa come spina dorsale gli AGGREGATI territoriali per tema (totali "
+        "finanziato/speso, NON l'elenco esaustivo dei progetti) e, dove i tool "
+        "lo permettono, il confronto con COMUNI SIMILI (stessa fascia "
+        "dimensionale e regione). Dei singoli progetti cita solo i più "
+        "rilevanti per importo."
+    )
+    if (req.popolazione or 0) >= MACRO_POPULATION:
+        tema_hint = (
+            f"Concentrati sul tema '{req.tema}'."
+            if req.tema
+            else "Senza un tema specifico, concentrati sui 3-4 temi a maggiore "
+            "dotazione finanziaria."
+        )
+        parts.append(
+            f"MODALITÀ MACRO (città grande, ~{req.popolazione} abitanti): NON "
+            "enumerare i progetti (sono troppi) — lavora SOLO con gli aggregati "
+            f"per tema e i top progetti per importo di ciascun tema. {tema_hint}"
+        )
     if req.modalita in ("idee", "completa"):
         parts.append(
             "MODALITÀ BRAINSTORMING: oltre a quanto sopra, raccogli anche — se i "
@@ -216,14 +253,57 @@ def _bundle_section(source: str, narrative: str, resources: list[Resource]) -> s
     return "\n".join(lines)
 
 
+# Cosa implica ciascun tipo di zona per l'analisi (tassonomia ZonaTipo, Pezzo 6):
+# iniettato nella RICHIESTA così SWOT e proposte si tarano sul profilo funzionale
+# dell'area selezionata invece di restare generici. Chiave = valore lower-case.
+_ZONA_TIPO_FOCUS: dict[str, str] = {
+    "industriale": (
+        "area produttiva — insediamenti e aree dismesse, infrastrutture "
+        "energetiche/logistiche, bonifiche, comunità energetiche, accessibilità merci"
+    ),
+    "commerciale": (
+        "area commerciale/terziaria — attrattività, mobilità e sosta, "
+        "rigenerazione del retail, mix funzionale"
+    ),
+    "portuale": (
+        "area portuale/costiera — logistica marittima, interfaccia porto-città, "
+        "ambiente costiero, cold ironing, dragaggi"
+    ),
+    "centro_storico": (
+        "centro storico — tutela del patrimonio, turismo, residenzialità, "
+        "rigenerazione urbana, accessibilità e ZTL"
+    ),
+    "verde": (
+        "area verde/ambientale — servizi ecosistemici, fruizione, rischio "
+        "idrogeologico, forestazione, biodiversità"
+    ),
+    "agricola": (
+        "area agricola/rurale — filiere e irrigazione, dissesto, "
+        "multifunzionalità, agro-energia, spopolamento"
+    ),
+}
+
+
 def _request_header(req: ProgrammaRequest) -> str:
-    rows = [f"comune ISTAT: {req.cod_comune}"]
+    label = f"{req.cod_comune} ({req.comune_nome})" if req.comune_nome else req.cod_comune
+    rows = [f"comune ISTAT: {label}"]
     if req.zona:
         rows.append(f"zona: {req.zona}" + (f" (tipo: {req.zona_tipo})" if req.zona_tipo else ""))
+    if req.zona_tipo:
+        focus = _ZONA_TIPO_FOCUS.get(req.zona_tipo.strip().lower())
+        if focus:
+            rows.append(f"profilo della zona: {focus}")
     if req.tema:
         rows.append(f"tema: {req.tema}")
     if req.cicli:
         rows.append(f"cicli: {', '.join(req.cicli)}")
+    if req.popolazione:
+        rows.append(f"popolazione: {req.popolazione}")
+        if req.popolazione >= MACRO_POPULATION:
+            rows.append(
+                "scala: città grande → analisi MACRO (aggregati per tema + top "
+                "progetti per importo, nessuna enumerazione)"
+            )
     return "RICHIESTA:\n" + "\n".join(rows)
 
 
@@ -243,10 +323,24 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
             if candidate.startswith("{"):
                 text = candidate
                 break
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
+    start = text.find("{")
+    if start < 0:
         raise ValueError(f"Nessun oggetto JSON nella risposta del programma_agent: {raw[:200]}")
-    data = json.loads(text[start : end + 1])
+    end = text.rfind("}")
+    # JSON troncato (max_tokens): nessuna chiusura → prendi dal primo `{` in poi
+    # e lascia che json_repair chiuda le strutture aperte.
+    candidate = text[start : end + 1] if end > start else text[start:]
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError:
+        # I modelli, anche a T=0, ogni tanto omettono una virgola o lasciano il
+        # JSON troncato: un parse stretto azzererebbe l'intera scheda. Ripara
+        # best-effort (json_repair) invece di perdere tutto — la validazione
+        # vera resta PER VOCE (sotto) e nei guardrail deterministici.
+        from json_repair import repair_json
+
+        log.warning("JSON del programma_agent malformato: riparo best-effort")
+        data = repair_json(candidate, return_objects=True)
     if not isinstance(data, dict):
         raise ValueError("La risposta del programma_agent non è un oggetto JSON")
 
@@ -371,6 +465,9 @@ def build_programma_aggregator(
             )
             response = _build(parsed_scheda, "scheda")
             response_idee = _build(parsed_idee, "idee")
+            # La sintesi dell'idee_agent è la lettura d'insieme delle idee:
+            # va nel campo dedicato, non sovrascrive la sintesi territoriale.
+            response.idee_sintesi = response_idee.sintesi
             # Le idee si riconoscono dal `generatore`; niente duplicati per titolo.
             titoli = {p.titolo.strip().lower() for p in response.proposte}
             response.proposte += [
@@ -382,6 +479,12 @@ def build_programma_aggregator(
         else:
             agent = idee_agent if (req.modalita == "idee" and idee_agent) else programma_agent
             response = _build(await _run(agent, req.modalita), req.modalita)
+            # In modalità "idee" pura la sintesi prodotta è la lettura delle
+            # idee: spostala nel campo dedicato così il frontend la rende in
+            # cima alla sezione idee (e non come quadro territoriale).
+            if req.modalita == "idee":
+                response.idee_sintesi = response.sintesi
+                response.sintesi = ""
 
         return ProgrammaOutput(
             text=response.model_dump_json(),

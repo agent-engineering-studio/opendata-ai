@@ -16,6 +16,7 @@ from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 
 from ..auth import ClerkUser
+from ..db.repositories import comuni as comuni_repo
 from ..db.repositories import history as history_repo
 from ..db.repositories import users as users_repo
 from ..orchestrator.programma import ProgrammaRequest, ProgrammaResponse
@@ -25,6 +26,21 @@ from ..state import session_holder
 log = logging.getLogger("opendata-backend.programma")
 
 router = APIRouter(tags=["programma"])
+
+
+async def _enrich_popolazione(req: ProgrammaRequest) -> None:
+    """Arricchisce la richiesta con la popolazione del comune (anagrafica
+    locale) → abilita la modalità macro per le città grandi. Best-effort: senza
+    DB o senza anagrafica sincronizzata, la popolazione resta None.
+    """
+    db = session_holder.database
+    if db is None:
+        return
+    try:
+        async with db.session() as session:
+            req.popolazione = await comuni_repo.get_popolazione(session, req.cod_comune)
+    except Exception:
+        log.warning("lookup popolazione fallito per %s (proseguo senza)", req.cod_comune)
 
 
 def _summary(resp: ProgrammaResponse) -> str:
@@ -84,6 +100,7 @@ async def genera_programma(
             "vuota — abilita la fonte nel .env (+ ENABLE_ISPRA/ENABLE_OSM consigliate)"
         )
 
+    await _enrich_popolazione(req)
     try:
         resp = await sess.run_programma(req)
     except RuntimeError as exc:
@@ -122,6 +139,8 @@ async def genera_programma_stream(
             log.warning(
                 "/programma/stream con ENABLE_OPENCOESIONE=false: scheda povera o vuota"
             )
+
+    await _enrich_popolazione(req)
 
     async def _events():
         try:

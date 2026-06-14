@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "OpenData AI",
   description:
     "Il tuo agente di intelligenza artificiale per gli open data — portali CKAN e statistiche ufficiali (ISTAT, Eurostat, OCSE)",
+  icons: { icon: "/logo-mark.svg" },
 };
 
 export default function RootLayout({

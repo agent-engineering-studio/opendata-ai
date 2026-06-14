@@ -291,8 +291,19 @@ class OrchestratorSession:
         if len(participants) < 1:
             raise RuntimeError("No participants enabled — refusing to start")
 
+        # Gli agenti tool-less di sintesi (synth/programma/idee) emettono l'output
+        # FINALE lungo (prosa + JSON ricco). Senza max_tokens il client Anthropic
+        # taglia a 1024 token → JSON troncato → report vuoto. Alziamo il tetto.
+        # temperature=0: per il JSON strutturato vogliamo determinismo, non
+        # creatività di sintassi (a T~1 il modello ogni tanto droppa una virgola).
+        synth_options: dict[str, object] = {
+            **default_options,
+            "temperature": 0.0,
+            "max_tokens": s.synth_max_tokens,
+        }
+
         synth_agent = await self._enter_agent(
-            chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, default_options,
+            chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, synth_options,
         )
         self._synth_agent = synth_agent
 
@@ -308,12 +319,12 @@ class OrchestratorSession:
                 )
             self._programma_agent = await self._enter_agent(
                 programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
-                None, default_options,
+                None, synth_options,
             )
             # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
             self._idee_agent = await self._enter_agent(
                 programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
-                None, default_options,
+                None, synth_options,
             )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
@@ -441,12 +452,24 @@ class OrchestratorSession:
             fw_logger = logging.getLogger("agent_framework")
             fw_logger.addHandler(handler)
 
+            per_specialist = self._settings.specialist_timeout_sec
+
             async def _worker(agent: Agent) -> _WrappedAgentResult:
                 name = getattr(agent, "name", None) or "agent"
                 in_flight.add(name)
                 await queue.put({"event": "status", "source": name, "phase": "start"})
                 try:
-                    resp = await agent.run(task_text)
+                    # Timeout PER SPECIALISTA: uno specialista lento (es. CKAN che
+                    # ritenta download 404) non deve bloccare l'intero report —
+                    # scaduto, viene escluso e gli altri proseguono.
+                    resp = await asyncio.wait_for(agent.run(task_text), timeout=per_specialist)
+                except asyncio.TimeoutError:
+                    in_flight.discard(name)
+                    await queue.put({
+                        "event": "status", "source": name, "phase": "end",
+                        "error": f"timeout dopo {int(per_specialist)}s",
+                    })
+                    raise
                 except Exception as exc:
                     in_flight.discard(name)
                     await queue.put(
@@ -618,12 +641,23 @@ class OrchestratorSession:
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
 
+            per_specialist = self._settings.specialist_timeout_sec
+
             async def _worker(agent: Agent) -> _WrappedAgentResult:
                 name = getattr(agent, "name", None) or "agent"
                 in_flight.add(name)
                 await queue.put({"event": "status", "source": name, "phase": "start"})
                 try:
-                    resp = await agent.run(query)
+                    # Timeout PER SPECIALISTA (vedi run_programma_streaming): uno
+                    # specialista lento non blocca l'intero fan-out.
+                    resp = await asyncio.wait_for(agent.run(query), timeout=per_specialist)
+                except asyncio.TimeoutError:
+                    in_flight.discard(name)
+                    await queue.put({
+                        "event": "status", "source": name, "phase": "end",
+                        "error": f"timeout dopo {int(per_specialist)}s",
+                    })
+                    raise
                 except Exception as exc:
                     in_flight.discard(name)
                     await queue.put(
