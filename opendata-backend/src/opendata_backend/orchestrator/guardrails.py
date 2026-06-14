@@ -69,6 +69,12 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento")
 
+# Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
+# differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
+# regola (A)+(B): ogni spunto cita ≥1 premessa LOCALE verificabile (fonte_tipo
+# "dato_locale") + ≥1 precedente ESTERNO fetchabile (fonte web → "ispirazione_esterna").
+GENERATORI_MARKETING = ("caso_analogo", "asset_sottoutilizzato", "domanda_emergente")
+
 _OC_HOST = "opencoesione.gov.it"
 _INDICATORE_HOSTS = ("istat.it", "isprambiente.it", "openstreetmap.org", "overpass-api.de")
 
@@ -109,6 +115,26 @@ def _generatore_ok(prop) -> bool:
     if prop.generatore == "finestra_finanziamento":
         return any(_OC_HOST in h and "aggregati" in u for h, u in zip(hosts, urls))
     return False  # generatore mancante o sconosciuto
+
+
+def _generatore_marketing_ok(prop) -> bool:
+    """Lo spunto marketing soddisfa la regola (A)+(B)? (Pezzo 10).
+
+    - generatore ∈ GENERATORI_MARKETING;
+    - (A) ≥1 evidenza LOCALE verificabile (fonte_tipo "dato_locale");
+    - (B) ≥1 evidenza ESTERNA (fonte web → "ispirazione_esterna").
+    Le evidenze qui sono già filtrate a quelle con URL risolvibile, quindi (B)
+    implica un precedente esterno effettivamente fetchabile. Manca (A) o (B)
+    → lo spunto è scartato (non degradato): senza premessa locale non è
+    difendibile, senza precedente esterno non è "marketing che prende spunto".
+    """
+    if prop.generatore not in GENERATORI_MARKETING:
+        return False
+    has_local = any(getattr(e, "fonte_tipo", "dato_locale") == "dato_locale" for e in prop.evidenze)
+    has_external = any(
+        getattr(e, "fonte_tipo", None) == "ispirazione_esterna" for e in prop.evidenze
+    )
+    return has_local and has_external
 
 
 def validate_programma(
@@ -159,6 +185,13 @@ def validate_programma(
                 prop.titolo[:40], prop.generatore,
             )
             continue
+        if modalita == "marketing" and not _generatore_marketing_ok(prop):
+            log.warning(
+                "guardrail marketing: spunto %r scartato (generatore %r senza "
+                "premessa locale + precedente esterno)",
+                prop.titolo[:40], prop.generatore,
+            )
+            continue
         # Linea di finanziamento dichiarabile solo con fonte raccolta davvero.
         if prop.finanziamento is not None and (
             (prop.finanziamento.fonte_url or "").strip() not in urls
@@ -168,12 +201,34 @@ def validate_programma(
                 prop.titolo[:40],
             )
             prop.finanziamento = None
-        if prop.finanziamento is None and prop.fattibilita.livello != "da_verificare":
+        # La regola "senza finanziamento → da_verificare" vale per le proposte
+        # finanziabili (scheda/idee). Il marketing territoriale NON è ancorato a
+        # un fondo: la sua fattibilità riflette la facilità d'azione, non la
+        # disponibilità di risorse — quindi questa degradazione NON si applica.
+        if (
+            modalita != "marketing"
+            and prop.finanziamento is None
+            and prop.fattibilita.livello != "da_verificare"
+        ):
             log.info(
                 "guardrail: proposta %r senza finanziamento → fattibilità da_verificare",
                 prop.titolo[:40],
             )
             prop.fattibilita.livello = "da_verificare"
+        # Marketing: fattibilità mai "alta" su SOLA base esterna — serve un
+        # riscontro locale (difesa ridondante: _generatore_marketing_ok già lo
+        # impone, ma tiene la regola esplicita per chiarezza/test).
+        if (
+            modalita == "marketing"
+            and prop.fattibilita.livello == "alta"
+            and prop.evidenze
+            and all(getattr(e, "fonte_tipo", None) == "ispirazione_esterna" for e in prop.evidenze)
+        ):
+            log.info(
+                "guardrail marketing: spunto %r solo esterno → fattibilità degradata a media",
+                prop.titolo[:40],
+            )
+            prop.fattibilita.livello = "media"
         # Tier documentale (spec 09): fattibilità mai "alta" su SOLA base
         # documentale — serve almeno un riscontro certificato.
         if (

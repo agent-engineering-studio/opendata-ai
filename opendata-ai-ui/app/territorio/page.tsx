@@ -89,6 +89,9 @@ function TerritorioInner() {
   const [selection, setSelection] = useState<ZoneSelection | null>(null);
   const [codManuale, setCodManuale] = useState("");
   const [tema, setTema] = useState("");
+  // Modalità report: "completa" (sintesi+SWOT+proposte+idee finanziabili) o
+  // "marketing" (spunti di attrattività: turismo/viabilità/sicurezza/brand).
+  const [modalita, setModalita] = useState<ModalitaProgramma>("completa");
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
   const [attesaSec, setAttesaSec] = useState(0);
   const [steps, setSteps] = useState<Step[]>([]);
@@ -139,8 +142,9 @@ function TerritorioInner() {
         // Analisi a livello di INTERO comune: niente zona (la popolazione e la
         // strategia macro per le città grandi le decide il backend).
         tema: tema.trim() || null,
-        // Un solo fan-out alimenta scheda E idee: report completo in un colpo.
-        modalita: "completa" satisfies ModalitaProgramma,
+        // "completa" = un fan-out → scheda + idee; "marketing" = spunti di
+        // attrattività (turismo/viabilità/sicurezza/brand) dalla fonte web.
+        modalita,
         // "Rigenera": salta la cache lato backend e rifà il fan-out.
         ...(force ? { force_refresh: true } : {}),
       };
@@ -210,9 +214,26 @@ function TerritorioInner() {
   }
 
   const scheda = stato.fase === "risultato" ? stato.scheda : null;
-  // Nel report unico le idee si riconoscono dal generatore.
-  const proposte = scheda?.proposte.filter((p) => !p.generatore) ?? [];
-  const idee = scheda?.proposte.filter((p) => p.generatore) ?? [];
+  // Nel report unico le idee si riconoscono dal generatore; gli spunti di
+  // marketing dalla lente (o dai generatori di marketing).
+  const MARKETING_GEN = new Set([
+    "caso_analogo",
+    "asset_sottoutilizzato",
+    "domanda_emergente",
+  ]);
+  const isMarketingP = (p: { generatore?: string | null; lente?: string | null }) =>
+    !!p.lente || (!!p.generatore && MARKETING_GEN.has(p.generatore));
+  const proposte = scheda?.proposte.filter((p) => !p.generatore && !p.lente) ?? [];
+  const marketing = scheda?.proposte.filter(isMarketingP) ?? [];
+  const idee = scheda?.proposte.filter((p) => !!p.generatore && !isMarketingP(p)) ?? [];
+  const lenti = Array.from(new Set(marketing.map((p) => (p.lente as string) || "altro")));
+  const LENTE_TITLE: Record<string, string> = {
+    turismo_cultura: "Turismo & cultura",
+    viabilita_mobilita: "Viabilità & mobilità",
+    sicurezza_vivibilita: "Sicurezza & vivibilità",
+    attrattivita_brand: "Attrattività & brand",
+    altro: "Altri spunti",
+  };
 
   return (
     <main className="container py-4" style={{ maxWidth: 960 }}>
@@ -246,6 +267,33 @@ function TerritorioInner() {
                   Per le città grandi, indicare un tema rende l&apos;analisi più
                   mirata (altrimenti si concentra sui temi a maggiore dotazione).
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <span className="form-label fw-semibold d-block mb-1">Tipo di analisi</span>
+              <div className="btn-group" role="group" aria-label="Tipo di analisi">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${modalita === "completa" ? "btn-primary" : "btn-outline-primary"}`}
+                  aria-pressed={modalita === "completa"}
+                  onClick={() => setModalita("completa")}
+                >
+                  Analisi completa
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${modalita === "marketing" ? "btn-primary" : "btn-outline-primary"}`}
+                  aria-pressed={modalita === "marketing"}
+                  onClick={() => setModalita("marketing")}
+                >
+                  Marketing territoriale
+                </button>
+              </div>
+              <div className="form-text">
+                {modalita === "marketing"
+                  ? "Spunti di attrattività (turismo, viabilità, sicurezza, brand) ispirati a iniziative di altri enti — non progetti finanziati."
+                  : "Quadro di sintesi, SWOT, proposte e idee finanziabili dai confronti con territori simili."}
               </div>
             </div>
 
@@ -410,43 +458,79 @@ function TerritorioInner() {
             </>
           ) : null}
 
-          <h2 className="h5 mt-4 mb-3">Proposte</h2>
-          {proposte.length === 0 ? (
-            <p className="text-muted">
-              Nessuna proposta ha superato la verifica delle fonti per questa
-              richiesta. Prova ad allargare o a cambiare il tema.
-            </p>
-          ) : (
-            <div className="d-flex flex-column gap-3">
-              {proposte.map((p, i) => (
-                <ProposalCard key={i} proposta={p} />
-              ))}
-            </div>
-          )}
-
-          <h2 className="h5 mt-4 mb-3">Idee per il territorio</h2>
-          {scheda.idee_sintesi?.trim() ? (
-            <p className="mb-2" style={{ whiteSpace: "pre-line" }}>
-              {scheda.idee_sintesi}
-            </p>
+          {proposte.length > 0 || marketing.length === 0 ? (
+            <>
+              <h2 className="h5 mt-4 mb-3">Proposte</h2>
+              {proposte.length === 0 ? (
+                <p className="text-muted">
+                  Nessuna proposta ha superato la verifica delle fonti per questa
+                  richiesta. Prova ad allargare o a cambiare il tema.
+                </p>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {proposte.map((p, i) => (
+                    <ProposalCard key={i} proposta={p} />
+                  ))}
+                </div>
+              )}
+            </>
           ) : null}
-          <p className="small text-muted">
-            Spunti nuovi generati dagli scarti tra dati e attuato: confronti con
-            comuni simili, bisogni scoperti, progetti fermi, risorse disponibili.
-            Elencate dalla più promettente.
-          </p>
-          {idee.length === 0 ? (
-            <p className="text-muted">
-              Nessuna idea ha superato la verifica delle premesse. I generatori
-              comparativi richiedono il mirror locale e l&apos;anagrafica comuni
-              (make oc-sync + make comuni-sync).
-            </p>
+
+          {marketing.length === 0 ? (
+            <>
+              <h2 className="h5 mt-4 mb-3">Idee per il territorio</h2>
+              {scheda.idee_sintesi?.trim() ? (
+                <p className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                  {scheda.idee_sintesi}
+                </p>
+              ) : null}
+              <p className="small text-muted">
+                Spunti nuovi generati dagli scarti tra dati e attuato: confronti con
+                comuni simili, bisogni scoperti, progetti fermi, risorse disponibili.
+                Elencate dalla più promettente.
+              </p>
+              {idee.length === 0 ? (
+                <p className="text-muted">
+                  Nessuna idea ha superato la verifica delle premesse. I generatori
+                  comparativi richiedono il mirror locale e l&apos;anagrafica comuni
+                  (make oc-sync + make comuni-sync).
+                </p>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {idee.map((p, i) => (
+                    <ProposalCard key={i} proposta={p} />
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
-            <div className="d-flex flex-column gap-3">
-              {idee.map((p, i) => (
-                <ProposalCard key={i} proposta={p} />
-              ))}
-            </div>
+            <>
+              <h2 className="h5 mt-4 mb-3">Marketing territoriale — spunti di attrattività</h2>
+              {scheda.idee_sintesi?.trim() ? (
+                <p className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                  {scheda.idee_sintesi}
+                </p>
+              ) : null}
+              <p className="small text-muted">
+                Spunti di posizionamento ispirati a iniziative di altri enti: ogni
+                spunto cita una premessa locale e un precedente esterno. Non sono atti
+                amministrativi né progetti finanziati.
+              </p>
+              <div className="d-flex flex-column gap-4">
+                {lenti.map((lente) => (
+                  <div key={lente}>
+                    <h3 className="h6 fw-bold mb-2">{LENTE_TITLE[lente] ?? lente}</h3>
+                    <div className="d-flex flex-column gap-3">
+                      {marketing
+                        .filter((p) => ((p.lente as string) || "altro") === lente)
+                        .map((p, i) => (
+                          <ProposalCard key={i} proposta={p} />
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           <SourcesList citazioni={scheda.citazioni} />

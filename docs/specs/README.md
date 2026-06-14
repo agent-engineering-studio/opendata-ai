@@ -19,9 +19,11 @@ Pezzo 8). Ogni spec ha il prompt operativo gemello in
 | 7 | `07-arricchimento-osm-ispra.md` | accessibilità OSM + vincoli ISPRA nella SWOT | 2 (7a), 1-pattern (7b) |
 | 8 | `08-idee-territorio.md` | modalità brainstorming (4 generatori) | 3, 4, 5; meglio con 6, 7 |
 | 9 | `09-knowledge-graph-source.md` | KG (repo `knowledge-graph`) come fonte: tier "evidenza documentale" (delibere, PUG, bilanci) | 2-pattern; arricchisce 4 e 8 |
+| 10 | `10-marketing-territorio.md` | modulo marketing territoriale (turismo/viabilità/sicurezza/brand): fonte web `web-mcp`→SearXNG, `modalita="marketing"`, sezione report distinta | 2-pattern, 8; fonte web nuova |
 
 Verticale minimo dimostrabile: **1 → 2 → 4 → 5**. Il 3 può girare in parallelo al
-4–5; il 6 e il 7 sono indipendenti tra loro; l'8 chiude.
+4–5; il 6 e il 7 sono indipendenti tra loro; l'8 chiude. Il 10 è additivo (modulo
+marketing parallelo alle idee finanziabili).
 
 ## Decisioni prese (non riaprire senza motivo)
 
@@ -42,3 +44,10 @@ Verticale minimo dimostrabile: **1 → 2 → 4 → 5**. Il 3 può girare in para
   `/programma` (422 fuori ambito); il mirror OpenCoesione si sincronizza con
   `--regione PUG`. Vuoto in dev = nessun limite. Il resto d'Italia si
   riattiva svuotando una env, senza toccare codice.
+- **Marketing territoriale = modulo separato** (14/06/2026, Pezzo 10): fonte web
+  `web-mcp`→**SearXNG self-hosted** (gratis, provider-agnostico; NO tool nativi
+  Anthropic né Bing/Azure), `modalita="marketing"` con sezione di report distinta
+  dalle Idee finanziabili. Guardrail (A)+(B): ogni spunto cita una premessa locale
+  verificabile + un precedente esterno fetchabile (badge `dato_locale` vs
+  `ispirazione_esterna`). I `caso_analogo` esterni NON sono geo-bloccati (sono
+  spunti), con bias peer-group dichiarato.

@@ -127,7 +127,7 @@ agent-backend: ## Launch the unified backend REPL against the running stack
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-backend:local opendata-agent
 
-.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-ispra
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-ispra mcp-stdio-web
 mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
@@ -143,6 +143,10 @@ mcp-stdio-opencoesione: ## Smoke-test the OpenCoesione MCP server over stdio
 mcp-stdio-ispra: ## Smoke-test the ISPRA MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio ispra-mcp-server:local
+
+mcp-stdio-web: ## Smoke-test the Web (SearXNG) MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio web-mcp:local
 
 .PHONY: oc-sync
 oc-sync: ## Ingest the OpenCoesione bulk into Postgres (vars: OC_SYNC_ARGS="--regione PUG --ciclo 2014-2020")
@@ -166,6 +170,7 @@ lint: ## Run ruff on all Python packages
 	cd opencoesione-mcp-server && ruff check src
 	cd ispra-mcp-server && ruff check src
 	cd osm-mcp && ruff check src
+	cd web-mcp && ruff check src
 	cd opendata-backend && ruff check src
 
 test: ## Run pytest on all Python packages
@@ -175,4 +180,5 @@ test: ## Run pytest on all Python packages
 	cd opencoesione-mcp-server && pytest -q
 	cd ispra-mcp-server && pytest -q
 	cd osm-mcp && pytest -q
+	cd web-mcp && pytest -q
 	cd opendata-backend && pytest -q

@@ -34,7 +34,9 @@ from .synth import (
 
 log = logging.getLogger("orchestrator.programma")
 
-FonteEvidenza = Literal["istat", "opencoesione", "ckan", "eurostat", "oecd", "osm", "ispra"]
+FonteEvidenza = Literal[
+    "istat", "opencoesione", "ckan", "eurostat", "oecd", "osm", "ispra", "kg", "web"
+]
 
 SWOT_KEYS = ("forze", "debolezze", "opportunita", "minacce")
 
@@ -53,6 +55,12 @@ class Evidenza(BaseModel):
     # fatto da documenti comunali ingeriti nel KG (delibere, piani, bilanci).
     # DERIVATO dalla fonte, mai dall'LLM: kg → documentale, il resto certificato.
     tier: Literal["certificato", "documentale"] = "certificato"
+    # Tipo di fonte per il marketing territoriale (spec 10): "dato_locale" =
+    # premessa verificabile dalle fonti locali; "ispirazione_esterna" = spunto
+    # da una ricerca web (iniziativa di un altro ente). DERIVATO dalla fonte,
+    # mai dall'LLM: web → ispirazione_esterna, il resto dato_locale. Il guardrail
+    # marketing pretende ALMENO una premessa locale + un'ispirazione esterna.
+    fonte_tipo: Literal["dato_locale", "ispirazione_esterna"] = "dato_locale"
 
     @field_validator("fonte")
     @classmethod
@@ -63,6 +71,7 @@ class Evidenza(BaseModel):
     @model_validator(mode="after")
     def _derive_tier(self) -> "Evidenza":
         self.tier = "documentale" if self.fonte == "kg" else "certificato"
+        self.fonte_tipo = "ispirazione_esterna" if self.fonte == "web" else "dato_locale"
         return self
 
 
@@ -95,10 +104,20 @@ class Proposta(BaseModel):
     # campo `fonte`: un typo non deve invalidare il parse — lo gestisce il
     # guardrail).
     generatore: str | None = None
+    # Lente tematica del marketing territoriale (Pezzo 10): turismo_cultura,
+    # viabilita_mobilita, sicurezza_vivibilita, attrattivita_brand. Usata SOLO
+    # in modalità "marketing" per raggruppare gli spunti nella sezione dedicata;
+    # None nelle altre modalità. str normalizzato (come `generatore`).
+    lente: str | None = None
 
     @field_validator("generatore")
     @classmethod
     def _normalise_generatore(cls, v: str | None) -> str | None:
+        return v.strip().lower() if isinstance(v, str) and v.strip() else None
+
+    @field_validator("lente")
+    @classmethod
+    def _normalise_lente(cls, v: str | None) -> str | None:
         return v.strip().lower() if isinstance(v, str) and v.strip() else None
 
 
@@ -115,8 +134,11 @@ class ProgrammaRequest(BaseModel):
     cicli: list[str] | None = None
     # "scheda" = fotografia SWOT (Pezzo 4); "idee" = brainstorming a quattro
     # generatori (Pezzo 8); "completa" = UN solo fan-out che alimenta ENTRAMBI
-    # gli agenti → report unico (sintesi + SWOT + proposte + idee).
-    modalita: Literal["scheda", "idee", "completa"] = "scheda"
+    # gli agenti → report unico (sintesi + SWOT + proposte + idee);
+    # "marketing" = brainstorming di marketing territoriale (Pezzo 10): turismo,
+    # viabilità, sicurezza, brand — spunti ancorati a una premessa locale + un
+    # precedente esterno (fonte web), sezione di report distinta dalle idee.
+    modalita: Literal["scheda", "idee", "completa", "marketing"] = "scheda"
     # Popolazione del comune, arricchita SERVER-SIDE dal router (anagrafica
     # locale) — NON arriva dal client. Sopra MACRO_POPULATION l'analisi passa
     # in "modalità macro" (aggregati + top-N, niente enumerazione) per evitare
@@ -253,6 +275,16 @@ def build_programma_task(
             "per tema (aggregati territoriali), gli indicatori critici e "
             "l'accessibilità della zona."
         )
+    if req.modalita == "marketing":
+        parts.append(
+            "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
+            "ASSET locali valorizzabili (POI, beni culturali, prodotti tipici, reti "
+            "— da OSM/CKAN) e gli indicatori di domanda (flussi, demografia). "
+            "SOPRATTUTTO: cerca sul WEB iniziative ANALOGHE DI ALTRI ENTI (comuni "
+            "simili, Regione, agenzie turistiche, stampa istituzionale) da cui "
+            "prendere spunto su turismo, viabilità/mobilità, sicurezza/vivibilità e "
+            "attrattività/brand — privilegia fonti istituzionali (site:gov.it)."
+        )
     return " ".join(parts)
 
 
@@ -387,6 +419,7 @@ def build_programma_aggregator(
     req: ProgrammaRequest,
     *,
     idee_agent: Agent | None = None,
+    marketing_agent: Agent | None = None,
     instructions_hint: str | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
@@ -402,6 +435,8 @@ def build_programma_aggregator(
     """
     if req.modalita == "completa" and idee_agent is None:
         raise ValueError("modalita='completa' richiede anche idee_agent")
+    if req.modalita == "marketing" and marketing_agent is None:
+        raise ValueError("modalita='marketing' richiede anche marketing_agent")
 
     async def aggregate(results: list[Any]) -> ProgrammaOutput:
         log.info("programma aggregator: %d participant results", len(results))
@@ -488,6 +523,14 @@ def build_programma_aggregator(
             ]
             if not response.disclaimer.strip() and response_idee.disclaimer.strip():
                 response.disclaimer = response_idee.disclaimer
+        elif req.modalita == "marketing":
+            # Marketing territoriale (Pezzo 10): un solo fan-out alimenta il
+            # marketing_agent. La sua sintesi è la lettura d'insieme degli
+            # spunti → va in idee_sintesi (intro della sezione marketing), non
+            # come quadro territoriale.
+            response = _build(await _run(marketing_agent, "marketing"), "marketing")  # type: ignore[arg-type]
+            response.idee_sintesi = response.sintesi
+            response.sintesi = ""
         else:
             agent = idee_agent if (req.modalita == "idee" and idee_agent) else programma_agent
             response = _build(await _run(agent, req.modalita), req.modalita)

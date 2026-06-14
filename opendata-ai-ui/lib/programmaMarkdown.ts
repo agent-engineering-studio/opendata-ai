@@ -26,7 +26,33 @@ const GENERATORE_LABEL: Record<string, string> = {
   fabbisogno: "Bisogno scoperto",
   incompiuto: "Da completare",
   finestra_finanziamento: "Finanziabile ora",
+  caso_analogo: "Caso analogo",
+  asset_sottoutilizzato: "Asset da valorizzare",
+  domanda_emergente: "Domanda emergente",
 };
+
+const LENTE_LABEL: Record<string, string> = {
+  turismo_cultura: "Turismo & cultura",
+  viabilita_mobilita: "Viabilità & mobilità",
+  sicurezza_vivibilita: "Sicurezza & vivibilità",
+  attrattivita_brand: "Attrattività & brand",
+  altro: "Altri spunti",
+};
+
+const MARKETING_GENERATORI = new Set([
+  "caso_analogo",
+  "asset_sottoutilizzato",
+  "domanda_emergente",
+]);
+
+function isMarketing(p: Proposta): boolean {
+  return (!!p.generatore && MARKETING_GENERATORI.has(p.generatore)) || !!p.lente;
+}
+
+const DISCLAIMER_ADDENDUM =
+  " I dati aperti possono risultare disallineati rispetto allo stato reale " +
+  "dell'amministrazione per tempi burocratici; l'ingestione dei documenti nella " +
+  "knowledge base aggiorna la conoscenza e sollecita l'allineamento delle fonti.";
 
 const FATTIBILITA_LABEL: Record<LivelloFattibilita, string> = {
   alta: "Fattibilità alta",
@@ -42,8 +68,9 @@ function ratioPct(ratio: number | null | undefined): string | null {
 
 function evidenzaLine(e: Evidenza): string {
   const tier = e.tier === "documentale" ? " _(documentale)_" : "";
+  const ext = e.fonte_tipo === "ispirazione_esterna" ? " _(ispirazione esterna)_" : "";
   const dettaglio = e.dettaglio?.trim() ? `${e.dettaglio.trim()} ` : "";
-  return `- **${e.fonte}**${tier}: ${dettaglio}([fonte](${e.url}))`;
+  return `- **${e.fonte}**${tier}${ext}: ${dettaglio}([fonte](${e.url}))`;
 }
 
 function finanziamentoLine(f: Finanziamento): string {
@@ -54,7 +81,9 @@ function finanziamentoLine(f: Finanziamento): string {
 function propostaBlock(p: Proposta): string {
   const lines: string[] = [];
   const gen = p.generatore ? GENERATORE_LABEL[p.generatore] ?? p.generatore : null;
-  lines.push(`### ${p.titolo}${gen ? ` _(${gen})_` : ""}`);
+  const lente = p.lente ? LENTE_LABEL[p.lente] ?? p.lente : null;
+  const tag = [lente, gen].filter(Boolean).join(" · ");
+  lines.push(`### ${p.titolo}${tag ? ` _(${tag})_` : ""}`);
 
   const liv = FATTIBILITA_LABEL[p.fattibilita.livello] ?? p.fattibilita.livello;
   const ratio = ratioPct(p.fattibilita.spend_ratio_storico);
@@ -73,14 +102,15 @@ function propostaBlock(p: Proposta): string {
 
 /** Serializza la scheda in Markdown (stesso contenuto della pagina). */
 export function schedaToMarkdown(s: ProgrammaResponse): string {
-  const proposte = s.proposte.filter((p) => !p.generatore);
-  const idee = s.proposte.filter((p) => p.generatore);
+  const marketing = s.proposte.filter(isMarketing);
+  const idee = s.proposte.filter((p) => p.generatore && !isMarketing(p));
+  const proposte = s.proposte.filter((p) => !p.generatore && !p.lente);
   const out: string[] = [];
 
   const titolo = `Analisi del territorio — comune ${s.comune}${s.zona ? ` · ${s.zona}` : ""}`;
   out.push(`# ${titolo}`, "");
   out.push(`*Generata il ${new Date(s.generato_il).toLocaleString("it-IT")}*`, "");
-  if (s.disclaimer?.trim()) out.push(`> ${s.disclaimer.trim()}`, "");
+  out.push(`> ${(s.disclaimer?.trim() || "") + DISCLAIMER_ADDENDUM}`.trim(), "");
 
   if (s.sintesi?.trim()) {
     out.push("## Quadro di sintesi", "", s.sintesi.trim(), "");
@@ -99,25 +129,45 @@ export function schedaToMarkdown(s: ProgrammaResponse): string {
     }
   }
 
-  out.push("## Proposte", "");
-  if (proposte.length === 0) {
-    out.push("_Nessuna proposta ha superato la verifica delle fonti._", "");
-  } else {
-    for (const p of proposte) out.push(propostaBlock(p), "");
+  if (proposte.length > 0 || marketing.length === 0) {
+    out.push("## Proposte", "");
+    if (proposte.length === 0) {
+      out.push("_Nessuna proposta ha superato la verifica delle fonti._", "");
+    } else {
+      for (const p of proposte) out.push(propostaBlock(p), "");
+    }
   }
 
-  out.push("## Idee per il territorio", "");
-  if (s.idee_sintesi?.trim()) out.push(s.idee_sintesi.trim(), "");
-  out.push(
-    "_Spunti generati dagli scarti tra dati e attuato: confronti con comuni " +
-      "simili, bisogni scoperti, progetti fermi, risorse disponibili. " +
-      "Elencate dalla più promettente._",
-    "",
-  );
-  if (idee.length === 0) {
-    out.push("_Nessuna idea ha superato la verifica delle premesse._", "");
+  if (marketing.length === 0) {
+    out.push("## Idee per il territorio", "");
+    if (s.idee_sintesi?.trim()) out.push(s.idee_sintesi.trim(), "");
+    out.push(
+      "_Spunti generati dagli scarti tra dati e attuato: confronti con comuni " +
+        "simili, bisogni scoperti, progetti fermi, risorse disponibili. " +
+        "Elencate dalla più promettente._",
+      "",
+    );
+    if (idee.length === 0) {
+      out.push("_Nessuna idea ha superato la verifica delle premesse._", "");
+    } else {
+      for (const p of idee) out.push(propostaBlock(p), "");
+    }
   } else {
-    for (const p of idee) out.push(propostaBlock(p), "");
+    out.push("## Marketing territoriale — spunti di attrattività", "");
+    if (s.idee_sintesi?.trim()) out.push(s.idee_sintesi.trim(), "");
+    out.push(
+      "_Spunti di posizionamento ispirati a iniziative di altri enti: ogni spunto " +
+        "cita una premessa locale e un precedente esterno. Non sono atti " +
+        "amministrativi né progetti finanziati._",
+      "",
+    );
+    const lenti = Array.from(new Set(marketing.map((p) => (p.lente as string) || "altro")));
+    for (const lente of lenti) {
+      out.push(`### ${LENTE_LABEL[lente] ?? lente}`, "");
+      for (const p of marketing.filter((p) => ((p.lente as string) || "altro") === lente)) {
+        out.push(propostaBlock(p), "");
+      }
+    }
   }
 
   if (s.citazioni.length) {

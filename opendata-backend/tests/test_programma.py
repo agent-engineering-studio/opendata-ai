@@ -467,6 +467,116 @@ def test_completa_requires_idee_agent() -> None:
         build_programma_aggregator(_StubProgrammaAgent("{}"), req)  # type: ignore[arg-type]
 
 
+# ───────────────── modalità marketing: spunti di attrattività (Pezzo 10) ────
+
+_OSM_URL = "https://www.openstreetmap.org/way/12345"
+_WEB_URL = "https://comune-altrove.gov.it/turismo-lento"
+_MARKETING_REQ = ProgrammaRequest(
+    cod_comune="110002", comune_nome="Barletta", modalita="marketing"
+)
+
+
+def _spunto(generatore: str | None, lente: str, evidenze: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "titolo": f"Spunto {generatore}",
+        "descrizione": "d",
+        "generatore": generatore,
+        "lente": lente,
+        "evidenze": evidenze,
+        "finanziamento": None,
+        "fattibilita": {"livello": "media", "motivazione": "m", "spend_ratio_storico": None},
+    }
+
+
+@pytest.mark.asyncio
+async def test_marketing_mode_enforces_local_plus_external() -> None:
+    """Regola (A)+(B): ogni spunto cita una premessa locale + un precedente web,
+    e il `generatore` deve essere di marketing — altrimenti è SCARTATO."""
+    ev_local = {"fonte": "osm", "url": _OSM_URL, "dettaglio": "POI castello"}
+    ev_web = {"fonte": "web", "url": _WEB_URL, "dettaglio": "spunto da: comune X"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _spunto("caso_analogo", "turismo_cultura", [ev_local, ev_web]),    # ok
+                _spunto("asset_sottoutilizzato", "turismo_cultura", [ev_local]),   # manca web → out
+                _spunto("domanda_emergente", "viabilita_mobilita", [ev_web]),      # manca locale → out
+                _spunto("gap_comparativo", "turismo_cultura", [ev_local, ev_web]), # gen non marketing → out
+            ],
+        )
+    )
+    parts = [
+        _participant(
+            "osm", "Asset locali.",
+            [{"name": "castello", "url": _OSM_URL, "format": "JSON", "content": None}],
+        ),
+        _participant(
+            "web", "Iniziative di altri enti.",
+            [{"name": "turismo lento", "url": _WEB_URL, "format": "WEB", "content": None}],
+        ),
+    ]
+    aggregate = build_programma_aggregator(
+        agent, _MARKETING_REQ, marketing_agent=agent  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["caso_analogo"]
+    kept = resp.proposte[0]
+    assert kept.lente == "turismo_cultura"
+    # fonte_tipo derivato: la premessa locale e l'ispirazione esterna distinte.
+    tipi = {e.fonte_tipo for e in kept.evidenze}
+    assert tipi == {"dato_locale", "ispirazione_esterna"}
+
+
+def test_marketing_requires_marketing_agent() -> None:
+    req = ProgrammaRequest(cod_comune="110002", modalita="marketing")
+    with pytest.raises(ValueError, match="marketing_agent"):
+        build_programma_aggregator(_StubProgrammaAgent("{}"), req)  # type: ignore[arg-type]
+
+
+def test_marketing_task_asks_for_external_initiatives() -> None:
+    task = build_programma_task(_MARKETING_REQ, None)
+    assert "MARKETING" in task.upper() and "site:gov.it" in task
+    # Le altre modalità non chiedono la ricerca web di iniziative altrui.
+    assert "MARKETING" not in build_programma_task(_REQ, None).upper()
+
+
+def test_evidenza_fonte_tipo_is_derived_from_fonte() -> None:
+    web = Evidenza(fonte="web", url=_WEB_URL, dettaglio="d")
+    assert web.fonte_tipo == "ispirazione_esterna"
+    loc = Evidenza(fonte="osm", url=_OSM_URL, dettaglio="d")
+    assert loc.fonte_tipo == "dato_locale"
+    # Derivato e NON falsificabile: l'LLM non può marcare il web come locale.
+    forged = Evidenza(fonte="web", url=_WEB_URL, dettaglio="d", fonte_tipo="dato_locale")
+    assert forged.fonte_tipo == "ispirazione_esterna"
+
+
+def test_marketing_rejects_external_only_and_keeps_anchored() -> None:
+    ext_only = Proposta(
+        titolo="solo esterno", descrizione="d",
+        generatore="caso_analogo", lente="turismo_cultura",
+        evidenze=[Evidenza(fonte="web", url=_WEB_URL, dettaglio="x")],
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([ext_only]), {_WEB_URL}, modalita="marketing")
+    assert out.proposte == []  # senza premessa locale → scartato
+
+    anchored = Proposta(
+        titolo="ancorato", descrizione="d",
+        generatore="caso_analogo", lente="turismo_cultura",
+        evidenze=[
+            Evidenza(fonte="osm", url=_OSM_URL, dettaglio="asset"),
+            Evidenza(fonte="web", url=_WEB_URL, dettaglio="spunto da: comune X"),
+        ],
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out2 = validate_programma(_resp([anchored]), {_OSM_URL, _WEB_URL}, modalita="marketing")
+    assert len(out2.proposte) == 1
+    # Marketing non è ancorato a un fondo: niente finanziamento NON degrada a
+    # da_verificare (regola che vale solo per scheda/idee).
+    assert out2.proposte[0].fattibilita.livello == "alta"
+
+
 @pytest.mark.asyncio
 async def test_project_rows_become_named_citations() -> None:
     """similar_projects: ogni progetto peer diventa citazione nominata —

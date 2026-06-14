@@ -148,6 +148,14 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
                 captured.extend(_kg_resources_from_payload(payload))
                 continue
 
+            # ── web (marketing-territoriale, Pezzo 10): web_search ritorna
+            # `results[]` (title/url/snippet/date), web_fetch una pagina con
+            # `content`. Diventano citazioni esterne (format WEB) — il guardrail
+            # marketing le tratta come `ispirazione_esterna`.
+            if source == "web":
+                captured.extend(_web_resources_from_payload(payload))
+                continue
+
             # ── fonti "citation-style" (opencoesione / osm / ispra): i tool
             # includono `source_url`, l'URL risolvibile di quella risposta.
             # Sono citazioni (format JSON), mai file — catturate anche quando
@@ -311,6 +319,64 @@ def _project_citations_from_rows(payload: dict[str, Any]) -> list[Resource]:
     return out
 
 
+#: Quante hit di web_search diventano citazioni (tieni piccolo il contesto LLM).
+_MAX_WEB_CITATIONS = 12
+
+
+def _web_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
+    """web_search / web_fetch → citazioni esterne (format WEB, source="web").
+
+    web_search ritorna ``{results: [{title,url,snippet,date}]}``; web_fetch
+    ritorna ``{url, content}``. Entrambi diventano risorse WEB taggate
+    ``source="web"`` — l'evidenza che le cita risulta `ispirazione_esterna`
+    (campo derivato su Evidenza) e il guardrail marketing richiede ALMENO una
+    di queste accanto a una premessa locale (Pezzo 10).
+    """
+    out: list[Resource] = []
+    results = payload.get("results")
+    if isinstance(results, list):
+        for r in results[:_MAX_WEB_CITATIONS]:
+            if not isinstance(r, dict):
+                continue
+            url = r.get("url")
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            snippet = str(r.get("snippet") or "").strip()
+            date = str(r.get("date") or "").strip()
+            descr = (snippet[:140] + (f" — {date}" if date else "")).strip() or None
+            out.append(
+                Resource(
+                    name=str(r.get("title") or url)[:120],
+                    url=url,
+                    format="WEB",
+                    source="web",
+                    description=descr,
+                )
+            )
+        return out
+    # web_fetch: una singola pagina recuperata con contenuto.
+    url = payload.get("url")
+    content = payload.get("content")
+    if (
+        isinstance(url, str)
+        and url.startswith(("http://", "https://"))
+        and isinstance(content, str)
+        and content.strip()
+    ):
+        name = url.rstrip("/").split("/")[-1].split("?")[0] or url
+        out.append(
+            Resource(
+                name=name[:120],
+                url=url,
+                format="WEB",
+                source="web",
+                content=content[:_MAX_CAPTURED_CHARS],
+                description="(pagina recuperata)",
+            )
+        )
+    return out
+
+
 def _kg_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     """SourceReference del kg_query → citazioni documentali (doc + pagina).
 
@@ -413,7 +479,7 @@ def _normalise_source_tag(executor_id: str) -> str | None:
     Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm", "kg"):
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm", "web", "kg"):
         # longest-first: eurostat before istat so a literal "eurostat" doesn't
         # get matched as istat; opencoesione first for the same reason. "kg"
         # è ultimo perché cortissimo (matcherebbe dentro nomi più lunghi).
@@ -450,7 +516,7 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
 
 
 _SYNTH_SOURCE_ORDER = (
-    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg"
+    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg", "web"
 )
 
 

@@ -9,6 +9,7 @@ on:
       - 'ckan-mcp-server/**'
       - 'istat-mcp-server/**'
       - 'osm-mcp/**'
+      - 'web-mcp/**'
       - 'opendata-backend/**'
       - 'opendata-ai-ui/**'
       - '.github/workflows/docker-publish.yml'
@@ -60,6 +61,9 @@ jobs:
           - name: osm-mcp
             context: .
             dockerfile: osm-mcp/Dockerfile
+          - name: web-mcp
+            context: .
+            dockerfile: web-mcp/Dockerfile
           - name: opendata-backend
             context: .
             dockerfile: opendata-backend/Dockerfile

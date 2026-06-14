@@ -7,12 +7,23 @@ function ratioPct(ratio: number | null | undefined): string | null {
   return `${Math.round(ratio * 100)}%`;
 }
 
-/* Etichette UI dei quattro generatori della modalità idee (spec 08). */
+/* Etichette UI dei quattro generatori della modalità idee (spec 08) +
+   dei tre generatori e quattro lenti del marketing territoriale (Pezzo 10). */
 const GENERATORE_LABEL: Record<string, string> = {
   gap_comparativo: "Fatto altrove",
   fabbisogno: "Bisogno scoperto",
   incompiuto: "Da completare",
   finestra_finanziamento: "Finanziabile ora",
+  caso_analogo: "Caso analogo",
+  asset_sottoutilizzato: "Asset da valorizzare",
+  domanda_emergente: "Domanda emergente",
+};
+
+const LENTE_LABEL: Record<string, string> = {
+  turismo_cultura: "Turismo & cultura",
+  viabilita_mobilita: "Viabilità & mobilità",
+  sicurezza_vivibilita: "Sicurezza & vivibilità",
+  attrattivita_brand: "Attrattività & brand",
 };
 
 export function ProposalCard({ proposta }: { proposta: Proposta }) {
@@ -20,17 +31,30 @@ export function ProposalCard({ proposta }: { proposta: Proposta }) {
   const generatore = proposta.generatore
     ? GENERATORE_LABEL[proposta.generatore] ?? proposta.generatore
     : null;
+  const lente = proposta.lente ? LENTE_LABEL[proposta.lente] ?? proposta.lente : null;
+  // Il marketing territoriale non è ancorato a un fondo: niente messaggio
+  // "nessuna linea di finanziamento" (sarebbe fuorviante).
+  const isMarketing = !!proposta.lente;
   return (
     <article className="card shadow-sm">
       <div className="card-body">
         <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
           <h3 className="h6 fw-bold mb-0">{proposta.titolo}</h3>
           <span className="d-flex gap-1 flex-shrink-0">
+            {lente ? (
+              <span
+                className="badge text-white"
+                style={{ backgroundColor: "var(--color-green, #00cf86)" }}
+                title="Lente tematica del marketing territoriale"
+              >
+                {lente}
+              </span>
+            ) : null}
             {generatore ? (
               <span
                 className="badge text-white"
                 style={{ backgroundColor: "var(--color-primary-700)" }}
-                title="Da quale scarto tra dati e attuato nasce l'idea"
+                title="Da quale scarto/generatore nasce lo spunto"
               >
                 {generatore}
               </span>
@@ -60,14 +84,16 @@ export function ProposalCard({ proposta }: { proposta: Proposta }) {
               fonte
             </a>
           </div>
-        ) : (
+        ) : isMarketing ? null : (
           <p className="small fst-italic mb-2" style={{ color: "var(--color-text-muted)" }}>
             Nessuna linea di finanziamento individuata nelle evidenze raccolte.
           </p>
         )}
 
         {generatore ? (
-          <p className="small fw-semibold mb-1">Premesse verificabili:</p>
+          <p className="small fw-semibold mb-1">
+            {isMarketing ? "Premessa locale + ispirazione esterna:" : "Premesse verificabili:"}
+          </p>
         ) : null}
         <div className="d-flex flex-column gap-1">
           {proposta.evidenze.map((e, i) => (

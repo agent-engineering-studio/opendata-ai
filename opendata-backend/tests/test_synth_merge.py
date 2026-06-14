@@ -417,6 +417,40 @@ async def test_osm_and_ispra_participants_tag_section_and_capture() -> None:
 
 
 @pytest.mark.asyncio
+async def test_web_participant_captures_search_results() -> None:
+    """Web (Pezzo 10): i risultati di web_search diventano citazioni WEB
+    taggate source='web' (l'ispirazione esterna del guardrail marketing)."""
+    from opendata_backend.orchestrator.synth import (
+        _capture_tool_resources,
+        _normalise_source_tag,
+    )
+
+    assert _normalise_source_tag("web") == "web"
+
+    payload = {
+        "query": "comune turismo lento site:gov.it",
+        "results": [
+            {"title": "Borgo che riparte", "url": "https://comune-x.gov.it/turismo",
+             "snippet": "turismo lento e cammini", "date": "2025-09-01"},
+            {"title": "senza url", "snippet": "scartato"},  # no url → dropped
+        ],
+    }
+    msgs = [_StubMessage(contents=[
+        _StubFunctionResult(type="function_result", result=json.dumps(payload))
+    ])]
+    result = _StubResult(
+        executor_id="web",
+        agent_response=_StubInnerResponseWithMessages(text="…", messages=msgs),
+    )
+    captured = _capture_tool_resources(result, "web")
+    assert len(captured) == 1
+    r = captured[0]
+    assert r.source == "web" and r.format == "WEB"
+    assert r.url == "https://comune-x.gov.it/turismo"
+    assert "turismo lento" in (r.description or "")
+
+
+@pytest.mark.asyncio
 async def test_kg_participant_captures_document_provenance(monkeypatch) -> None:
     """KG (spec 09): le SourceReference del kg_query diventano citazioni DOC
     con provenienza documento+pagina; con KG_UI_URL il locator è navigabile."""

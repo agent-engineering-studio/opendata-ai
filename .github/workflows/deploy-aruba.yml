@@ -70,10 +70,11 @@ jobs:
             IMAGE_TAG="$2"
             cd "$COMPOSE_DIR"
 
-            # The 5 opendata services we own. We deliberately do NOT touch the
+            # The opendata services we own. We deliberately do NOT touch the
             # shared aes-infra services (traefik, redis) — those are managed
-            # by the infra repo, not by this workflow.
-            SERVICES=(ckan-mcp istat-mcp osm-mcp opendata-backend opendata-ai-ui)
+            # by the infra repo, not by this workflow. web-mcp is our GHCR image
+            # (OPENDATA_TAG); searxng is an upstream image it depends on.
+            SERVICES=(ckan-mcp istat-mcp osm-mcp web-mcp searxng opendata-backend opendata-ai-ui)
 
             COMPOSE=(docker compose
               --env-file .env --env-file .env.opendata

@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
+
+from opendata_core.kg import KgClient
 
 from ..auth import ClerkUser
 from ..db.repositories import comuni as comuni_repo
@@ -93,6 +97,44 @@ async def _cache_store(cache_key: str, knowledge_version: int, req: ProgrammaReq
         log.warning("cache store fallito per %s (proseguo)", req.cod_comune)
 
 
+def _analysis_summary_text(resp: ProgrammaResponse) -> str:
+    """Testo sintetico dell'analisi da ingestionare nel KG (ricerca trasversale)."""
+    lines = [f"Analisi del territorio — comune {resp.comune}"]
+    if resp.zona:
+        lines.append(f"zona: {resp.zona}")
+    if resp.sintesi.strip():
+        lines.append(f"\nSINTESI\n{resp.sintesi.strip()}")
+    if resp.idee_sintesi.strip():
+        lines.append(f"\nIDEE (lettura d'insieme)\n{resp.idee_sintesi.strip()}")
+    proposte = [p.titolo for p in resp.proposte if not p.generatore]
+    idee = [p.titolo for p in resp.proposte if p.generatore]
+    if proposte:
+        lines.append("\nProposte:\n- " + "\n- ".join(proposte))
+    if idee:
+        lines.append("\nIdee:\n- " + "\n- ".join(idee))
+    return "\n".join(lines)
+
+
+async def _push_analysis_to_kg(resp: ProgrammaResponse) -> None:
+    """Ingestiona il riassunto dell'analisi nel KG, su namespace SEPARATO
+    (`analisi-<cod>`), per la ricerca trasversale tra comuni. Best-effort e
+    no-op se il KG non è configurato. Namespace distinto da `comune-<cod>` così
+    l'agente KG non rilegge le analisi come evidenza (niente auto-citazione)."""
+    settings = session_holder.settings
+    if settings is None or not settings.enable_kg_analysis_push or not settings.kg_api_url:
+        return
+    try:
+        namespace = f"{settings.kg_analysis_namespace_prefix}{resp.comune}"
+        dest_dir = Path(settings.kg_upload_dir) / namespace
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / f"{uuid.uuid4().hex}.txt"
+        dest.write_text(_analysis_summary_text(resp), encoding="utf-8")
+        async with KgClient(settings.kg_api_url) as kg:
+            await kg.ingest(str(dest), namespace)
+    except Exception:
+        log.warning("push riassunto analisi nel KG fallito per %s (proseguo)", resp.comune)
+
+
 async def _enrich_popolazione(req: ProgrammaRequest) -> None:
     """Arricchisce la richiesta con la popolazione del comune (anagrafica
     locale) → abilita la modalità macro per le città grandi. Best-effort: senza
@@ -164,6 +206,14 @@ async def genera_programma(
             "/programma con ENABLE_OPENCOESIONE=false: la scheda uscirà povera o "
             "vuota — abilita la fonte nel .env (+ ENABLE_ISPRA/ENABLE_OSM consigliate)"
         )
+    if settings is not None and req.modalita == "marketing" and not settings.enable_web:
+        # Senza la fonte web il guardrail marketing (A)+(B) scarta ogni spunto
+        # (manca il precedente esterno) — la sezione uscirà vuota.
+        log.warning(
+            "/programma modalita=marketing con ENABLE_WEB=false: gli spunti "
+            "verranno scartati (manca l'ispirazione esterna) — abilita ENABLE_WEB "
+            "(web-mcp + SearXNG) nel .env"
+        )
 
     await _enrich_popolazione(req)
     ck = await _cache_key_for(req)
@@ -180,6 +230,7 @@ async def genera_programma(
 
     if ck:
         await _cache_store(ck[0], ck[1], req, resp)
+    await _push_analysis_to_kg(resp)
     await _audit(user, req, resp)
     log.info("programma generato: %s", _summary(resp))
     return resp
@@ -235,6 +286,7 @@ async def genera_programma_stream(
                     resp = ProgrammaResponse.model_validate(ev["scheda"])
                     if ck:
                         await _cache_store(ck[0], ck[1], req, resp)
+                    await _push_analysis_to_kg(resp)
                     await _audit(user, req, resp)
                     log.info("programma (stream) generato: %s", _summary(resp))
                 yield json.dumps(ev, ensure_ascii=False) + "\n"

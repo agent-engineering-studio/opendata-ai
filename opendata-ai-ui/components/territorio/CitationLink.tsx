@@ -9,6 +9,7 @@ const FONTE_LABEL: Record<string, string> = {
   osm: "OpenStreetMap",
   ispra: "ISPRA",
   kg: "Documenti PA",
+  web: "Web",
 };
 
 const FONTE_BADGE: Record<string, string> = {
@@ -20,6 +21,7 @@ const FONTE_BADGE: Record<string, string> = {
   osm: "bg-info text-white",
   ispra: "bg-dark text-white",
   kg: "bg-secondary text-white",
+  web: "bg-info text-white",
 };
 
 /**
@@ -30,6 +32,8 @@ const FONTE_BADGE: Record<string, string> = {
 export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
   const label = FONTE_LABEL[evidenza.fonte] ?? evidenza.fonte;
   const documentale = evidenza.tier === "documentale" || evidenza.fonte === "kg";
+  // Marketing (Pezzo 10): precedente esterno da cui prendere spunto, non prova.
+  const esterna = evidenza.fonte_tipo === "ispirazione_esterna" || evidenza.fonte === "web";
   // I locator sintetici kg:// non sono URL navigabili — niente link rotto.
   const linkable = /^https?:\/\//.test(evidenza.url);
   return (
@@ -45,6 +49,14 @@ export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
           title="Fatto tratto da un documento comunale ingerito (delibera, piano, bilancio), non da un dato aperto certificato"
         >
           documento comunale
+        </span>
+      ) : null}
+      {esterna ? (
+        <span
+          className="badge flex-shrink-0 border text-dark bg-white"
+          title="Iniziativa di un altro ente da cui prendere spunto — ispirazione, non prova per questo comune"
+        >
+          ispirazione esterna
         </span>
       ) : null}
       <span style={{ color: "var(--color-text-muted)" }}>

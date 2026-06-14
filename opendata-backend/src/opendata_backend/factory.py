@@ -31,11 +31,13 @@ from .config import (
     ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     KG_INSTRUCTIONS,
+    MARKETING_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
     PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
+    WEB_INSTRUCTIONS,
     Settings,
     resolve_provider,
 )
@@ -122,6 +124,7 @@ class OrchestratorSession:
         self._synth_agent: Agent | None = None
         self._programma_agent: Agent | None = None
         self._idee_agent: Agent | None = None
+        self._marketing_agent: Agent | None = None
         self._enabled_sources: list[str] = []
         # agent-framework workflows reject concurrent .run() on the same instance,
         # and the participant Agents are shared — serialise requests with a lock.
@@ -162,13 +165,14 @@ class OrchestratorSession:
                 ("osm", s.enable_osm),
                 ("ispra", s.enable_ispra),
                 ("kg", s.enable_kg),
+                ("web", s.enable_web),
             )
             if on
         ]
         if not enabled:
             raise RuntimeError(
                 "At least one source must be enabled "
-                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra / kg)"
+                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra / kg / web)"
             )
         self._enabled_sources = enabled
         log.info(
@@ -270,6 +274,21 @@ class OrchestratorSession:
             )
             participants.append(ispra_agent)
 
+        # Web search specialist (marketing territoriale, Pezzo 10): web-mcp over
+        # a self-hosted SearXNG. Surfaces EXTERNAL initiatives by other public
+        # bodies to take inspiration from — the `ispirazione_esterna` half of the
+        # marketing (A)+(B) guardrail.
+        if s.enable_web:
+            web_mcp = await self._enter_mcp_tool(
+                s.web_agent_name,
+                s.web_mcp_url,
+                "Web search + fetch over external initiatives and territorial best practices.",
+            )
+            web_agent = await self._enter_agent(
+                chat_client, WEB_INSTRUCTIONS, s.web_agent_name, [web_mcp], default_options,
+            )
+            participants.append(web_agent)
+
         # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
         # orchestrator fans out to a remote A2A-compliant agent as a peer. It
         # appears in the same loop as CKAN / ISTAT — same lifecycle, same
@@ -326,6 +345,11 @@ class OrchestratorSession:
                 programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
                 None, synth_options,
             )
+            # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
+            self._marketing_agent = await self._enter_agent(
+                programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
+                None, synth_options,
+            )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
         # per request in run() / run_streaming() because (a) agent-framework
@@ -343,6 +367,7 @@ class OrchestratorSession:
         self._synth_agent = None
         self._programma_agent = None
         self._idee_agent = None
+        self._marketing_agent = None
         await self._stack.aclose()
 
     @staticmethod
@@ -418,7 +443,8 @@ class OrchestratorSession:
 
         async with self._lock:
             aggregator = build_programma_aggregator(
-                self._programma_agent, req, idee_agent=self._idee_agent
+                self._programma_agent, req,
+                idee_agent=self._idee_agent, marketing_agent=self._marketing_agent
             )
             task_text = build_programma_task(req, zona_info)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -571,7 +597,8 @@ class OrchestratorSession:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
             aggregator = build_programma_aggregator(
-                self._programma_agent, req, idee_agent=self._idee_agent
+                self._programma_agent, req,
+                idee_agent=self._idee_agent, marketing_agent=self._marketing_agent
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(build_programma_task(req, zona_info))

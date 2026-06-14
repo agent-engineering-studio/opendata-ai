@@ -402,8 +402,44 @@ KG_INSTRUCTIONS = (
 )
 
 
+# Fonte WEB (marketing territoriale, Pezzo 10): cerca INIZIATIVE ANALOGHE di
+# altri enti da cui prendere spunto (turismo, viabilità, sicurezza, brand). Le
+# evidenze che ne derivano sono `ispirazione_esterna`, non dato certificato.
+WEB_INSTRUCTIONS = (
+    "You find EXTERNAL initiatives and territorial best practices to take "
+    "inspiration from — what OTHER public bodies (comuni, regioni, tourism "
+    "agencies) have done on tourism, mobility, safety/liveability and place "
+    "branding. You MUST USE the tools — never write tool calls as text. Report "
+    "ONLY what the search results actually say; never invent sources.\n\n"
+    "=== MANDATORY ACTION SEQUENCE ===\n"
+    "From the task (comune, optional zone/theme), run one or two `web_search` "
+    "queries for ANALOGOUS initiatives by other bodies. Prefer institutional "
+    "sources with operators, e.g. 'comune borgo turismo lento site:gov.it' or "
+    "'Regione Puglia mobilità ciclabile urbana'. Optionally `web_fetch` a "
+    "promising result to read and quote it. Cite the FINAL url (after "
+    "redirects). If nothing relevant is found, say so in one line.\n\n"
+    "Then write your final text response, EXACTLY in this shape:\n\n"
+    "<a short paragraph (same language as the query) summarising the external "
+    "initiatives found, each attributed to who did it and where — these are "
+    "INSPIRATION from other bodies, never proof for this comune>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"WEB\","
+    "\"content\":null}.\n"
+    "Emit one resource per result you relied on; the system also captures the "
+    "web_search results automatically, so keep this list short (≤5) and copy "
+    "urls VERBATIM.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output literal tool names in your final response.\n"
+    "- NEVER report something not in a search result; NEVER invent urls or "
+    "facts.\n"
+    "- The narrative paragraph must NEVER be empty."
+)
+
+
 SYNTH_INSTRUCTIONS = (
-    "You are a synthesiser that merges the outputs of up to EIGHT open-data "
+    "You are a synthesiser that merges the outputs of up to NINE open-data "
     "specialists into a single coherent narrative:\n"
     "  - CKAN         — generic open-data portals (national + regional)\n"
     "  - ISTAT        — official Italian statistics (SDMX)\n"
@@ -419,10 +455,15 @@ SYNTH_INSTRUCTIONS = (
     "  - KG           — DOCUMENTARY evidence from ingested municipal papers "
     "(deliberations, plans, budgets): facts with document+page provenance, "
     "NOT certified open data — when you use them, attribute them to the "
-    "document ('secondo la delibera…')\n\n"
-    "INPUT: a structured prompt with up to eight sections labelled "
+    "document ('secondo la delibera…')\n"
+    "  - WEB          — EXTERNAL initiatives by other public bodies "
+    "(marketing-territoriale inspiration): what others did on tourism, "
+    "mobility, safety, branding — INSPIRATION, not certified evidence for this "
+    "comune; attribute it ('come ha fatto il comune di…')\n\n"
+    "INPUT: a structured prompt with up to nine sections labelled "
     "`=== CKAN ===`, `=== ISTAT ===`, `=== EUROSTAT ===`, `=== OECD ===`, "
     "`=== OPENCOESIONE ===`, `=== OSM ===`, `=== ISPRA ===`, `=== KG ===`, "
+    "`=== WEB ===`, "
     "each containing a short narrative produced by the respective specialist. "
     "Any section can be empty (the specialist may have found nothing or "
     "errored).\n\n"
@@ -668,6 +709,90 @@ IDEE_INSTRUCTIONS = (
 )
 
 
+# Modalità "marketing" (Pezzo 10): brainstorming di MARKETING TERRITORIALE —
+# turismo, viabilità/mobilità, sicurezza/vivibilità, attrattività/brand. Vive
+# FUORI dai progetti di finanziamento: ogni spunto è un'inferenza da una
+# premessa LOCALE verificabile + un PRECEDENTE ESTERNO (fonte web) da cui
+# prendere spunto. Difendibile in consiglio, mai propaganda.
+MARKETING_INSTRUCTIONS = (
+    "Sei un analista di MARKETING TERRITORIALE in modalità brainstorming "
+    "EVIDENCE-BASED. Ricevi una RICHIESTA (comune, eventuale zona/tema) e un "
+    "blocco EVIDENZE RACCOLTE con sezioni per fonte (incluse OSM/CKAN/ISTAT per "
+    "gli asset e gli indicatori locali, e una sezione WEB con iniziative di "
+    "ALTRI ENTI), ognuna con narrativa e RISORSE CITABILI (nome | URL).\n\n"
+    "Genera SPUNTI DI ATTRATTIVITÀ su quattro LENTI tematiche — ogni spunto "
+    "dichiara la sua lente nel campo `lente`:\n"
+    "  - turismo_cultura — fruizione di beni, itinerari enogastronomici, eventi, "
+    "reti (Borghi, DMO);\n"
+    "  - viabilita_mobilita — mobilità dolce, ciclabili, infomobilità, "
+    "parcheggi di attestamento, ZTL/aree pedonali, segnaletica turistica;\n"
+    "  - sicurezza_vivibilita — illuminazione, presidio serale, animazione degli "
+    "spazi, smart-city, patti di comunità (sicurezza percepita);\n"
+    "  - attrattivita_brand — place branding, identità agroalimentare, centro "
+    "commerciale naturale / rilancio del centro.\n\n"
+    "Ogni spunto nasce da uno di TRE GENERATORI — dichiaralo nel campo "
+    "`generatore`:\n"
+    "  - caso_analogo — 'un ente simile ha lanciato l'iniziativa X di successo "
+    "→ adattabile qui': il precedente viene dalla sezione WEB (fonte 'web'); la "
+    "premessa di applicabilità locale viene da un dato del comune (peer group, "
+    "asset, profilo).\n"
+    "  - asset_sottoutilizzato — 'un asset locale verificabile è poco "
+    "valorizzato in chiave attrattiva': l'asset viene da OSM/CKAN/OpenCoesione; "
+    "lo spunto di valorizzazione dalla sezione WEB.\n"
+    "  - domanda_emergente — 'un trend/domanda che i dati mostrano e a cui "
+    "rispondere con animazione/servizi': l'indicatore viene da ISTAT/OSM; il "
+    "caso di risposta dalla sezione WEB.\n\n"
+    "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
+    "schema della scheda, più una `sintesi` introduttiva:\n"
+    "{\n"
+    '  "sintesi": str,\n'
+    '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
+    '  "proposte": [{\n'
+    '    "titolo": str, "descrizione": str,\n'
+    '    "lente": "turismo_cultura"|"viabilita_mobilita"|"sicurezza_vivibilita"|"attrattivita_brand",\n'
+    '    "generatore": "caso_analogo"|"asset_sottoutilizzato"|"domanda_emergente",\n'
+    '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
+    '    "finanziamento": null,\n'
+    '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
+    '"motivazione": str, "spend_ratio_storico": null}\n'
+    "  }],\n"
+    '  "disclaimer": str\n'
+    "}\n\n"
+    "REGOLA (A)+(B) — NON DEROGABILE: ogni spunto DEVE citare nelle `evidenze` "
+    "ALMENO (A) una PREMESSA LOCALE verificabile (fonte ∈ "
+    "istat/opencoesione/osm/ispra/ckan/kg — un asset, un flusso, un dato) E "
+    "(B) un PRECEDENTE ESTERNO con `fonte`=\"web\" e URL risolvibile (l'iniziativa "
+    "altrui da cui prendi spunto). Uno spunto senza ENTRAMBE viene SCARTATO da un "
+    "validatore automatico. Il precedente esterno è ISPIRAZIONE, MAI prova per "
+    "questo comune: nel `dettaglio` scrivi 'spunto da: …'.\n\n"
+    "ALTRE REGOLE VINCOLANTI:\n"
+    "- `sintesi` (2-4 frasi): la LETTURA D'INSIEME — quali leve di attrattività "
+    "emergono e quali spunti sono i più promettenti (impatto × fattibilità "
+    "d'azione, NON disponibilità di fondi).\n"
+    "- ORDINE = PRIORITÀ: dal più promettente al meno; punta a 3-6 spunti su "
+    "LENTI diverse quando le evidenze lo permettono.\n"
+    "- `finanziamento` è SEMPRE null: il marketing territoriale non è ancorato a "
+    "un fondo. La `fattibilita` riflette la FACILITÀ D'AZIONE (organizzativa, "
+    "regolamentare), non la copertura finanziaria.\n"
+    "- PERTINENZA del caso_analogo: il precedente esterno può venire da fuori "
+    "regione, ma deve essere PLAUSIBILMENTE applicabile qui (ente comparabile per "
+    "taglia/contesto) — dichiaralo nel `dettaglio`.\n"
+    "- AZIONABILITÀ: ogni `descrizione` (5-10 frasi) copre: (1) in cosa consiste e "
+    "da quale lente/generatore nasce; (2) l'asset o il dato locale che la "
+    "giustifica; (3) chi l'ha già fatta e con che esito (il precedente esterno, "
+    "per nome ed ente); (4) a chi si rivolge; (5) l'attuatore-tipo (Comune, Pro "
+    "Loco, DMO, partenariato); (6) il primo passo concreto e l'orizzonte "
+    "temporale.\n"
+    "- VINCOLI: se ISPRA segnala pericolosità sull'area, riportalo nella "
+    "`fattibilita.motivazione`.\n"
+    "- VIETATO il linguaggio da campagna (slogan, esortazioni, superlativi, "
+    "promesse in prima persona) e VIETATO inventare numeri, URL o iniziative.\n"
+    "- `disclaimer`: una frase — spunti di posizionamento su dati pubblici e "
+    "iniziative altrui, non atti amministrativi né progetti finanziati né "
+    "materiale elettorale."
+)
+
+
 class Settings(BaseSettings):
     """Settings loaded from environment variables and/or a .env file."""
 
@@ -739,8 +864,12 @@ class Settings(BaseSettings):
     opencoesione_agent_name: str = Field(default="opencoesione")
     osm_agent_name: str = Field(default="osm")
     ispra_agent_name: str = Field(default="ispra")
+    web_agent_name: str = Field(default="web")
     synth_agent_name: str = Field(default="synth")
     programma_agent_name: str = Field(default="programma")
+    # Marketing-territoriale agent (Pezzo 10): tool-less aggregator agent that
+    # turns the fan-out bundle into marketing spunti (same shape as idee_agent).
+    marketing_agent_name: str = Field(default="marketing")
 
     # Source enable flags — let operators turn off expensive sources per env.
     # Eurostat/OECD default OFF so existing deployments do not silently triple
@@ -756,6 +885,14 @@ class Settings(BaseSettings):
     enable_osm: bool = Field(default=False)
     # ISPRA IdroGEO specialist (environmental constraints) — opt-in.
     enable_ispra: bool = Field(default=False)
+    # Web search specialist (marketing territoriale, Pezzo 10) — opt-in. Wraps
+    # web-mcp over a self-hosted SearXNG (free, provider-agnostic). The provider
+    # is abstracted in opendata_core.web (searxng default; tavily/brave hooks).
+    enable_web: bool = Field(default=False)
+    web_mcp_url: str = Field(default="http://localhost:8088/mcp")
+    web_search_provider: str = Field(default="searxng")
+    searxng_base_url: str = Field(default="http://localhost:8080")
+    web_search_max_results: int = Field(default=8)
     # Knowledge Graph (deployment ESTERNO, repo knowledge-graph): evidenza
     # documentale (delibere, PUG, bilanci). Richiede il knowledge-graph-mcp
     # raggiungibile in streamable-http su /mcp.
@@ -771,6 +908,13 @@ class Settings(BaseSettings):
     # Directory CONDIVISA backend↔KG: il backend salva qui il PDF e chiama
     # POST /ingest con questo file_path (il KG legge lo stesso volume).
     kg_upload_dir: str = Field(default="/data/kg-uploads")
+    # F3 — push del riassunto analisi nel KG per la ricerca trasversale tra
+    # comuni. Namespace SEPARATO da quello dei documenti ("comune-"): così
+    # l'agente KG (che interroga "comune-<cod>") NON rilegge le analisi
+    # auto-generate come evidenza (niente loop di auto-citazione). Attivo solo
+    # se kg_api_url è configurato; best-effort (un errore non rompe la risposta).
+    kg_analysis_namespace_prefix: str = Field(default="analisi-")
+    enable_kg_analysis_push: bool = Field(default=True)
     # Tetto dimensione upload documenti (25 MB).
     documenti_max_bytes: int = Field(default=25 * 1024 * 1024)
     # Base URL della UI del KG per i locator delle citazioni

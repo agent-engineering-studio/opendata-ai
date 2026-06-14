@@ -5,7 +5,8 @@ export type ResourceSource =
   | "oecd"
   | "opencoesione"
   | "osm"
-  | "kg";
+  | "kg"
+  | "web";
 
 export type Resource = {
   name: string;
@@ -54,7 +55,8 @@ export type FonteEvidenza =
   | "oecd"
   | "osm"
   | "ispra"
-  | "kg";
+  | "kg"
+  | "web";
 
 export type Evidenza = {
   /** Tag fonte normalizzato (istat, opencoesione, …) — string: il backend
@@ -66,6 +68,9 @@ export type Evidenza = {
   dettaglio: string;
   /** "certificato" = dato aperto ufficiale; "documentale" = documento comunale (KG). */
   tier?: "certificato" | "documentale";
+  /** Marketing (Pezzo 10): "dato_locale" = premessa locale verificabile;
+   * "ispirazione_esterna" = precedente web di un altro ente (spunto, non prova). */
+  fonte_tipo?: "dato_locale" | "ispirazione_esterna";
 };
 
 export type VoceSwot = {
@@ -94,17 +99,32 @@ export type Generatore =
   | "incompiuto"
   | "finestra_finanziamento";
 
+/** Generatori del marketing territoriale (Pezzo 10). */
+export type GeneratoreMarketing =
+  | "caso_analogo"
+  | "asset_sottoutilizzato"
+  | "domanda_emergente";
+
+/** Lenti tematiche del marketing territoriale (Pezzo 10). */
+export type LenteMarketing =
+  | "turismo_cultura"
+  | "viabilita_mobilita"
+  | "sicurezza_vivibilita"
+  | "attrattivita_brand";
+
 export type Proposta = {
   titolo: string;
   descrizione: string;
   evidenze: Evidenza[];
   finanziamento?: Finanziamento | null;
   fattibilita: Fattibilita;
-  /** Modalità idee: da quale scarto nasce l'idea (assente in modalità scheda). */
-  generatore?: Generatore | (string & {}) | null;
+  /** Modalità idee/marketing: da quale scarto/generatore nasce (assente in scheda). */
+  generatore?: Generatore | GeneratoreMarketing | (string & {}) | null;
+  /** Modalità marketing: lente tematica per il raggruppamento nella sezione dedicata. */
+  lente?: LenteMarketing | (string & {}) | null;
 };
 
-export type ModalitaProgramma = "scheda" | "idee" | "completa";
+export type ModalitaProgramma = "scheda" | "idee" | "completa" | "marketing";
 
 export type ProgrammaRequest = {
   /** Codice ISTAT del comune, es. "072006". */

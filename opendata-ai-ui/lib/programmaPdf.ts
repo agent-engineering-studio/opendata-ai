@@ -46,6 +46,35 @@ const GENERATORE_LABEL: Record<string, string> = {
   finestra_finanziamento: "Finanziabile ora",
 };
 
+// Marketing territoriale (Pezzo 10): generatori e lenti tematiche.
+const GENERATORE_MARKETING_LABEL: Record<string, string> = {
+  caso_analogo: "Caso analogo",
+  asset_sottoutilizzato: "Asset da valorizzare",
+  domanda_emergente: "Domanda emergente",
+};
+
+const LENTE_LABEL: Record<string, string> = {
+  turismo_cultura: "Turismo & cultura",
+  viabilita_mobilita: "Viabilità & mobilità",
+  sicurezza_vivibilita: "Sicurezza & vivibilità",
+  attrattivita_brand: "Attrattività & brand",
+};
+
+const MARKETING_GENERATORI = new Set(Object.keys(GENERATORE_MARKETING_LABEL));
+
+/** Uno spunto è "marketing" se ha un generatore di marketing o una lente. */
+function isMarketing(p: Proposta): boolean {
+  return (!!p.generatore && MARKETING_GENERATORI.has(p.generatore)) || !!p.lente;
+}
+
+// Nota fissa (memoria disclaimer-opendata-disallineamento): vale per ogni
+// modalità — i dati aperti possono non rispecchiare lo stato reale per tempi
+// burocratici; l'ingestione documenti nel KG aggiorna e sollecita l'allineamento.
+const DISCLAIMER_ADDENDUM =
+  " I dati aperti possono risultare disallineati rispetto allo stato reale " +
+  "dell'amministrazione per tempi burocratici; l'ingestione dei documenti nella " +
+  "knowledge base aggiorna la conoscenza e sollecita l'allineamento delle fonti.";
+
 const FATTIBILITA: Record<LivelloFattibilita, { label: string; color: string }> = {
   alta: { label: "Fattibilità alta", color: "#008055" },
   media: { label: "Fattibilità media", color: "#a66300" },
@@ -61,9 +90,10 @@ function ratioPct(ratio: number | null | undefined): string | null {
 /** Riga evidenza: dettaglio + link "(fonte)" cliccabile e verificabile. */
 function evidenzaInline(e: Evidenza): Content {
   const tier = e.tier === "documentale" ? " [documentale]" : "";
+  const ext = e.fonte_tipo === "ispirazione_esterna" ? " [ispirazione esterna]" : "";
   return {
     text: [
-      { text: `${e.fonte}${tier}: `, bold: true, color: BRAND.primary900 },
+      { text: `${e.fonte}${tier}${ext}: `, bold: true, color: BRAND.primary900 },
       { text: e.dettaglio?.trim() ? `${e.dettaglio.trim()} ` : "" },
       { text: "(fonte)", link: e.url, color: BRAND.primary, decoration: "underline" },
     ],
@@ -89,7 +119,10 @@ function finanziamentoInline(f: Finanziamento): Content {
 
 /** Una proposta o idea come "card" riquadrata. */
 function propostaCard(p: Proposta): Content {
-  const gen = p.generatore ? GENERATORE_LABEL[p.generatore] ?? p.generatore : null;
+  const gen = p.generatore
+    ? GENERATORE_LABEL[p.generatore] ?? GENERATORE_MARKETING_LABEL[p.generatore] ?? p.generatore
+    : null;
+  const lente = p.lente ? LENTE_LABEL[p.lente] ?? p.lente : null;
   const fatt = FATTIBILITA[p.fattibilita.livello] ?? FATTIBILITA.da_verificare;
   const ratio = ratioPct(p.fattibilita.spend_ratio_storico);
 
@@ -98,6 +131,9 @@ function propostaCard(p: Proposta): Content {
     {
       columns: [
         { text: fatt.label, color: "#ffffff", background: fatt.color, fontSize: 8, bold: true, width: "auto", margin: [0, 2, 0, 2] },
+        ...(lente
+          ? [{ text: lente, color: "#ffffff", background: BRAND.green, fontSize: 8, bold: true, width: "auto", margin: [8, 2, 0, 2] } as Content]
+          : []),
         ...(gen
           ? [{ text: gen, color: BRAND.primary, fontSize: 8, bold: true, margin: [8, 3, 0, 0], width: "auto" } as Content]
           : []),
@@ -148,8 +184,9 @@ function sectionTitle(text: string): Content {
 
 /** Costruisce la definizione documento pdfmake dalla scheda. */
 function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
-  const proposte = s.proposte.filter((p) => !p.generatore);
-  const idee = s.proposte.filter((p) => p.generatore);
+  const marketing = s.proposte.filter(isMarketing);
+  const idee = s.proposte.filter((p) => p.generatore && !isMarketing(p));
+  const proposte = s.proposte.filter((p) => !p.generatore && !p.lente);
   const dataStr = (() => {
     try {
       return new Date(s.generato_il).toLocaleString("it-IT");
@@ -168,9 +205,11 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
     { text: `Generata il ${dataStr}`, fontSize: 9, color: BRAND.muted, margin: [0, 2, 0, 8] },
   ];
 
-  if (s.disclaimer?.trim()) {
+  {
+    const base = s.disclaimer?.trim() || "";
+    const text = (base + DISCLAIMER_ADDENDUM).trim();
     content.push({
-      table: { widths: ["*"], body: [[{ text: s.disclaimer.trim(), fontSize: 8.5, italics: true, color: BRAND.muted, margin: [8, 6, 8, 6] }]] },
+      table: { widths: ["*"], body: [[{ text, fontSize: 8.5, italics: true, color: BRAND.muted, margin: [8, 6, 8, 6] }]] },
       layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => BRAND.bgMuted },
       margin: [0, 0, 0, 6],
     });
@@ -193,28 +232,70 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
     }
   }
 
-  content.push(sectionTitle("Proposte"));
-  if (proposte.length === 0) {
-    content.push({ text: "Nessuna proposta ha superato la verifica delle fonti.", italics: true, color: BRAND.muted, fontSize: 9.5 });
-  } else {
-    content.push(...proposte.map(propostaCard));
+  // In modalità marketing (solo spunti) la sezione Proposte/SWOT sarebbe vuota:
+  // mostrala solo se ci sono proposte o se NON è un report di solo marketing.
+  if (proposte.length > 0 || marketing.length === 0) {
+    content.push(sectionTitle("Proposte"));
+    if (proposte.length === 0) {
+      content.push({ text: "Nessuna proposta ha superato la verifica delle fonti.", italics: true, color: BRAND.muted, fontSize: 9.5 });
+    } else {
+      content.push(...proposte.map(propostaCard));
+    }
   }
 
-  content.push(sectionTitle("Idee per il territorio"));
-  if (s.idee_sintesi?.trim()) {
-    content.push({ text: s.idee_sintesi.trim(), fontSize: 10, alignment: "justify", margin: [0, 0, 0, 4] });
-  }
-  content.push({
-    text: "Spunti generati dagli scarti tra dati e attuato, elencati dalla più promettente.",
-    fontSize: 8.5,
-    italics: true,
-    color: BRAND.muted,
-    margin: [0, 0, 0, 6],
-  });
-  if (idee.length === 0) {
-    content.push({ text: "Nessuna idea ha superato la verifica delle premesse.", italics: true, color: BRAND.muted, fontSize: 9.5 });
+  // Le "Idee per il territorio" (generatori finanziari) e il "Marketing
+  // territoriale" sono modalità distinte e non co-occorrono: in modalità
+  // marketing `idee_sintesi` è l'intro degli spunti, e la sezione Idee si salta.
+  if (marketing.length === 0) {
+    content.push(sectionTitle("Idee per il territorio"));
+    if (s.idee_sintesi?.trim()) {
+      content.push({ text: s.idee_sintesi.trim(), fontSize: 10, alignment: "justify", margin: [0, 0, 0, 4] });
+    }
+    content.push({
+      text: "Spunti generati dagli scarti tra dati e attuato, elencati dalla più promettente.",
+      fontSize: 8.5,
+      italics: true,
+      color: BRAND.muted,
+      margin: [0, 0, 0, 6],
+    });
+    if (idee.length === 0) {
+      content.push({ text: "Nessuna idea ha superato la verifica delle premesse.", italics: true, color: BRAND.muted, fontSize: 9.5 });
+    } else {
+      content.push(...idee.map(propostaCard));
+    }
   } else {
-    content.push(...idee.map(propostaCard));
+    content.push(sectionTitle("Marketing territoriale — spunti di attrattività"));
+    if (s.idee_sintesi?.trim()) {
+      content.push({ text: s.idee_sintesi.trim(), fontSize: 10, alignment: "justify", margin: [0, 0, 0, 4] });
+    }
+    content.push({
+      text:
+        "Spunti di posizionamento ispirati a iniziative di altri enti: ogni spunto " +
+        "cita una premessa locale e un precedente esterno. Non sono atti amministrativi " +
+        "né progetti finanziati.",
+      fontSize: 8.5,
+      italics: true,
+      color: BRAND.muted,
+      margin: [0, 0, 0, 6],
+    });
+    // Raggruppa per lente, preservando l'ordine di prima comparsa.
+    const byLente = new Map<string, Proposta[]>();
+    for (const p of marketing) {
+      const key = (p.lente as string) || "altro";
+      const bucket = byLente.get(key);
+      if (bucket) bucket.push(p);
+      else byLente.set(key, [p]);
+    }
+    for (const [lente, items] of byLente) {
+      content.push({
+        text: LENTE_LABEL[lente] ?? lente,
+        bold: true,
+        fontSize: 11,
+        color: BRAND.primary,
+        margin: [0, 6, 0, 2],
+      });
+      content.push(...items.map(propostaCard));
+    }
   }
 
   if (s.citazioni.length) {
