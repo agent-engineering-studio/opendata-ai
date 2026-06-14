@@ -123,6 +123,10 @@ function TerritorioInner() {
 
   async function genera(e: React.FormEvent) {
     e.preventDefault();
+    await run(false);
+  }
+
+  async function run(force: boolean) {
     const cod = codComune.trim();
     if (!cod) return;
     setStato({ fase: "loading" });
@@ -136,6 +140,8 @@ function TerritorioInner() {
         tema: tema.trim() || null,
         // Un solo fan-out alimenta scheda E idee: report completo in un colpo.
         modalita: "completa" satisfies ModalitaProgramma,
+        // "Rigenera": salta la cache lato backend e rifà il fan-out.
+        ...(force ? { force_refresh: true } : {}),
       };
       const token = await getToken();
       const res = await apiFetch("/programma/stream", {
@@ -336,6 +342,16 @@ function TerritorioInner() {
               </p>
             </div>
             <div className="d-flex gap-2 no-print">
+              {scheda.da_cache ? (
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => run(true)}
+                  title="Rigenera l'analisi ignorando la cache"
+                >
+                  Rigenera
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
@@ -352,6 +368,17 @@ function TerritorioInner() {
               </button>
             </div>
           </div>
+
+          {scheda.da_cache ? (
+            <div className="alert alert-light border d-flex align-items-center gap-2 py-2 small no-print" role="status">
+              <span aria-hidden="true">💾</span>
+              <span>
+                Analisi servita dalla <strong>cache</strong> (generata il{" "}
+                {formatGeneratoIl(scheda.generato_il)}). Premi <em>Rigenera</em> per
+                rifarla con i dati più recenti.
+              </span>
+            </div>
+          ) : null}
 
           <DisclaimerBanner text={scheda.disclaimer} />
 

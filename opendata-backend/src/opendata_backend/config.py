@@ -753,6 +753,10 @@ class Settings(BaseSettings):
     # Modello dedicato alla scheda (None = riusa claude_model). Ha effetto solo
     # col provider claude; consigliato un modello Sonnet per il JSON lungo.
     programma_model: str | None = Field(default=None)
+    # TTL (giorni) della cache delle analisi (F1): oltre, la scheda viene
+    # rigenerata anche senza nuovi documenti, per intercettare gli aggiornamenti
+    # delle fonti (es. OpenCoesione). 0 = cache disabilitata.
+    programma_cache_ttl_days: int = Field(default=30)
     # Tetto di token per gli agenti di SINTESI (synth/programma/idee). Il client
     # Anthropic, se non riceve max_tokens, applica un default di 1024 token —
     # troppo basso per il JSON ricco della scheda (sintesi + SWOT + proposte +

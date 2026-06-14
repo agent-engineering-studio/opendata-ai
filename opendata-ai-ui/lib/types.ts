@@ -119,6 +119,8 @@ export type ProgrammaRequest = {
   cicli?: string[] | null;
   /** "scheda" (default) = SWOT; "idee" = brainstorming a 4 generatori. */
   modalita?: ModalitaProgramma;
+  /** "Rigenera": salta la cache (F1) e forza un nuovo fan-out. */
+  force_refresh?: boolean;
 };
 
 /* ── Selezione zona via tag OSM (Pezzo 6 — GET /territorio/*) ─────────── */
@@ -175,4 +177,6 @@ export type ProgrammaResponse = {
   citazioni: Resource[];
   disclaimer: string;
   generato_il: string;
+  /** True se la scheda arriva dalla cache (F1): la UI offre "Rigenera". */
+  da_cache?: boolean;
 };

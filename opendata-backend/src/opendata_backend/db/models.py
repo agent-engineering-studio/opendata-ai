@@ -214,3 +214,52 @@ class Classification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class ComuneKnowledge(Base):
+    """Versione della "conoscenza" per comune (F1/F2).
+
+    Incrementata quando cambiano i documenti del comune nel KG (upload/delete,
+    F2). Entra nella chiave della cache analisi: bumpare la versione invalida
+    tutte le schede in cache di quel comune (rigenerate al prossimo accesso).
+    In F1 resta a 0 (nessun documento ancora), ma la colonna c'è già.
+    """
+
+    __tablename__ = "comune_knowledge"
+    __table_args__ = ({"schema": "opendata"},)
+
+    cod_comune: Mapped[str] = mapped_column(Text, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProgrammaCache(Base):
+    """Cache delle analisi /programma per il replay (query invece di rigenerare).
+
+    GLOBALE (non per-utente): la scheda di un comune dipende dai parametri e
+    dalle evidenze pubbliche, non da chi la chiede. Invalidata da
+    `knowledge_version` (per comune) + TTL (`expires_at`). `scheda_json` è la
+    `ProgrammaResponse` serializzata, restituita verbatim al hit.
+    """
+
+    __tablename__ = "programma_cache"
+    __table_args__ = (
+        Index("ix_programma_cache_comune", "cod_comune"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cache_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False)
+    tema: Mapped[str | None] = mapped_column(Text, nullable=True)
+    modalita: Mapped[str] = mapped_column(Text, nullable=False)
+    knowledge_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    scheda_json: Mapped[str] = mapped_column(Text, nullable=False)
+    generato_il: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

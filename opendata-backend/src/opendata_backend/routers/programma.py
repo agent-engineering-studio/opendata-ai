@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Depends
@@ -18,14 +19,78 @@ from fastapi.responses import StreamingResponse
 from ..auth import ClerkUser
 from ..db.repositories import comuni as comuni_repo
 from ..db.repositories import history as history_repo
+from ..db.repositories import programma_cache as cache_repo
 from ..db.repositories import users as users_repo
-from ..orchestrator.programma import ProgrammaRequest, ProgrammaResponse
+from ..orchestrator.programma import PROMPT_VERSION, ProgrammaRequest, ProgrammaResponse
 from ..shared.ratelimit import enforce_rate_limit
 from ..state import session_holder
 
 log = logging.getLogger("opendata-backend.programma")
 
 router = APIRouter(tags=["programma"])
+
+
+async def _cache_key_for(req: ProgrammaRequest) -> tuple[str, int] | None:
+    """Calcola (cache_key, knowledge_version) per la richiesta, o None se la
+    cache è disabilitata (no DB o TTL=0)."""
+    settings = session_holder.settings
+    db = session_holder.database
+    if db is None or settings is None or settings.programma_cache_ttl_days <= 0:
+        return None
+    async with db.session() as session:
+        kv = await cache_repo.get_knowledge_version(session, req.cod_comune)
+    key = cache_repo.compute_cache_key(
+        cod_comune=req.cod_comune,
+        tema=req.tema,
+        cicli=req.cicli,
+        modalita=req.modalita,
+        knowledge_version=kv,
+        prompt_version=PROMPT_VERSION,
+    )
+    return key, kv
+
+
+async def _cache_lookup(cache_key: str) -> ProgrammaResponse | None:
+    """Scheda fresca dalla cache (con da_cache=True), o None."""
+    db = session_holder.database
+    if db is None:
+        return None
+    async with db.session() as session:
+        row = await cache_repo.get_fresh(session, cache_key, now=datetime.now(timezone.utc))
+        if row is None:
+            return None
+        scheda_json = row.scheda_json
+    resp = ProgrammaResponse.model_validate_json(scheda_json)
+    resp.da_cache = True
+    return resp
+
+
+async def _cache_store(cache_key: str, knowledge_version: int, req: ProgrammaRequest,
+                       resp: ProgrammaResponse) -> None:
+    """Salva la scheda in cache (best-effort: un errore non rompe la risposta)."""
+    settings = session_holder.settings
+    db = session_holder.database
+    if db is None or settings is None or settings.programma_cache_ttl_days <= 0:
+        return
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=settings.programma_cache_ttl_days)
+    try:
+        async with db.session() as session:
+            await cache_repo.upsert(
+                session,
+                cache_key=cache_key,
+                cod_comune=req.cod_comune,
+                tema=req.tema,
+                modalita=req.modalita,
+                knowledge_version=knowledge_version,
+                prompt_version=PROMPT_VERSION,
+                scheda_json=resp.model_dump_json(),
+                generato_il=resp.generato_il,
+                expires_at=expires_at,
+            )
+            await session.commit()
+    except Exception:
+        log.warning("cache store fallito per %s (proseguo)", req.cod_comune)
 
 
 async def _enrich_popolazione(req: ProgrammaRequest) -> None:
@@ -101,11 +166,20 @@ async def genera_programma(
         )
 
     await _enrich_popolazione(req)
+    ck = await _cache_key_for(req)
+    if ck and not req.force_refresh:
+        cached = await _cache_lookup(ck[0])
+        if cached is not None:
+            log.info("programma da cache: %s", _summary(cached))
+            return cached
+
     try:
         resp = await sess.run_programma(req)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    if ck:
+        await _cache_store(ck[0], ck[1], req, resp)
     await _audit(user, req, resp)
     log.info("programma generato: %s", _summary(resp))
     return resp
@@ -141,12 +215,26 @@ async def genera_programma_stream(
             )
 
     await _enrich_popolazione(req)
+    ck = await _cache_key_for(req)
 
     async def _events():
         try:
+            # Hit di cache: niente fan-out, un solo evento result immediato.
+            if ck and not req.force_refresh:
+                cached = await _cache_lookup(ck[0])
+                if cached is not None:
+                    await _audit(user, req, cached)
+                    log.info("programma (stream) da cache: %s", _summary(cached))
+                    yield json.dumps(
+                        {"event": "result", "scheda": cached.model_dump(mode="json")},
+                        ensure_ascii=False,
+                    ) + "\n"
+                    return
             async for ev in sess.run_programma_streaming(req):
                 if ev.get("event") == "result":
                     resp = ProgrammaResponse.model_validate(ev["scheda"])
+                    if ck:
+                        await _cache_store(ck[0], ck[1], req, resp)
                     await _audit(user, req, resp)
                     log.info("programma (stream) generato: %s", _summary(resp))
                 yield json.dumps(ev, ensure_ascii=False) + "\n"

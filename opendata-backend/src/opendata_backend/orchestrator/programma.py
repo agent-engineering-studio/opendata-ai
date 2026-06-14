@@ -122,11 +122,19 @@ class ProgrammaRequest(BaseModel):
     # in "modalità macro" (aggregati + top-N, niente enumerazione) per evitare
     # report sterminati sulle città grandi (es. Milano, ~2600 progetti).
     popolazione: int | None = None
+    # "Rigenera": salta la cache (F1) e forza un nuovo fan-out. Non entra nella
+    # chiave di cache (è un controllo, non un parametro dell'analisi).
+    force_refresh: bool = False
 
 
 # Soglia "città grande": sopra questa popolazione l'analisi è guidata dagli
 # aggregati territoriali e dai top progetti per tema, mai dall'enumerazione.
 MACRO_POPULATION = 150_000
+
+# Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
+# Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
+# cache, così vengono rigenerate invece di servire output vecchio.
+PROMPT_VERSION = "2026-06-14"
 
 
 class ProgrammaResponse(BaseModel):
@@ -146,6 +154,10 @@ class ProgrammaResponse(BaseModel):
     citazioni: list[Resource]  # tutte le fonti risolvibili raccolte dagli specialisti
     disclaimer: str
     generato_il: datetime
+    # True quando la scheda è stata servita dalla cache (F1) invece di
+    # rigenerata: la UI mostra "analisi da cache · Rigenera". `generato_il`
+    # resta la data della generazione originale.
+    da_cache: bool = False
 
 
 class _LlmProgramma(BaseModel):
