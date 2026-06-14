@@ -21,8 +21,11 @@ export interface ApiFetchOptions extends Omit<RequestInit, "headers"> {
 
 export async function apiFetch(path: string, opts: ApiFetchOptions = {}): Promise<Response> {
   const { token, headers, ...rest } = opts;
+  // Con FormData (upload multipart) NON impostare Content-Type: lo fa il
+  // browser includendo il boundary. Forzarlo a JSON romperebbe l'upload.
+  const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
   const merged: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(headers ?? {}),
   };
   if (token) merged["Authorization"] = `Bearer ${token}`;

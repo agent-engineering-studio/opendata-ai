@@ -164,6 +164,19 @@ export type ZoneListResponse = {
   source_url?: string;
 };
 
+/** Documento PA ingerito nel KG (F2) — riga del file manager. */
+export type Documento = {
+  id: number;
+  cod_comune: string;
+  filename: string;
+  stato: "in_ingest" | "ingerito" | "errore" | (string & {});
+  pagine?: number | null;
+  mime_type?: string | null;
+  kg_document_id?: string | null;
+  errore?: string | null;
+  caricato_il?: string | null;
+};
+
 export type ProgrammaResponse = {
   comune: string;
   zona?: string | null;

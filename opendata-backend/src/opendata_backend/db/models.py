@@ -235,6 +235,37 @@ class ComuneKnowledge(Base):
     )
 
 
+class Documento(Base):
+    """Registro dei documenti PA ingeriti nel KG (F2) — alimenta il file manager.
+
+    Il file vive nel KG (chunk/grafo) sotto namespace `comune-{cod}`; qui
+    teniamo i METADATI per sapere cosa è stato caricato, da chi e con che esito
+    (stato), così la UI non deve dipendere da un listing del KG.
+    """
+
+    __tablename__ = "documenti"
+    __table_args__ = (
+        Index("ix_documenti_comune", "cod_comune"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    kg_namespace: Mapped[str] = mapped_column(Text, nullable=False)
+    kg_document_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pagine: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # in_ingest | ingerito | errore
+    stato: Mapped[str] = mapped_column(Text, nullable=False, server_default="in_ingest")
+    errore: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caricato_da: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caricato_il: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ProgrammaCache(Base):
     """Cache delle analisi /programma per il replay (query invece di rigenerare).
 

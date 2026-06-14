@@ -227,6 +227,12 @@ services:
       KG_AGENT_NAME: ${KG_AGENT_NAME:-kg}
       KG_NAMESPACE_PREFIX: ${KG_NAMESPACE_PREFIX:-comune-}
       KG_UI_URL: ${KG_UI_URL:-}
+      # F2 — upload documenti: base REST del KG (FastAPI) per ingest/delete e
+      # directory CONDIVISA col KG (il KG deve montare lo stesso volume sullo
+      # stesso path per leggere i file passati a POST /ingest). Vuoto → upload
+      # documenti disabilitato (endpoint 503).
+      KG_API_URL: ${KG_API_URL:-}
+      KG_UPLOAD_DIR: ${KG_UPLOAD_DIR:-/data/kg-uploads}
       # Ambito territoriale (vuoto = nessun limite; prod = Puglia).
       TERRITORIO_PROVINCE: ${TERRITORIO_PROVINCE:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

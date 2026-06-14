@@ -744,6 +744,15 @@ class Settings(BaseSettings):
     kg_agent_name: str = Field(default="kg")
     # Convenzione namespace per non mescolare documenti tra amministrazioni.
     kg_namespace_prefix: str = Field(default="comune-")
+    # F2 — write-path verso il KG (lato server, MAI esposto all'agente, R13):
+    # base REST del KG (FastAPI) per ingest/delete documenti. Vuoto → upload
+    # documenti disabilitato (l'endpoint risponde 503).
+    kg_api_url: str | None = Field(default=None)
+    # Directory CONDIVISA backend↔KG: il backend salva qui il PDF e chiama
+    # POST /ingest con questo file_path (il KG legge lo stesso volume).
+    kg_upload_dir: str = Field(default="/data/kg-uploads")
+    # Tetto dimensione upload documenti (25 MB).
+    documenti_max_bytes: int = Field(default=25 * 1024 * 1024)
     # Base URL della UI del KG per i locator delle citazioni
     # ({kg_ui_url}/documents/{doc_id}); vuoto → riferimento sintetico kg://.
     kg_ui_url: str | None = Field(default=None)

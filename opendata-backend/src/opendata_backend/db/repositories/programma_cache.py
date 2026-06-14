@@ -50,6 +50,23 @@ async def get_knowledge_version(session: AsyncSession, cod_comune: str) -> int:
     return int(v) if v is not None else 0
 
 
+async def bump_knowledge_version(session: AsyncSession, cod_comune: str) -> int:
+    """Incrementa la versione conoscenza del comune → invalida la sua cache
+    analisi (la chiave cambia). Chiamato su upload/delete di documenti (F2).
+    Crea la riga se assente. Ritorna la nuova versione."""
+    cod = cod_comune.strip()
+    row = await session.scalar(
+        select(ComuneKnowledge).where(ComuneKnowledge.cod_comune == cod)
+    )
+    now = datetime.now(timezone.utc)
+    if row is None:
+        session.add(ComuneKnowledge(cod_comune=cod, version=1, updated_at=now))
+        return 1
+    row.version = (row.version or 0) + 1
+    row.updated_at = now
+    return row.version
+
+
 async def get_fresh(
     session: AsyncSession, cache_key: str, *, now: datetime
 ) -> ProgrammaCache | None:

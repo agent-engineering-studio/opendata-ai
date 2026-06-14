@@ -10,6 +10,7 @@ import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
 import { ZoneSelector, type ZoneSelection } from "@/components/territorio/ZoneSelector";
+import { DocumentiManager } from "@/components/territorio/DocumentiManager";
 import { downloadSchedaMarkdown } from "@/lib/programmaMarkdown";
 import { downloadSchedaPdf } from "@/lib/programmaPdf";
 
@@ -320,6 +321,17 @@ function TerritorioInner() {
             ) : null}
           </div>
         </form>
+
+        {codComune ? (
+          <details className="card shadow-sm mb-4">
+            <summary className="card-header fw-semibold" style={{ cursor: "pointer" }}>
+              Documenti del comune (base di conoscenza)
+            </summary>
+            <div className="card-body">
+              <DocumentiManager codComune={codComune} comuneNome={selection?.comune_nome} />
+            </div>
+          </details>
+        ) : null}
 
         {stato.fase === "errore" ? (
           <div className="alert alert-danger" role="alert">

@@ -26,6 +26,8 @@ dependencies = [
     "redis>=5.0.0",
     "anthropic>=0.40.0",
     "a2a-sdk[fastapi]>=1.1.0",
+    # Upload documenti (F2): FastAPI UploadFile/Form richiedono python-multipart.
+    "python-multipart>=0.0.9",
     # Ripara il JSON degli agenti di sintesi: i modelli, anche a T=0, ogni
     # tanto omettono una virgola e un parse stretto azzererebbe l'intera
     # scheda. Usato SOLO come fallback dopo json.loads (vedi orchestrator).
