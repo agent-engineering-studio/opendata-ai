@@ -181,6 +181,55 @@ services:
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8080"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # I default overpass-api.de + kumi.systems sono irraggiungibili da alcune
+      # reti (ConnectError/timeout). Usiamo i mirror FR (primario) + CH
+      # (fallback), entrambi raggiungibili; sovrascrivibili via env.
+      OVERPASS_URL: ${OVERPASS_URL:-https://overpass.openstreetmap.fr/api/interpreter}
+      OVERPASS_FALLBACK_URLS: ${OVERPASS_FALLBACK_URLS:-https://overpass.osm.ch/api/interpreter}
+    restart: unless-stopped
+
+  # ───── Overpass self-hosted — istanza locale su estratto Italia (opt-in) ─────
+  # Profilo "overpass" (start con `--profile overpass`): elimina rate limit (429)
+  # e blocchi di rete verso i mirror pubblici. NON è nel set di default perché
+  # richiede disco (~25-50 GB di DB) e un init lungo (download .pbf ~2 GB +
+  # build, da ~1 h a freddo: il container resta NON pronto finché non finisce).
+  #
+  # Per usarlo, oltre ad attivare il profilo, punta i client all'istanza locale:
+  #   OVERPASS_URL=http://overpass/api/interpreter            (backend + osm-mcp)
+  #   OVERPASS_FALLBACK_URLS=https://overpass.openstreetmap.fr/api/interpreter
+  # (in .env / .env.local). Dettagli e sizing in infra/overpass/README.md.
+  overpass:
+    image: wiktorn/overpass-api:latest
+    container_name: opendata-ai-overpass
+    profiles: ["overpass"]
+    ports:
+      - "${OVERPASS_PORT:-18086}:80"
+    environment:
+      # `no` = niente metadata/attic → DB molto più piccolo e init più rapido
+      # (l'app usa solo geometrie/tag correnti, non lo storico delle modifiche).
+      OVERPASS_META: ${OVERPASS_META:-no}
+      OVERPASS_MODE: init
+      # Estratto regionale Geofabrik. Default: Italia intera (margine se l'app
+      # esce dalla Puglia). Per ridurre disco/init usa il Sud:
+      #   https://download.geofabrik.de/europe/italy/sud-latest.osm.pbf
+      #   https://download.geofabrik.de/europe/italy/sud-updates/
+      OVERPASS_PLANET_URL: ${OVERPASS_PLANET_URL:-https://download.geofabrik.de/europe/italy-latest.osm.pbf}
+      OVERPASS_DIFF_URL: ${OVERPASS_DIFF_URL:-https://download.geofabrik.de/europe/italy-updates/}
+      # L'entrypoint scarica sempre su planet.osm.bz2: se la sorgente è .pbf va
+      # convertita (osmium è incluso nell'immagine). Diff Geofabrik = giornalieri.
+      OVERPASS_PLANET_PREPROCESS: 'mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat /db/planet.osm.pbf -o /db/planet.osm.bz2 && rm /db/planet.osm.pbf'
+      OVERPASS_RULES_LOAD: ${OVERPASS_RULES_LOAD:-10}
+      OVERPASS_UPDATE_SLEEP: ${OVERPASS_UPDATE_SLEEP:-86400}
+    volumes:
+      - overpass_db:/db
+    healthcheck:
+      # In init l'API non risponde: start_period lungo per non marcarlo unhealthy
+      # durante il primo build del DB.
+      test: ["CMD-SHELL", "wget -qO- 'http://localhost/api/interpreter?data=[out:json][timeout:5];out%20count;' | grep -q count || exit 1"]
+      interval: 1m
+      timeout: 15s
+      retries: 3
+      start_period: 2h
     restart: unless-stopped
 
   # ───── SearXNG — meta-search backend per la fonte web (marketing P10) ─────
@@ -193,7 +242,10 @@ services:
     ports:
       - "${SEARXNG_PORT:-18099}:8080"
     volumes:
-      - ./infra/searxng:/etc/searxng:ro
+      # niente :ro — l'entrypoint dell'immagine fa chown di /etc/searxng all'avvio
+      # e su un mount read-only fallisce ("chown: ... Read-only file system").
+      # SearXNG non scrive nulla qui a runtime, la dir host resta pulita.
+      - ./infra/searxng:/etc/searxng
     environment:
       SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-18099}/
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -244,6 +296,10 @@ services:
       OPENCOESIONE_MCP_URL: ${OPENCOESIONE_MCP_URL:-http://opencoesione-mcp:8082/mcp}
       OSM_MCP_URL: ${OSM_MCP_URL:-http://osm-mcp:8080/mcp}
       ENABLE_OSM_MAPS: ${ENABLE_OSM_MAPS:-true}
+      # Il backend usa opendata_core.osm in-process (ancore zona/turismo): stessi
+      # mirror Overpass raggiungibili dell'osm-mcp (default de+kumi bloccati).
+      OVERPASS_URL: ${OVERPASS_URL:-https://overpass.openstreetmap.fr/api/interpreter}
+      OVERPASS_FALLBACK_URLS: ${OVERPASS_FALLBACK_URLS:-https://overpass.osm.ch/api/interpreter}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
       EUROSTAT_SDMX_BASE_URL: ${EUROSTAT_SDMX_BASE_URL:-https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1}
@@ -344,3 +400,5 @@ volumes:
     name: opendata-ai-redis-data
   sdmx_cache:
     name: opendata-ai-sdmx-cache
+  overpass_db:
+    name: opendata-ai-overpass-db

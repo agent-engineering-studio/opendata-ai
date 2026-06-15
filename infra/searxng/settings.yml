@@ -5,8 +5,25 @@
 #   interroga con format=json); di default SearXNG espone solo html.
 # - `limiter: false`: niente rate-limit/bot-detection sul consumo server↔server.
 # - `secret_key`: firma token interni; cambiala in produzione (istanza interna,
-#   rischio basso). Montato read-only.
-use_default_settings: true
+#   rischio basso).
+# Motori che sporcano il log da un IP datacenter, gestiti in due modi diversi:
+# - `engines.remove` (ahmia, torch): motori Tor, falliscono l'init senza proxy
+#   Tor; nessun altro motore dipende da loro, quindi si rimuovono del tutto.
+# - `engines[].disabled` (duckduckgo, brave): NON si possono rimuovere perché i
+#   motori `… images/news/videos` condividono la loro `network` con lo stesso
+#   nome — rimuovendoli SearXNG va in KeyId all'avvio (`KeyError: 'brave'`). Li
+#   disabilitiamo: la network resta definita ma il motore non viene interrogato
+#   (niente CAPTCHA duckduckgo né 429 brave). Restano google/bing/ecc.
+use_default_settings:
+  engines:
+    remove:
+      - ahmia
+      - torch
+engines:
+  - name: duckduckgo
+    disabled: true
+  - name: brave
+    disabled: true
 server:
   secret_key: "opendata-ai-searxng-internal-change-me"
   limiter: false
