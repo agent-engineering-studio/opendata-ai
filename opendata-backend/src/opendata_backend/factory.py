@@ -444,7 +444,11 @@ class OrchestratorSession:
         async with self._lock:
             aggregator = build_programma_aggregator(
                 self._programma_agent, req,
-                idee_agent=self._idee_agent, marketing_agent=self._marketing_agent
+                idee_agent=self._idee_agent,
+                # Marketing nell'analisi unica solo se la fonte web è attiva
+                # (senza, gli spunti non avrebbero l'ispirazione esterna e
+                # verrebbero scartati dal guardrail A+B).
+                marketing_agent=self._marketing_agent if self._settings.enable_web else None,
             )
             task_text = build_programma_task(req, zona_info)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -598,7 +602,11 @@ class OrchestratorSession:
             # usarne uno solo (scheda/idee) o fonderli (completa).
             aggregator = build_programma_aggregator(
                 self._programma_agent, req,
-                idee_agent=self._idee_agent, marketing_agent=self._marketing_agent
+                idee_agent=self._idee_agent,
+                # Marketing nell'analisi unica solo se la fonte web è attiva
+                # (senza, gli spunti non avrebbero l'ispirazione esterna e
+                # verrebbero scartati dal guardrail A+B).
+                marketing_agent=self._marketing_agent if self._settings.enable_web else None,
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(build_programma_task(req, zona_info))

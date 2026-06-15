@@ -129,16 +129,15 @@ export function schedaToMarkdown(s: ProgrammaResponse): string {
     }
   }
 
-  if (proposte.length > 0 || marketing.length === 0) {
-    out.push("## Proposte", "");
-    if (proposte.length === 0) {
-      out.push("_Nessuna proposta ha superato la verifica delle fonti._", "");
-    } else {
-      for (const p of proposte) out.push(propostaBlock(p), "");
-    }
+  // Analisi UNICA: Proposte, Idee e Marketing sono sezioni dello stesso report.
+  out.push("## Proposte", "");
+  if (proposte.length === 0) {
+    out.push("_Nessuna proposta ha superato la verifica delle fonti._", "");
+  } else {
+    for (const p of proposte) out.push(propostaBlock(p), "");
   }
 
-  if (marketing.length === 0) {
+  if (idee.length > 0) {
     out.push("## Idee per il territorio", "");
     if (s.idee_sintesi?.trim()) out.push(s.idee_sintesi.trim(), "");
     out.push(
@@ -147,14 +146,11 @@ export function schedaToMarkdown(s: ProgrammaResponse): string {
         "Elencate dalla più promettente._",
       "",
     );
-    if (idee.length === 0) {
-      out.push("_Nessuna idea ha superato la verifica delle premesse._", "");
-    } else {
-      for (const p of idee) out.push(propostaBlock(p), "");
-    }
-  } else {
+    for (const p of idee) out.push(propostaBlock(p), "");
+  }
+
+  if (marketing.length > 0) {
     out.push("## Marketing territoriale — spunti di attrattività", "");
-    if (s.idee_sintesi?.trim()) out.push(s.idee_sintesi.trim(), "");
     out.push(
       "_Spunti di posizionamento ispirati a iniziative di altri enti: ogni spunto " +
         "cita una premessa locale e un precedente esterno. Non sono atti " +

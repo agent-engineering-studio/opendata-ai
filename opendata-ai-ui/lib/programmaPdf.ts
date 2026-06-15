@@ -232,21 +232,16 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
     }
   }
 
-  // In modalità marketing (solo spunti) la sezione Proposte/SWOT sarebbe vuota:
-  // mostrala solo se ci sono proposte o se NON è un report di solo marketing.
-  if (proposte.length > 0 || marketing.length === 0) {
-    content.push(sectionTitle("Proposte"));
-    if (proposte.length === 0) {
-      content.push({ text: "Nessuna proposta ha superato la verifica delle fonti.", italics: true, color: BRAND.muted, fontSize: 9.5 });
-    } else {
-      content.push(...proposte.map(propostaCard));
-    }
+  // Analisi UNICA: Proposte, Idee e Marketing sono SEZIONI dello stesso report
+  // (ognuna mostrata se ha contenuto), non modalità alternative.
+  content.push(sectionTitle("Proposte"));
+  if (proposte.length === 0) {
+    content.push({ text: "Nessuna proposta ha superato la verifica delle fonti.", italics: true, color: BRAND.muted, fontSize: 9.5 });
+  } else {
+    content.push(...proposte.map(propostaCard));
   }
 
-  // Le "Idee per il territorio" (generatori finanziari) e il "Marketing
-  // territoriale" sono modalità distinte e non co-occorrono: in modalità
-  // marketing `idee_sintesi` è l'intro degli spunti, e la sezione Idee si salta.
-  if (marketing.length === 0) {
+  if (idee.length > 0) {
     content.push(sectionTitle("Idee per il territorio"));
     if (s.idee_sintesi?.trim()) {
       content.push({ text: s.idee_sintesi.trim(), fontSize: 10, alignment: "justify", margin: [0, 0, 0, 4] });
@@ -258,16 +253,11 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
       color: BRAND.muted,
       margin: [0, 0, 0, 6],
     });
-    if (idee.length === 0) {
-      content.push({ text: "Nessuna idea ha superato la verifica delle premesse.", italics: true, color: BRAND.muted, fontSize: 9.5 });
-    } else {
-      content.push(...idee.map(propostaCard));
-    }
-  } else {
+    content.push(...idee.map(propostaCard));
+  }
+
+  if (marketing.length > 0) {
     content.push(sectionTitle("Marketing territoriale — spunti di attrattività"));
-    if (s.idee_sintesi?.trim()) {
-      content.push({ text: s.idee_sintesi.trim(), fontSize: 10, alignment: "justify", margin: [0, 0, 0, 4] });
-    }
     content.push({
       text:
         "Spunti di posizionamento ispirati a iniziative di altri enti: ogni spunto " +

@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-14"
+PROMPT_VERSION = "2026-06-15"
 
 
 class ProgrammaResponse(BaseModel):
@@ -275,7 +275,7 @@ def build_programma_task(
             "per tema (aggregati territoriali), gli indicatori critici e "
             "l'accessibilità della zona."
         )
-    if req.modalita == "marketing":
+    if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
             "ASSET locali valorizzabili (POI, beni culturali, prodotti tipici, reti "
@@ -503,24 +503,30 @@ def build_programma_aggregator(
             return validate_programma(resp, evidence_urls, modalita=modalita)
 
         if req.modalita == "completa":
-            # Un solo fan-out (già pagato), due sintesi in parallelo: la
-            # scheda (sintesi+SWOT+proposte) e le idee dei generatori — ogni
-            # parte validata con le regole della propria modalità, poi fuse.
-            parsed_scheda, parsed_idee = await asyncio.gather(
-                _run(programma_agent, "programma"),
-                _run(idee_agent, "idee"),  # type: ignore[arg-type]
-            )
-            response = _build(parsed_scheda, "scheda")
-            response_idee = _build(parsed_idee, "idee")
-            # La sintesi dell'idee_agent è la lettura d'insieme delle idee:
-            # va nel campo dedicato, non sovrascrive la sintesi territoriale.
+            # ANALISI UNICA (un solo fan-out già pagato): scheda
+            # (sintesi+SWOT+proposte) + idee dei generatori + — quando il
+            # marketing_agent è disponibile (fonte web attiva) — gli spunti di
+            # marketing territoriale. Ogni parte è validata con le regole della
+            # propria modalità, poi le proposte sono FUSE in un'unica lista
+            # (la categoria resta nel `generatore`/`lente`).
+            runs = [_run(programma_agent, "programma"), _run(idee_agent, "idee")]
+            if marketing_agent is not None:
+                runs.append(_run(marketing_agent, "marketing"))
+            parsed = await asyncio.gather(*runs)
+            response = _build(parsed[0], "scheda")
+            response_idee = _build(parsed[1], "idee")
             response.idee_sintesi = response_idee.sintesi
-            # Le idee si riconoscono dal `generatore`; niente duplicati per titolo.
-            titoli = {p.titolo.strip().lower() for p in response.proposte}
-            response.proposte += [
-                p for p in response_idee.proposte
-                if p.titolo.strip().lower() not in titoli
-            ]
+
+            def _merge(extra: ProgrammaResponse) -> None:
+                titoli = {p.titolo.strip().lower() for p in response.proposte}
+                response.proposte += [
+                    p for p in extra.proposte
+                    if p.titolo.strip().lower() not in titoli
+                ]
+
+            _merge(response_idee)
+            if marketing_agent is not None:
+                _merge(_build(parsed[2], "marketing"))
             if not response.disclaimer.strip() and response_idee.disclaimer.strip():
                 response.disclaimer = response_idee.disclaimer
         elif req.modalita == "marketing":
