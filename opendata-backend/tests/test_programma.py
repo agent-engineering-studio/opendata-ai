@@ -482,6 +482,67 @@ async def test_commercio_info_injects_citable_istat_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_turismo_cultura_requires_local_anchor() -> None:
+    """turismo_cultura (lente Turismo): premessa = asset OSM o ricettività ISTAT
+    (host in _TURISMO_HOSTS); nessun requisito web. Solo OpenCoesione → out."""
+    osm_url = "https://www.openstreetmap.org/#map=13/40.79800/16.92300"
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "12 musei, Castello X"}
+    ev_istat = {"fonte": "istat", "url": _ISTAT_URL, "dettaglio": "posti letto"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("turismo_cultura", [ev_osm]),    # ok (asset OSM)
+                _idea("turismo_cultura", [ev_istat]),  # ok (ricettività ISTAT)
+                _idea("turismo_cultura", [ev_oc]),     # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("osm", "Asset.", [
+        {"name": "asset turistici", "url": osm_url, "format": "JSON", "content": None},
+        {"name": "ricettività", "url": _ISTAT_URL, "format": "JSON", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["turismo_cultura", "turismo_cultura"]
+
+
+@pytest.mark.asyncio
+async def test_turismo_info_injects_citable_osm_anchor() -> None:
+    """L'ancora turismo deterministica (asset OSM iniettati dal backend) rende
+    citabile la fonte: una proposta turismo_cultura che la cita sopravvive ANCHE
+    se nessuno specialista ha prodotto la risorsa OSM."""
+    osm_url = "https://www.openstreetmap.org/#map=13/40.79800/16.92300"
+    turismo_info = {
+        "comune": "110002",
+        "counts": {"musei": 2, "monumenti_siti": 5, "attrazioni": 3, "ricettivita": 7, "cultura": 1},
+        "landmarks": [{"name": "Castello Svevo", "kind": "castle"}],
+        "source_url": osm_url,
+    }
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "5 monumenti, Castello Svevo"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("turismo_cultura", [ev_osm])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, turismo_info=turismo_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["turismo_cultura"]
+    assert any(osm_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

@@ -111,6 +111,43 @@ async def test_commercial_profile_requires_scope():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_tourism_profile_counts_and_landmarks():
+    # 1ª POST = conteggi (5 categorie + totale); 2ª POST = landmark nominati.
+    counts_resp = httpx.Response(
+        200,
+        json={
+            "elements": [
+                {"type": "count", "id": 0, "tags": {"total": str(t)}}
+                for t in (4, 3, 2, 5, 1, 15)  # musei, monumenti, attrazioni, ricettività, cultura, totale
+            ]
+        },
+    )
+    landmarks_resp = httpx.Response(
+        200,
+        json={
+            "elements": [
+                {"type": "node", "id": 1, "tags": {"name": "Castello di Gioia del Colle", "historic": "castle"}},
+                {"type": "node", "id": 2, "tags": {"name": "Museo Archeologico", "tourism": "museum"}},
+                {"type": "node", "id": 3, "tags": {"tourism": "attraction"}},  # senza nome → scartato
+                {"type": "node", "id": 4, "tags": {"name": "Castello di Gioia del Colle", "historic": "castle"}},  # dup
+            ]
+        },
+    )
+    respx.post(settings.OVERPASS_URL).mock(side_effect=[counts_resp, landmarks_resp])
+    raw = await tools.tourism_profile(south=40.7, west=16.9, north=40.85, east=17.0)
+    data = json.loads(raw)
+    assert data["counts"]["musei"] == 4
+    assert data["counts"]["ricettivita"] == 5
+    assert data["totale_culturale"] == 10  # 15 totale − 5 ricettività
+    assert data["totale_ricettivita"] == 5
+    names = [m["name"] for m in data["landmarks"]]
+    assert "Castello di Gioia del Colle" in names and "Museo Archeologico" in names
+    assert len(data["landmarks"]) == 2  # senza-nome scartato + dedup per nome
+    assert "openstreetmap.org" in data["source_url"]
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_get_route_returns_distance_and_steps():
     respx.get(url__regex=rf"{settings.OSRM_URL}/route/v1/.*").mock(
         return_value=httpx.Response(

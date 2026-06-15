@@ -257,6 +257,114 @@ async def overpass_commercial_counts(
     return out
 
 
+# ── Tourism / culture (lente Turismo/Cultura) ───────────────────────
+#
+# Asset culturali e ricettività mappati su OSM. `cultura` (teatri/cinema) e
+# `ricettivita` sono separati dal commercio per non sovrapporsi alla lente
+# Commercio (che conta shop/ristorazione).
+_TOURISM_FILTERS: dict[str, str] = {
+    "musei": '["tourism"="museum"]',
+    "monumenti_siti": '["historic"~"^(monument|memorial|castle|archaeological_site|ruins|fort|monastery|city_gate)$"]',
+    "attrazioni": '["tourism"~"^(attraction|artwork|viewpoint|gallery|theme_park)$"]',
+    "ricettivita": '["tourism"~"^(hotel|guest_house|hostel|bed_and_breakfast|apartment|chalet|camp_site|motel)$"]',
+    "cultura": '["amenity"~"^(theatre|arts_centre|cinema)$"]',
+}
+# I poli da NOMINARE (musei/monumenti/attrazioni): la ricettività e i teatri
+# raramente hanno un nome "citabile" come asset → fuori dall'enumerazione.
+_LANDMARK_FILTER = (
+    '["name"]'
+    '["tourism"~"^(museum|attraction|artwork|gallery|viewpoint|theme_park)$"]'
+)
+_LANDMARK_FILTER_HIST = (
+    '["name"]'
+    '["historic"~"^(monument|memorial|castle|archaeological_site|ruins|fort|monastery|city_gate)$"]'
+)
+
+
+async def overpass_tourism_counts(
+    *,
+    around: tuple[float, float, int] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+    timeout: float = 30.0,
+) -> dict[str, int]:
+    """Conta i POI turistico-culturali per categoria in UNA query (`out count`).
+
+    `around=(lat,lon,radius_m)` oppure `bbox=(s,w,n,e)`. Ritorna
+    `{categoria: n, ..., "totale": n}` (unione deduplicata). Mirror di
+    `overpass_commercial_counts` con `_TOURISM_FILTERS`.
+    """
+    if around is not None:
+        lat, lon, radius_m = around
+        region = f"(around:{int(radius_m)},{lat},{lon})"
+    elif bbox is not None:
+        s, w, n, e = bbox
+        region = f"({s},{w},{n},{e})"
+    else:
+        raise ValueError("overpass_tourism_counts richiede `around` o `bbox`")
+
+    keys = list(_TOURISM_FILTERS)
+    set_lines = [
+        f"( node{flt}{region}; way{flt}{region}; )->.{key};"
+        for key, flt in _TOURISM_FILTERS.items()
+    ]
+    out_lines = [f".{key} out count;" for key in keys]
+    union = "( " + " ".join(f".{k};" for k in keys) + " )->.tot;"
+    query = "[out:json][timeout:25];\n" + "\n".join(set_lines) + "\n" + union + "\n" \
+        + "\n".join(out_lines) + "\n.tot out count;"
+
+    elements = await overpass_post(query, timeout=timeout, backoff_base=2.0)
+    counts_elems = [el for el in elements if el.get("type") == "count"]
+
+    def _total(el: dict[str, Any]) -> int:
+        try:
+            return int((el.get("tags") or {}).get("total", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    out: dict[str, int] = {}
+    for i, key in enumerate(keys):
+        out[key] = _total(counts_elems[i]) if i < len(counts_elems) else 0
+    out["totale"] = _total(counts_elems[len(keys)]) if len(counts_elems) > len(keys) else 0
+    return out
+
+
+async def overpass_tourism_landmarks(
+    *,
+    bbox: tuple[float, float, float, float],
+    limit: int = 25,
+    timeout: float = 30.0,
+) -> list[dict[str, str]]:
+    """Enumera i poli culturali NOMINATI (musei/monumenti/attrazioni) in un bbox.
+
+    Enumerazione BOUNDED (`out tags <limit>`): payload piccolo. Serve a far
+    NOMINARE un asset specifico a un'idea di valorizzazione. Ritorna
+    `[{name, kind}]` deduplicato per nome, max `limit` voci.
+    """
+    s, w, n, e = bbox
+    region = f"({s},{w},{n},{e})"
+    cap = max(1, min(limit, 60))
+    query = (
+        "[out:json][timeout:25];\n"
+        f"( node{_LANDMARK_FILTER}{region}; way{_LANDMARK_FILTER}{region};"
+        f" node{_LANDMARK_FILTER_HIST}{region}; way{_LANDMARK_FILTER_HIST}{region}; );\n"
+        f"out tags {cap};"
+    )
+    elements = await overpass_post(query, timeout=timeout, backoff_base=2.0)
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for el in elements:
+        tags = el.get("tags") or {}
+        name = (tags.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        kind = tags.get("tourism") or tags.get("historic") or "poi"
+        out.append({"name": name, "kind": kind})
+        if len(out) >= cap:
+            break
+    return out
+
+
 # ── OSRM ────────────────────────────────────────────────────────────
 
 async def osrm_route(

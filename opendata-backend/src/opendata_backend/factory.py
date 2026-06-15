@@ -477,6 +477,53 @@ class OrchestratorSession:
                         req.cod_comune, exc_info=True)
             return None
 
+    @staticmethod
+    async def _resolve_turismo(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora TURISMO/CULTURA deterministica: asset culturali + ricettività OSM.
+
+        Geocoda il comune → bbox, conta i POI turistico-culturali (musei,
+        monumenti/siti, attrazioni, ricettività, cultura) ed estrae i poli
+        NOMINATI, così l'idee_agent ha SEMPRE l'evidenza + un source_url da citare
+        e può nominare un asset da valorizzare. Best-effort: se Nominatim/Overpass
+        non rispondono la lente si salta (non si inventa). Solo idee/completa.
+
+        Nota: ancora OSM (MVP-2 fase A). La ricettività ISTAT (capacità esercizi,
+        più affidabile) sarà l'ancora primaria in un follow-up.
+        """
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        try:
+            from opendata_core.osm import client as osm_client
+
+            async def _work() -> dict[str, Any] | None:
+                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                if not hits:
+                    return None
+                bb = hits[0].get("boundingbox") or []
+                if len(bb) != 4:
+                    return None
+                # Nominatim boundingbox = [south, north, west, east]
+                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                bbox = (s, w, n, e)
+                counts = await osm_client.overpass_tourism_counts(bbox=bbox)
+                landmarks = await osm_client.overpass_tourism_landmarks(bbox=bbox, limit=12)
+                if not counts or counts.get("totale", 0) == 0:
+                    return None
+                clat, clon = (s + n) / 2, (w + e) / 2
+                src = f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}"
+                return {
+                    "comune": req.cod_comune,
+                    "counts": counts,
+                    "landmarks": landmarks[:6],
+                    "source_url": src,
+                }
+
+            return await asyncio.wait_for(_work(), timeout=40.0)
+        except Exception:
+            log.warning("ancora turismo OSM non risolta per %s — lente turismo assente",
+                        req.cod_comune, exc_info=True)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -505,6 +552,7 @@ class OrchestratorSession:
         zona_info = await self._resolve_zona(req)
         zone_comm = await self._resolve_zone_commerciali(req)
         commercio = await self._resolve_commercio(req)
+        turismo = await self._resolve_turismo(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -515,8 +563,9 @@ class OrchestratorSession:
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
                 commercio_info=commercio,
+                turismo_info=turismo,
             )
-            task_text = build_programma_task(req, zona_info, zone_comm, commercio)
+            task_text = build_programma_task(req, zona_info, zone_comm, commercio, turismo)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -665,6 +714,7 @@ class OrchestratorSession:
         zona_info = await self._resolve_zona(req)
         zone_comm = await self._resolve_zone_commerciali(req)
         commercio = await self._resolve_commercio(req)
+        turismo = await self._resolve_turismo(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -676,9 +726,12 @@ class OrchestratorSession:
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
                 commercio_info=commercio,
+                turismo_info=turismo,
             )
             workflow = build_workflow(self._participants, aggregator)
-            events = await workflow.run(build_programma_task(req, zona_info, zone_comm, commercio))
+            events = await workflow.run(
+                build_programma_task(req, zona_info, zone_comm, commercio, turismo)
+            )
         outputs = events.get_outputs()
         if not outputs:
             raise RuntimeError("Programma workflow produced no outputs")
