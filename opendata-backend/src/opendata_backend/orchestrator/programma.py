@@ -282,15 +282,17 @@ def build_programma_task(
             "l'accessibilità della zona."
         )
         parts.append(
-            "LENTE COMMERCIO: raccogli la base imprenditoriale del comune (ISTAT "
-            "ASIA imprese attive, ATECO sez. G se disponibile) e la DENSITÀ "
-            "commerciale (OSM osm_commercial_profile sul centro comune, "
-            "radius 1500-2000m) — servono a valutare se il commercio è "
+            "LENTE COMMERCIO: l'ancora PRIMARIA è la base imprenditoriale ISTAT "
+            "(ASIA imprese attive del comune, ATECO sez. G se disponibile, "
+            "altrimenti totale imprese) — raccoglila SEMPRE: non dipende da "
+            "Overpass. In più, SE l'istanza Overpass risponde, aggiungi la "
+            "DENSITÀ commerciale (OSM osm_commercial_profile sul centro comune) "
+            "come complemento. Servono a valutare se il commercio è "
             "sottodimensionato e dove rigenerarlo / istituire un DUC."
         )
         if zone_commerciali:
             righe = []
-            for z in zone_commerciali[:4]:
+            for z in zone_commerciali[:2]:
                 c = z.get("centroid") or {}
                 bb = z.get("bbox")
                 bb_s = (

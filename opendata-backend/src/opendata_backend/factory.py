@@ -434,6 +434,8 @@ class OrchestratorSession:
                 )
                 cand = out.get("candidates") or []
                 if cand and out.get("fallback_level") != 3:
+                    # Max 2 zone: ogni zona = 1 chiamata Overpass in più; con
+                    # l'istanza pubblica che throttla (429), meglio poche.
                     return [
                         {
                             "name": c.get("name"),
@@ -441,7 +443,7 @@ class OrchestratorSession:
                             "bbox": c.get("bbox"),
                             "zona_tipo": c.get("zona_tipo", tipo),
                         }
-                        for c in cand[:4]
+                        for c in cand[:2]
                     ]
             return None
         except Exception:
