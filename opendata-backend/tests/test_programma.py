@@ -439,6 +439,49 @@ async def test_commercio_duc_requires_local_indicator() -> None:
 
 
 @pytest.mark.asyncio
+async def test_commercio_info_injects_citable_istat_anchor() -> None:
+    """L'ancora commercio deterministica (ISTAT ASIA iniettata dal backend) rende
+    citabile la fonte: una proposta commercio_duc che la cita sopravvive ANCHE se
+    nessuno specialista ha prodotto una risorsa ISTAT. È il fix che rende la lente
+    non-dormiente (l'agente ISTAT LLM non faceva emergere il dato)."""
+    asia_url = (
+        "https://esploradati.istat.it/SDMXWS/rest/data/183_285/A.110002...TOTAL"
+        "?startPeriod=2020"
+    )
+    commercio_info = {
+        "trovato": True,
+        "anno": "2023",
+        "totale": {"unita_locali": 2056, "addetti": 6048.3},
+        "commercio": {
+            "ateco": "G",
+            "unita_locali": 569,
+            "addetti": 1473.6,
+            "quota_unita_locali_pct": 27.7,
+        },
+        "source_url": asia_url,
+    }
+    ev_asia = {"fonte": "istat", "url": asia_url, "dettaglio": "569 UL commercio (sez. G)"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("commercio_duc", [ev_asia])],
+        )
+    )
+    # Specialisti SENZA alcuna risorsa ISTAT: l'unica citazione valida è l'ancora iniettata.
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, commercio_info=commercio_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["commercio_duc"]
+    # la fonte ISTAT ASIA è tra le citazioni globali (iniettata come risorsa citabile)
+    assert any(asia_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

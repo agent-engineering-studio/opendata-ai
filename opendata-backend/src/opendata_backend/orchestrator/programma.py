@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-15b"
+PROMPT_VERSION = "2026-06-15c"
 
 
 class ProgrammaResponse(BaseModel):
@@ -207,6 +207,7 @@ def build_programma_task(
     req: ProgrammaRequest,
     zona_info: dict[str, Any] | None = None,
     zone_commerciali: list[dict[str, Any]] | None = None,
+    commercio_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -281,15 +282,37 @@ def build_programma_task(
             "per tema (aggregati territoriali), gli indicatori critici e "
             "l'accessibilità della zona."
         )
-        parts.append(
-            "LENTE COMMERCIO: l'ancora PRIMARIA è la base imprenditoriale ISTAT "
-            "(ASIA imprese attive del comune, ATECO sez. G se disponibile, "
-            "altrimenti totale imprese) — raccoglila SEMPRE: non dipende da "
-            "Overpass. In più, SE l'istanza Overpass risponde, aggiungi la "
-            "DENSITÀ commerciale (OSM osm_commercial_profile sul centro comune) "
-            "come complemento. Servono a valutare se il commercio è "
-            "sottodimensionato e dove rigenerarlo / istituire un DUC."
-        )
+        if commercio_info:
+            com = commercio_info.get("commercio") or {}
+            tot = commercio_info.get("totale") or {}
+            src = commercio_info.get("source_url") or ""
+            anno = commercio_info.get("anno")
+            quota = com.get("quota_unita_locali_pct")
+            quota_s = f" ({quota}% del totale)" if quota is not None else ""
+            parts.append(
+                "LENTE COMMERCIO — DATI ISTAT ASIA GIÀ RACCOLTI (ancora primaria, "
+                f"anno {anno}): unità locali di imprese attive nella sezione ATECO G "
+                f"(commercio all'ingrosso e al dettaglio) = {com.get('unita_locali')}"
+                f"{quota_s}; addetti del commercio = {com.get('addetti')}; "
+                f"totale comune = {tot.get('unita_locali')} unità locali, "
+                f"{tot.get('addetti')} addetti. "
+                f"FONTE DA CITARE VERBATIM: {src} . "
+                "USA questi numeri per valutare se il commercio è sottodimensionato "
+                "rispetto alla popolazione e ai comuni simili; un'idea-DUC DEVE "
+                "citare questa fonte ISTAT come evidenza. SE l'istanza Overpass "
+                "risponde, aggiungi la DENSITÀ commerciale (osm_commercial_profile) "
+                "come complemento per localizzare il gap."
+            )
+        else:
+            parts.append(
+                "LENTE COMMERCIO: l'ancora PRIMARIA è la base imprenditoriale ISTAT "
+                "(ASIA imprese attive del comune, ATECO sez. G se disponibile, "
+                "altrimenti totale imprese) — raccoglila SEMPRE: non dipende da "
+                "Overpass. In più, SE l'istanza Overpass risponde, aggiungi la "
+                "DENSITÀ commerciale (OSM osm_commercial_profile sul centro comune) "
+                "come complemento. Servono a valutare se il commercio è "
+                "sottodimensionato e dove rigenerarlo / istituire un DUC."
+            )
         if zone_commerciali:
             righe = []
             for z in zone_commerciali[:2]:
@@ -460,6 +483,7 @@ def build_programma_aggregator(
     idee_agent: Agent | None = None,
     marketing_agent: Agent | None = None,
     instructions_hint: str | None = None,
+    commercio_info: dict[str, Any] | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -510,6 +534,37 @@ def build_programma_aggregator(
             resources = unique
             all_resources.extend(resources)
             sections.append(_bundle_section(str(source), narrative, resources))
+
+        # Ancora COMMERCIO deterministica (ISTAT ASIA): iniettata come sezione di
+        # evidenza + risorsa citabile così l'idee_agent può ancorare un'idea-DUC e
+        # citare la fonte ISTAT — l'agente ISTAT (LLM) si è dimostrato inaffidabile
+        # nel farla emergere. La risorsa entra in `all_resources` (→ citazioni +
+        # evidence_urls), quindi una proposta commercio_duc che la cita supera il
+        # guardrail e la validazione delle citazioni.
+        if commercio_info and commercio_info.get("source_url"):
+            com = commercio_info.get("commercio") or {}
+            tot = commercio_info.get("totale") or {}
+            src = commercio_info["source_url"].strip()
+            anno = commercio_info.get("anno")
+            quota = com.get("quota_unita_locali_pct")
+            quota_s = f" ({quota}% del totale)" if quota is not None else ""
+            com_res = Resource(
+                name=f"ISTAT ASIA — Unità locali e addetti (commercio, anno {anno})",
+                url=src,
+                format="CSV",
+                source="istat",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(com_res)
+            narrative = (
+                f"Base imprenditoriale del comune (ISTAT ASIA, anno {anno}). "
+                f"Commercio (ATECO sez. G): {com.get('unita_locali')} unità locali "
+                f"di imprese attive{quota_s}, {com.get('addetti')} addetti. "
+                f"Totale comune: {tot.get('unita_locali')} unità locali, "
+                f"{tot.get('addetti')} addetti. Usa questi numeri per valutare se il "
+                "commercio è sottodimensionato; un'idea-DUC DEVE citare questa fonte."
+            )
+            sections.append(_bundle_section("commercio", narrative, [com_res]))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

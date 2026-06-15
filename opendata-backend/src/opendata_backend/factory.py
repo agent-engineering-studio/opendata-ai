@@ -451,6 +451,32 @@ class OrchestratorSession:
                         req.cod_comune, exc_info=True)
             return None
 
+    @staticmethod
+    async def _resolve_commercio(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora COMMERCIO deterministica: imprese/UL+addetti ISTAT ASIA del comune.
+
+        L'agente ISTAT (LLM) si è dimostrato inaffidabile nel far emergere questo
+        dato (chiama il tool ma non lo riporta nella sezione). Lo recuperiamo qui,
+        server-side, e lo iniettiamo nel task — come già si fa per zona/popolazione
+        — così l'idee_agent ha SEMPRE l'evidenza imprese + il source_url da citare
+        per ancorare un'idea-DUC. Best-effort: se ISTAT non risponde, l'analisi
+        resta senza ancora commercio (la lente si salta, non si inventa). Solo per
+        modalità con idee.
+        """
+        if req.modalita not in ("idee", "completa"):
+            return None
+        try:
+            from opendata_core.sdmx import fetch_imprese_comune
+
+            res = await asyncio.wait_for(
+                fetch_imprese_comune(req.cod_comune), timeout=30.0
+            )
+            return res if res and res.get("trovato") else None
+        except Exception:
+            log.warning("ancora commercio ISTAT ASIA non risolta per %s — lente commercio assente",
+                        req.cod_comune, exc_info=True)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -478,6 +504,7 @@ class OrchestratorSession:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
         zone_comm = await self._resolve_zone_commerciali(req)
+        commercio = await self._resolve_commercio(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -487,8 +514,9 @@ class OrchestratorSession:
                 # (senza, gli spunti non avrebbero l'ispirazione esterna e
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
+                commercio_info=commercio,
             )
-            task_text = build_programma_task(req, zona_info, zone_comm)
+            task_text = build_programma_task(req, zona_info, zone_comm, commercio)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -636,6 +664,7 @@ class OrchestratorSession:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
         zone_comm = await self._resolve_zone_commerciali(req)
+        commercio = await self._resolve_commercio(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -646,9 +675,10 @@ class OrchestratorSession:
                 # (senza, gli spunti non avrebbero l'ispirazione esterna e
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
+                commercio_info=commercio,
             )
             workflow = build_workflow(self._participants, aggregator)
-            events = await workflow.run(build_programma_task(req, zona_info, zone_comm))
+            events = await workflow.run(build_programma_task(req, zona_info, zone_comm, commercio))
         outputs = events.get_outputs()
         if not outputs:
             raise RuntimeError("Programma workflow produced no outputs")
