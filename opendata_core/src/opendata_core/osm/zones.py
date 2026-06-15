@@ -34,11 +34,11 @@ __all__ = ["OverpassError", "ZonaTipo", "ZONA_TIPI", "lookup_comune", "list_zone
 log = logging.getLogger("opendata-core.osm.zones")
 
 ZonaTipo = Literal[
-    "industriale", "commerciale", "portuale", "centro_storico", "verde", "agricola"
+    "industriale", "commerciale", "portuale", "centro_storico", "verde", "agricola", "quartieri"
 ]
 
 ZONA_TIPI: tuple[str, ...] = (
-    "industriale", "commerciale", "portuale", "centro_storico", "verde", "agricola",
+    "industriale", "commerciale", "portuale", "centro_storico", "verde", "agricola", "quartieri",
 )
 
 #: Overpass tag filters per zona_tipo (way + relation; node aggiunto per i
@@ -53,10 +53,13 @@ ZONA_FILTERS: dict[str, list[str]] = {
     ],
     "verde": ['["leisure"="park"]', '["boundary"="protected_area"]'],
     "agricola": ['["landuse"="farmland"]', '["landuse"="orchard"]', '["landuse"="vineyard"]'],
+    # Quartieri/aree generiche per nominare le zone dove il landuse retail manca
+    # (lente Commercio/DUC): qualunque place quarter/suburb/neighbourhood nominato.
+    "quartieri": ['["place"~"quarter|suburb|neighbourhood"]["name"]'],
 }
 
 #: Tipi per cui ha senso cercare anche nodi place (punto, non poligono).
-_NODE_TIPI = frozenset({"centro_storico"})
+_NODE_TIPI = frozenset({"centro_storico", "quartieri"})
 
 #: Label umane per il fallback Nominatim ("<label> <comune>").
 ZONA_LABEL: dict[str, str] = {
@@ -66,6 +69,7 @@ ZONA_LABEL: dict[str, str] = {
     "centro_storico": "centro storico",
     "verde": "parco",
     "agricola": "zona agricola",
+    "quartieri": "quartiere",
 }
 
 #: Nominatim: classi accettabili per un'area urbana (scarta guest_house & co.).

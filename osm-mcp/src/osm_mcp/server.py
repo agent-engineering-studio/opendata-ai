@@ -294,10 +294,13 @@ async def osm_list_zones(cod_comune: str, zona_tipo: str, comune_nome: str | Non
     """List recognised OSM zones of a given type inside a comune (no drawing needed).
 
     zona_tipo is one of: industriale | commerciale | portuale | centro_storico |
-    verde | agricola. Candidates come from tag-matched OSM entities inside the
-    comune boundary (named ones first, then by area). The result declares the
-    `fallback_level` used: 1 = tag match, 2 = Nominatim named-area fallback
-    (needs comune_nome), 3 = nothing found → analyse at comune level.
+    verde | agricola | quartieri. Use "quartieri" (place=quarter|suburb|
+    neighbourhood) to name generic neighbourhoods when a themed landuse is
+    missing (e.g. to localise the commerce/DUC lens). Candidates come from
+    tag-matched OSM entities inside the comune boundary (named ones first, then
+    by area). The result declares the `fallback_level` used: 1 = tag match,
+    2 = Nominatim named-area fallback (needs comune_nome), 3 = nothing found →
+    analyse at comune level.
 
     Args:
         cod_comune: ISTAT comune code, zero-padded (e.g. "072006").
@@ -309,6 +312,32 @@ async def osm_list_zones(cod_comune: str, zona_tipo: str, comune_nome: str | Non
     source_url, sources }. Full geometry via osm_get_zone.
     """
     return await tools.list_zones(cod_comune, zona_tipo, comune_nome)
+
+
+@mcp.tool()
+async def osm_commercial_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 1500,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+) -> str:
+    """Commercial density: count commercial POIs by category to gauge how
+    under-/over-served an area is (commerce/DUC lens). COUNTS only (Overpass
+    `out count`), never lists — cheap and complete.
+
+    Pass (lat, lon, radius_m) for a point+radius, OR (south, west, north, east)
+    to profile a whole zone/neighbourhood using its bbox from osm_list_zones.
+
+    Returns JSON: { scope, counts: { negozi, alimentari, ristorazione, mercati,
+    servizi }, totale_commercio, source_url, sources }. Cross with population to
+    judge under-dimensioning; do not invent thresholds.
+    """
+    return await tools.commercial_profile(
+        lat=lat, lon=lon, radius_m=radius_m, south=south, west=west, north=north, east=east
+    )
 
 
 @mcp.tool()

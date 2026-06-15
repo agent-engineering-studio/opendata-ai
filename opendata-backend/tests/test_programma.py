@@ -402,6 +402,43 @@ async def test_idee_mode_enforces_generator_premises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_commercio_duc_requires_local_indicator() -> None:
+    """commercio_duc (lente Commercio): premessa = indicatore ISTAT o densità OSM
+    (host in _INDICATORE_HOSTS); nessun requisito web. Solo OpenCoesione → out."""
+    osm_url = "https://www.openstreetmap.org/#map=15/40.79800/16.92300"
+    ispra_url = "https://idrogeo.isprambiente.it/api/pir/comuni/72021"
+    ev_istat = {"fonte": "istat", "url": _ISTAT_URL, "dettaglio": "120 imprese attive"}
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "densità commercio: 8 negozi"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    ev_ispra = {"fonte": "ispra", "url": ispra_url, "dettaglio": "frane"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("commercio_duc", [ev_istat]),   # ok (indicatore ISTAT)
+                _idea("commercio_duc", [ev_osm]),     # ok (densità OSM)
+                _idea("commercio_duc", [ev_oc]),      # solo OpenCoesione → out
+                _idea("commercio_duc", [ev_ispra]),   # ISPRA (ambiente) → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant(
+        "osm", "Densità.",
+        [
+            {"name": "imprese", "url": _ISTAT_URL, "format": "JSON", "content": None},
+            {"name": "profilo commercio", "url": osm_url, "format": "JSON", "content": None},
+            {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+            {"name": "rischio", "url": ispra_url, "format": "JSON", "content": None},
+        ],
+    )
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["commercio_duc", "commercio_duc"]
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

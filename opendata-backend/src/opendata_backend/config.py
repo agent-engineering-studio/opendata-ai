@@ -175,7 +175,15 @@ ISTAT_INSTRUCTIONS = _SDMX_INSTRUCTIONS_TEMPLATE.format(
         "saying ISTAT does not cover that scope. CL_ITTER107 is the Italian "
         "territorial codelist; use `istat_territorial_codes` to resolve it.\n"
         "⚠️ ISTAT BUG: `end_period=N` returns up to N+1; prefer `last_n` or pass "
-        "end_period=str(N-1)."
+        "end_period=str(N-1).\n"
+        "COMMERCIO/IMPRESE: when the task is about local commerce or business "
+        "vitality, search ASIA dataflows (keywords 'imprese attive', 'unità "
+        "locali', 'ASIA') and report the comune's active businesses/local units; "
+        "filter by ATECO section G (commercio all'ingrosso e al dettaglio) when "
+        "the dataflow exposes that dimension, otherwise report the total of "
+        "active businesses (raw entrepreneurial density). As a proxy for spending "
+        "capacity you MAY use BES / census indicators (reddito medio, "
+        "occupazione) if present — it is a proxy, not official MEF income."
     ),
 )
 
@@ -300,7 +308,14 @@ OSM_INSTRUCTIONS = (
     "3000–5000 m). Two or three calls are enough.\n"
     "STEP 3 — optionally `explore_area` for a neighbourhood digest, or "
     "`get_route` from the zone to one key destination (e.g. the closest "
-    "train station) to report a real distance/time.\n\n"
+    "train station) to report a real distance/time.\n"
+    "STEP 4 — COMMERCIO: when the task is about local commerce / a DUC, OR "
+    "carries a 'ZONE CANDIDATE PER IL COMMERCIO' block, call "
+    "`osm_commercial_profile` to COUNT commercial POIs: once on the comune "
+    "centre (radius ~1500-2000 m) and once per candidate zone passing its "
+    "bbox (south,west,north,east). Report the per-category counts and the "
+    "total for each scope, citing the `source_url` returned — a low density "
+    "vs population signals an under-served area. Cap at 3-4 such calls.\n\n"
     "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
     "<a short paragraph (in the same language as the user query) on the "
     "accessibility of the place: nearby transport nodes with distances, "
@@ -542,6 +557,11 @@ PROGRAMMA_INSTRUCTIONS = (
     "quel profilo funzionale — gli interventi devono avere senso PER QUEL tipo "
     "di area. Non proporre interventi estranei al profilo (es. forestazione in "
     "area portuale) senza un'evidenza specifica che li giustifichi.\n"
+    "- COMMERCIO: se il bundle riporta la base imprenditoriale (ISTAT imprese "
+    "attive) e/o la densità commerciale (OSM), inquadra nella `sintesi`/SWOT il "
+    "commercio del comune (offerta vs popolazione) e segnala le zone più deboli; "
+    "lascia però le proposte operative (dove istituire un DUC, rigenerazione "
+    "retail) all'analisi delle idee — non duplicarle qui.\n"
     "- Ogni voce SWOT e ogni proposta DEVE avere ≥1 evidenza il cui `url` è "
     "COPIATO VERBATIM da una RISORSA CITABILE del bundle. `fonte` è il tag della "
     "sezione (istat, opencoesione, ckan, …). `dettaglio` riporta COSA DICE il "
@@ -613,7 +633,17 @@ IDEE_INSTRUCTIONS = (
     "RISORSE CITABILI), col titolo e gli importi nel `dettaglio`.\n"
     "  - finestra_finanziamento — 'cosa è finanziabile adesso': risorse "
     "programmate e non spese per tema (aggregati territoriali, ciclo "
-    "2021-2027). Evidenze: l'URL OpenCoesione degli aggregati.\n\n"
+    "2021-2027). Evidenze: l'URL OpenCoesione degli aggregati.\n"
+    "  - commercio_duc — 'dove rigenerare il commercio / istituire un DUC "
+    "(Distretto Urbano del Commercio)': individua DOVE il commercio è "
+    "sottodimensionato. ANCORA PRIMARIA = la base imprenditoriale ISTAT (ASIA "
+    "imprese attive, ATECO sez. G o totale): citala SEMPRE come evidenza (è il "
+    "dato che regge l'idea anche quando OSM non risponde). La DENSITÀ "
+    "commerciale OSM (source_url di osm_commercial_profile) è un COMPLEMENTO da "
+    "aggiungere se presente nel bundle. Se la zona è nel blocco ZONE CANDIDATE, "
+    "NOMINALA (es. 'nel quartiere X'); coi numeri (imprese, densità) nel "
+    "`dettaglio`. Niente precedente web. Se NON c'è né l'indicatore ISTAT "
+    "imprese né la densità OSM, NON forzare l'idea: saltala.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -621,7 +651,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '

@@ -81,6 +81,36 @@ async def test_find_nearby_places_normalises_elements():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_commercial_profile_counts_by_category():
+    # Overpass `out count`: un elemento per categoria (5) + uno per il totale.
+    respx.post(settings.OVERPASS_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "elements": [
+                    {"type": "count", "id": 0, "tags": {"total": str(t)}}
+                    for t in (10, 3, 5, 1, 2, 18)
+                ]
+            },
+        )
+    )
+    raw = await tools.commercial_profile(lat=40.798, lon=16.923, radius_m=1500)
+    data = json.loads(raw)
+    assert data["counts"]["negozi"] == 10
+    assert data["counts"]["ristorazione"] == 5
+    assert data["totale_commercio"] == 18
+    assert "openstreetmap.org" in data["source_url"]
+    assert data["scope"]["radius_m"] == 1500
+
+
+@pytest.mark.asyncio
+async def test_commercial_profile_requires_scope():
+    raw = await tools.commercial_profile()
+    assert "error" in json.loads(raw)
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_get_route_returns_distance_and_steps():
     respx.get(url__regex=rf"{settings.OSRM_URL}/route/v1/.*").mock(
         return_value=httpx.Response(
