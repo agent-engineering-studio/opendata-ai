@@ -37,7 +37,10 @@ def build_server() -> FastMCP:
             "SDMX 2.1 REST API. Start from `istat_list_dataflows` to discover datasets, "
             "inspect a dataflow with `istat_get_dataflow` / `istat_get_structure` / "
             "`istat_get_constraints`, resolve codes with `istat_get_codelist`, and "
-            "finally fetch observations as CSV with `istat_get_data`. All tools accept "
+            "finally fetch observations as CSV with `istat_get_data`. For the commerce "
+            "lens of a comune, skip discovery and call `istat_imprese_comune(cod_comune)`: "
+            "one reliable call returning active enterprises/local units and employees by "
+            "ATECO section (G = commercio) from the pinned ASIA dataflow. All tools accept "
             "an optional `base_url` to point at alternative SDMX 2.1 endpoints."
         ),
         host=HOST,

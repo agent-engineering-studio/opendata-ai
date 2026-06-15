@@ -11,7 +11,12 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from opendata_core.sdmx import SdmxClient, data_path, df_ref
+from opendata_core.sdmx import SdmxClient, data_path, df_ref, fetch_imprese_comune
+
+# The ASIA commerce connector lives in opendata_core.sdmx.asia so both this MCP
+# tool AND the backend orchestrator (which injects the evidence deterministically)
+# can call it. Re-exported here for the istat-mcp tests.
+from opendata_core.sdmx.asia import _parse_asia_csv  # noqa: F401  (re-exported for tests)
 
 # Max CSV characters returned by istat_get_data. A full SDMX cube can be tens of
 # MB; returning it whole overflows LLM context windows. ~120 KB ≈ 30k tokens.
@@ -24,7 +29,6 @@ _MAX_CSV_CHARS = 120_000
 # payload is effectively doubled in the prompt — keep this conservative (~80 KB
 # preview → ~40k tokens per call, leaving room for several calls per turn).
 _MAX_PAYLOAD_CHARS = 80_000
-
 
 def _cap_payload(payload: Any, hint: str) -> Any:
     """Return `payload` unchanged unless its JSON serialization exceeds the
@@ -367,6 +371,39 @@ def register_tools(mcp: FastMCP) -> None:
             "territorio che ti serve nel preview, oppure passa direttamente il "
             "key a istat_get_data.",
         )
+
+    @mcp.tool()
+    async def istat_imprese_comune(
+        cod_comune: str,
+        anno: str | None = None,
+        base_url: str | None = None,
+    ) -> dict[str, Any]:
+        """Imprese/unità locali e addetti di un comune da ISTAT ASIA, per sezione ATECO.
+
+        Connettore dedicato alla lente Commercio del territorio: UNA sola chiamata
+        deterministica al dataflow ASIA pinnato (183_285 "Unità locali e addetti")
+        invece della discovery a keyword (lenta e inaffidabile). Restituisce, per
+        l'ultimo anno disponibile, le unità locali di imprese ATTIVE e gli addetti
+        del comune, il totale e il dettaglio per sezione ATECO — in particolare la
+        sezione **G (commercio all'ingrosso e al dettaglio)**, ancora primaria per
+        valutare dove rigenerare il commercio / istituire un DUC.
+
+        Cita SEMPRE il `source_url` restituito come evidenza ISTAT.
+
+        Args:
+            cod_comune: Codice ISTAT del comune (CL_ITTER107, es. "072021" = Gioia
+                del Colle). Deve essere il codice comunale a 6 cifre.
+            anno: Anno specifico (es. "2022"); se omesso usa l'ultimo disponibile.
+            base_url: Endpoint SDMX alternativo (default ISTAT_SDMX_BASE_URL).
+
+        Returns:
+            {comune, anno, totale:{unita_locali,addetti},
+             commercio:{ateco:"G",unita_locali,addetti,quota_unita_locali_pct},
+             per_sezione_ateco:{<lettera>:{unita_locali,addetti}, …},
+             source_url, sources, trovato, note}
+            Se il comune non ha dati ASIA → {comune, trovato: false, note}.
+        """
+        return await fetch_imprese_comune(cod_comune, anno=anno, base_url=base_url)
 
     @mcp.tool()
     async def istat_cache_stats() -> dict[str, Any]:
