@@ -196,6 +196,67 @@ async def overpass_bbox(
     return await overpass_post(query, timeout=30.0, backoff_base=2.0)
 
 
+# ── Profilo commerciale (densità POI per categoria, lente Commercio/DUC) ──────
+# Filtri Overpass per categoria commerciale. `negozi` (shop=*) è l'ombrello; le
+# altre sono sottoinsiemi tematici utili al "mix". `totale` (sotto) è l'unione
+# DEDUPLICATA — non la somma (che conterebbe due volte gli shop tematici).
+_COMMERCIAL_FILTERS: dict[str, str] = {
+    "negozi": '["shop"]',
+    "alimentari": '["shop"~"^(supermarket|convenience|bakery|butcher|greengrocer|deli|grocery)$"]',
+    "ristorazione": '["amenity"~"^(restaurant|cafe|bar|fast_food|pub|ice_cream)$"]',
+    "mercati": '["amenity"="marketplace"]',
+    "servizi": '["amenity"~"^(bank|pharmacy|post_office)$"]',
+}
+
+
+async def overpass_commercial_counts(
+    *,
+    around: tuple[float, float, int] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+    timeout: float = 30.0,
+) -> dict[str, int]:
+    """Conta i POI commerciali per categoria in UNA sola query (Overpass
+    `out count`: payload minimo, nessuna enumerazione → niente problema del
+    `limit`). `around=(lat,lon,radius_m)` oppure `bbox=(s,w,n,e)`.
+
+    Ritorna `{categoria: n, ..., "totale": n}` dove `totale` è l'unione
+    deduplicata di tutte le categorie. Categorie a 0 incluse.
+    """
+    if around is not None:
+        lat, lon, radius_m = around
+        region = f"(around:{int(radius_m)},{lat},{lon})"
+    elif bbox is not None:
+        s, w, n, e = bbox
+        region = f"({s},{w},{n},{e})"
+    else:
+        raise ValueError("overpass_commercial_counts richiede `around` o `bbox`")
+
+    keys = list(_COMMERCIAL_FILTERS)
+    set_lines = [
+        f"( node{flt}{region}; way{flt}{region}; )->.{key};"
+        for key, flt in _COMMERCIAL_FILTERS.items()
+    ]
+    out_lines = [f".{key} out count;" for key in keys]
+    union = "( " + " ".join(f".{k};" for k in keys) + " )->.tot;"
+    query = "[out:json][timeout:25];\n" + "\n".join(set_lines) + "\n" + union + "\n" \
+        + "\n".join(out_lines) + "\n.tot out count;"
+
+    elements = await overpass_post(query, timeout=timeout, backoff_base=2.0)
+    counts_elems = [el for el in elements if el.get("type") == "count"]
+
+    def _total(el: dict[str, Any]) -> int:
+        try:
+            return int((el.get("tags") or {}).get("total", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    out: dict[str, int] = {}
+    for i, key in enumerate(keys):
+        out[key] = _total(counts_elems[i]) if i < len(counts_elems) else 0
+    out["totale"] = _total(counts_elems[len(keys)]) if len(counts_elems) > len(keys) else 0
+    return out
+
+
 # ── OSRM ────────────────────────────────────────────────────────────
 
 async def osrm_route(

@@ -67,7 +67,8 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # Verifiche deterministiche basate sui DOMINI delle evidenze (semplificazione
 # dichiarata rispetto alla spec: il controllo "comune ≠ quello in esame" via
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
-GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento")
+GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
+              "commercio_duc")
 
 # Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
 # differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
@@ -77,6 +78,9 @@ GENERATORI_MARKETING = ("caso_analogo", "asset_sottoutilizzato", "domanda_emerge
 
 _OC_HOST = "opencoesione.gov.it"
 _INDICATORE_HOSTS = ("istat.it", "isprambiente.it", "openstreetmap.org", "overpass-api.de")
+# Host validi come premessa di COMMERCIO: imprese ISTAT o densità OSM. ISPRA
+# (ambiente) NON è un indicatore di commercio → escluso (evita il loophole).
+_COMMERCIO_HOSTS = ("istat.it", "openstreetmap.org", "overpass-api.de")
 
 
 def _evidence_hosts(evidenze: list) -> list[str]:
@@ -114,6 +118,10 @@ def _generatore_ok(prop) -> bool:
         return has_oc_project
     if prop.generatore == "finestra_finanziamento":
         return any(_OC_HOST in h and "aggregati" in u for h, u in zip(hosts, urls))
+    if prop.generatore == "commercio_duc":
+        # Lente Commercio/DUC: premessa LOCALE = imprese ISTAT o densità OSM
+        # (NON ISPRA: l'ambiente non misura il commercio). Nessun requisito web.
+        return any(any(d in h for d in _COMMERCIO_HOSTS) for h in hosts)
     return False  # generatore mancante o sconosciuto
 
 

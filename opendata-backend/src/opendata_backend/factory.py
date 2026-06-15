@@ -414,6 +414,41 @@ class OrchestratorSession:
                         req.zona_osm_id, exc_info=True)
             return None
 
+    @staticmethod
+    async def _resolve_zone_commerciali(req: ProgrammaRequest) -> list[dict[str, Any]] | None:
+        """Zone candidate per localizzare il gap COMMERCIO (lente Commercio/DUC).
+
+        Cerca le aree a vocazione commerciale (landuse retail/commercial); se la
+        copertura manca (fallback_level 3), ripiega sui quartieri generici per
+        avere comunque nomi d'area. Best-effort: se Overpass non risponde,
+        l'analisi resta a livello comune. Solo per modalità con idee.
+        """
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        try:
+            from opendata_core.osm import zones as osm_zones
+
+            for tipo in ("commerciale", "quartieri"):
+                out = await osm_zones.list_zones(
+                    req.cod_comune, tipo, comune_nome=req.comune_nome
+                )
+                cand = out.get("candidates") or []
+                if cand and out.get("fallback_level") != 3:
+                    return [
+                        {
+                            "name": c.get("name"),
+                            "centroid": c.get("centroid"),
+                            "bbox": c.get("bbox"),
+                            "zona_tipo": c.get("zona_tipo", tipo),
+                        }
+                        for c in cand[:4]
+                    ]
+            return None
+        except Exception:
+            log.warning("zone commerciali non risolte per %s — gap commercio a livello comune",
+                        req.cod_comune, exc_info=True)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -440,6 +475,7 @@ class OrchestratorSession:
         if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
+        zone_comm = await self._resolve_zone_commerciali(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -450,7 +486,7 @@ class OrchestratorSession:
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
             )
-            task_text = build_programma_task(req, zona_info)
+            task_text = build_programma_task(req, zona_info, zone_comm)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -597,6 +633,7 @@ class OrchestratorSession:
         if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
         zona_info = await self._resolve_zona(req)
+        zone_comm = await self._resolve_zone_commerciali(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -609,7 +646,7 @@ class OrchestratorSession:
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
             )
             workflow = build_workflow(self._participants, aggregator)
-            events = await workflow.run(build_programma_task(req, zona_info))
+            events = await workflow.run(build_programma_task(req, zona_info, zone_comm))
         outputs = events.get_outputs()
         if not outputs:
             raise RuntimeError("Programma workflow produced no outputs")

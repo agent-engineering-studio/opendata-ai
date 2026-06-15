@@ -469,3 +469,44 @@ async def get_zone(osm_type: str, osm_id: str) -> str:
             "sources": _zone_sources(url),
         }
     )
+
+
+async def commercial_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 1500,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+) -> str:
+    """Densità del COMMERCIO: conta i POI commerciali per categoria (negozi,
+    alimentari, ristorazione, mercati, servizi) in un raggio attorno a un punto
+    o in un bbox. Misura il sottodimensionamento (lente Commercio/DUC).
+
+    Passa (lat, lon, radius_m) OPPURE (south, west, north, east) — quest'ultimo
+    per profilare una zona/quartiere usando il suo bbox da osm_list_zones.
+    """
+    if None not in (south, west, north, east):
+        counts = await osm_client.overpass_commercial_counts(
+            bbox=(south, west, north, east)
+        )
+        clat, clon = (south + north) / 2, (west + east) / 2
+        scope: dict[str, Any] = {"bbox": [south, west, north, east]}
+    elif lat is not None and lon is not None:
+        counts = await osm_client.overpass_commercial_counts(around=(lat, lon, radius_m))
+        clat, clon = lat, lon
+        scope = {"lat": lat, "lon": lon, "radius_m": radius_m}
+    else:
+        return _json({"error": "fornire (lat, lon[, radius_m]) oppure (south, west, north, east)"})
+    totale = counts.pop("totale", 0)
+    src = f"https://www.openstreetmap.org/#map=15/{clat:.5f}/{clon:.5f}"
+    return _json(
+        {
+            "scope": scope,
+            "counts": counts,
+            "totale_commercio": totale,
+            "source_url": src,
+            "sources": _zone_sources(src),
+        }
+    )

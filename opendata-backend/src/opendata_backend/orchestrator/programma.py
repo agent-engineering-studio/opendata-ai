@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-15"
+PROMPT_VERSION = "2026-06-15b"
 
 
 class ProgrammaResponse(BaseModel):
@@ -204,13 +204,19 @@ class ProgrammaOutput:
 
 
 def build_programma_task(
-    req: ProgrammaRequest, zona_info: dict[str, Any] | None = None
+    req: ProgrammaRequest,
+    zona_info: dict[str, Any] | None = None,
+    zone_commerciali: list[dict[str, Any]] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
     `zona_info` è la zona OSM risolta dal Pezzo 6 ({name, centroid, bbox}):
     nome/centroide/bbox vengono iniettati nel task così gli specialisti geo
     (OSM per le distanze, ISPRA per i layer WFS) non rifanno il lookup.
+
+    `zone_commerciali` (lente Commercio/DUC) sono le zone/quartieri candidati
+    risolti dal backend: l'agente OSM ci profila la densità commerciale (bbox)
+    e l'analisi delle idee localizza il gap commercio ("dove istituire un DUC").
     """
     label = f"{req.cod_comune} ({req.comune_nome})" if req.comune_nome else req.cod_comune
     parts = [
@@ -275,6 +281,37 @@ def build_programma_task(
             "per tema (aggregati territoriali), gli indicatori critici e "
             "l'accessibilità della zona."
         )
+        parts.append(
+            "LENTE COMMERCIO: raccogli la base imprenditoriale del comune (ISTAT "
+            "ASIA imprese attive, ATECO sez. G se disponibile) e la DENSITÀ "
+            "commerciale (OSM osm_commercial_profile sul centro comune, "
+            "radius 1500-2000m) — servono a valutare se il commercio è "
+            "sottodimensionato e dove rigenerarlo / istituire un DUC."
+        )
+        if zone_commerciali:
+            righe = []
+            for z in zone_commerciali[:4]:
+                c = z.get("centroid") or {}
+                bb = z.get("bbox")
+                bb_s = (
+                    f" bbox=[{bb[0]:.5f},{bb[1]:.5f},{bb[2]:.5f},{bb[3]:.5f}]"
+                    if bb else ""
+                )
+                c_s = (
+                    f" centroide({c.get('lat'):.5f},{c.get('lon'):.5f})"
+                    if c.get("lat") is not None else ""
+                )
+                righe.append(
+                    f"  • {z.get('name') or '(senza nome)'} "
+                    f"[{z.get('zona_tipo', 'zona')}]{c_s}{bb_s}"
+                )
+            parts.append(
+                "ZONE CANDIDATE PER IL COMMERCIO (per la localizzazione del gap): "
+                "per CIASCUNA profila la densità commerciale con "
+                "osm_commercial_profile passando il suo bbox, così la sintesi può "
+                "dire IN QUALE zona il commercio è più debole; un'idea-DUC DEVE "
+                "nominare una di queste zone.\n" + "\n".join(righe)
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "

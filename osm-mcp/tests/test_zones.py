@@ -135,6 +135,22 @@ async def test_list_zones_invalid_tipo_is_actionable() -> None:
         await zones.list_zones("072006", "balneare")
 
 
+async def test_list_zones_quartieri_accepts_place_nodes(monkeypatch) -> None:
+    """Tipo generico 'quartieri' (lente Commercio): nomina aree place=*."""
+    assert "quartieri" in zones.ZONA_TIPI
+
+    async def fake_overpass(query: str, **kw):
+        return [
+            {"type": "node", "id": 5, "lat": 40.80, "lon": 16.92,
+             "tags": {"place": "neighbourhood", "name": "Quartiere Sud"}},
+        ]
+
+    monkeypatch.setattr(zones, "_overpass", fake_overpass)
+    out = await zones.list_zones("072021", "quartieri")
+    assert [c["name"] for c in out["candidates"]] == ["Quartiere Sud"]
+    assert out["candidates"][0]["zona_tipo"] == "quartieri"
+
+
 async def test_list_zones_fallback_to_nominatim_filters_classes(monkeypatch) -> None:
     async def fake_overpass(query: str, **kw):
         return []
