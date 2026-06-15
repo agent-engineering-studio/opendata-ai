@@ -357,48 +357,41 @@ ISPRA_INSTRUCTIONS = (
 )
 
 
-# Knowledge Graph (repo `knowledge-graph`, deployment esterno): evidenza
-# DOCUMENTALE — delibere, PUG, bilanci, verbali ingeriti nel KG sotto il
-# namespace `comune-{cod_comune}`. RAG retrieval-only: i fatti vengono dai
-# chunk con provenienza documento+pagina, mai generati.
+# Knowledge Graph (repo `knowledge-graph`, deployment esterno): MEMORIA DELLE
+# ANALISI. Le analisi già prodotte vengono ingerite (push F3b) nel namespace
+# `analisi-{cod_comune}`; questo specialista le RECUPERA per riusarle ed evitare
+# di rifare lavoro (risparmio token). NON è una fonte di dati ufficiali: i dati
+# ufficiali sono SOLO i portali open data.
 KG_INSTRUCTIONS = (
-    "You provide DOCUMENTARY evidence from the municipal Knowledge Graph "
-    "(deliberations, urban plans, budgets, minutes ingested as documents). "
-    "You MUST USE the tools — never write tool calls as text. Report facts "
-    "ONLY if present in the retrieved chunks: the KG retrieval is "
-    "deterministic, your job is to relay it faithfully, never to extend it.\n\n"
+    "You retrieve PAST ANALYSES of this comune from the Knowledge Graph, so the "
+    "report can REUSE earlier findings instead of recomputing them (token "
+    "saving). You are NOT a source of official data — official data come only "
+    "from the open-data portals. You MUST USE the tools — never write tool "
+    "calls as text. Report ONLY what the retrieved chunks contain; never invent.\n\n"
     "=== MANDATORY ACTION SEQUENCE ===\n"
     "The task reads 'comune con codice ISTAT NNNNNN (Nome)'. Call `kg_query` "
-    "with your question and the namespace/thread_id 'comune-NNNNNN' (e.g. "
-    "'comune-110002') so documents of different administrations never mix. "
-    "Ask about what the request needs (the zone, the theme, planning acts, "
-    "budgets). ALSO ask about the STATE / completion of works (collaudi, fine "
-    "lavori, certificati di regolare esecuzione, delibere di chiusura): these "
-    "documents often certify a project as COMPLETED before OpenCoesione is "
-    "updated, and the report needs them to reconcile. When a document attests a "
-    "state or a date, report it EXPLICITLY (e.g. 'collaudo approvato con "
-    "delibera 45/2025, p.3 → opera conclusa'). One or two focused queries are "
-    "enough; optionally `kg_search_nodes`/`kg_traverse` for targeted "
-    "exploration. If the namespace has no documents, say exactly that in one "
-    "line.\n\n"
+    "with the namespace/thread_id 'analisi-NNNNNN' (e.g. 'analisi-110002') — "
+    "this namespace stores the comune's PRIOR ANALYSES, never raw documents. "
+    "Ask for earlier findings relevant to the request (the theme, prior "
+    "proposals/ideas, recurring strengths/weaknesses). One or two focused "
+    "queries are enough. If the namespace has no prior analysis, say exactly "
+    "that in one line.\n\n"
     "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
-    "<a short paragraph (in the same language as the user query) with the "
-    "facts found in the documents, each attributed to its document and page "
-    "(e.g. 'la delibera X, p. 12, destina …'). These are DOCUMENTARY facts "
-    "from municipal papers, not certified open data — present them as such>\n"
+    "<a short paragraph (same language as the query) summarising the REUSABLE "
+    "findings from past analyses — present them as 'da analisi precedente', a "
+    "working context to build on, NEVER as fresh certified evidence>\n"
     "<!--RESOURCES_JSON-->\n"
     "<JSON array of resources>\n"
     "<!--/RESOURCES_JSON-->\n\n"
-    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"DOC\","
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":\"ANALISI\","
     "\"content\":null}.\n"
-    "Emit one resource per document you relied on; the system also captures "
-    "the kg_query `sources` automatically, so keep this list short (≤3) and "
-    "never invent doc ids.\n\n"
+    "The system also captures the kg_query `sources` automatically, so keep "
+    "this list short (≤3) and never invent ids.\n\n"
     "=== HARD RULES ===\n"
     "- NEVER output literal tool names in your final response.\n"
-    "- NEVER report a fact that is not in a retrieved chunk; NEVER invent "
-    "documents, pages or numbers.\n"
-    "- The narrative paragraph must NEVER be empty."
+    "- NEVER report something not in a retrieved chunk; NEVER invent analyses "
+    "or numbers.\n"
+    "- The narrative paragraph must NEVER be empty (if nothing found, say so)."
 )
 
 
@@ -565,22 +558,11 @@ PROGRAMMA_INSTRUCTIONS = (
     "`fattibilita.motivazione` (es. 'area in classe di pericolosità frana "
     "elevata → priorità a messa in sicurezza prima dell'espansione') e citare "
     "l'evidenza ISPRA.\n"
-    "- EVIDENZA DOCUMENTALE: i fatti dalla sezione KG (documenti comunali: "
-    "delibere, piani, bilanci) sono evidenza DOCUMENTALE, non dato aperto "
-    "certificato — nel `dettaglio` cita documento e pagina. Una voce o "
-    "proposta può poggiarvi, ma la `fattibilita.livello` non può essere "
-    "'alta' su sola base documentale senza riscontro certificato (usa "
-    "'media' o 'da_verificare').\n"
-    "- RICONCILIAZIONE OPENCOESIONE ↔ DOCUMENTI: se un documento comunale (KG) "
-    "certifica per un progetto uno stato PIÙ AVANZATO di OpenCoesione — tipico: "
-    "OC lo segna 'in corso' con spend ratio basso, ma una delibera di collaudo/"
-    "fine lavori lo certifica CONCLUSO — riporta ENTRAMBE le fonti e SEGNALA la "
-    "discrepanza, non scegliere in silenzio (es. 'OpenCoesione registra "
-    "pagamenti al 27%, ma la delibera 45/2025 certifica il collaudo: il dato OC "
-    "è verosimilmente non aggiornato'). Non trattare come 'incompiuto' o a "
-    "spesa lenta un'opera che i documenti certificano conclusa; e non gonfiare "
-    "lo stato oltre ciò che il documento attesta. La discrepanza stessa è un "
-    "fatto utile all'amministratore.\n"
+    "- ANALISI PRECEDENTI (KG): i fatti dalla sezione KG sono ANALISI già "
+    "prodotte sul comune (memoria di riuso), NON dati ufficiali — i dati "
+    "ufficiali sono solo i portali open data. Usali come contesto/spunto per "
+    "non rifare lavoro, ma la `fattibilita.livello` non può essere 'alta' sulla "
+    "sola base di un'analisi precedente: serve un riscontro nei dati aperti.\n"
     "- VIETATO il linguaggio da campagna: niente slogan, esortazioni al voto, "
     "attacchi ad avversari, superlativi non supportati, promesse in prima "
     "persona. Tono da relazione tecnica.\n"
@@ -628,11 +610,7 @@ IDEE_INSTRUCTIONS = (
     "  - incompiuto — 'i soldi c'erano e qualcosa si è inceppato': progetti "
     "locali fermi (kind stalled_projects) da completare/rilanciare/"
     "riconvertire. Evidenze: l'URL del PROGETTO SPECIFICO fermo (dalle "
-    "RISORSE CITABILI), col titolo e gli importi nel `dettaglio`. ATTENZIONE "
-    "alla riconciliazione: se un documento comunale (KG) certifica quel "
-    "progetto come CONCLUSO (collaudo/fine lavori), NON è un incompiuto — "
-    "scartalo come idea 'da completare' (il dato OpenCoesione è solo non "
-    "aggiornato) e, semmai, segnala altrove la discrepanza.\n"
+    "RISORSE CITABILI), col titolo e gli importi nel `dettaglio`.\n"
     "  - finestra_finanziamento — 'cosa è finanziabile adesso': risorse "
     "programmate e non spese per tema (aggregati territoriali, ciclo "
     "2021-2027). Evidenze: l'URL OpenCoesione degli aggregati.\n\n"
@@ -901,24 +879,19 @@ class Settings(BaseSettings):
     kg_agent_name: str = Field(default="kg")
     # Convenzione namespace per non mescolare documenti tra amministrazioni.
     kg_namespace_prefix: str = Field(default="comune-")
-    # F2 — write-path verso il KG (lato server, MAI esposto all'agente, R13):
-    # base REST del KG (FastAPI) per ingest/delete documenti. Vuoto → upload
-    # documenti disabilitato (l'endpoint risponde 503).
+    # Write-path verso il KG (lato server, MAI esposto all'agente, R13): base
+    # REST del KG (FastAPI) per ingestionare il RIASSUNTO delle analisi. Vuoto
+    # → push disabilitato (best-effort).
     kg_api_url: str | None = Field(default=None)
-    # Directory CONDIVISA backend↔KG: il backend salva qui il PDF e chiama
-    # POST /ingest con questo file_path (il KG legge lo stesso volume).
+    # Directory CONDIVISA backend↔KG: il backend salva qui il riassunto analisi
+    # e chiama POST /ingest con questo file_path (il KG legge lo stesso volume).
     kg_upload_dir: str = Field(default="/data/kg-uploads")
-    # F3 — push del riassunto analisi nel KG per la ricerca trasversale tra
-    # comuni. Namespace SEPARATO da quello dei documenti ("comune-"): così
-    # l'agente KG (che interroga "comune-<cod>") NON rilegge le analisi
-    # auto-generate come evidenza (niente loop di auto-citazione). Attivo solo
-    # se kg_api_url è configurato; best-effort (un errore non rompe la risposta).
+    # Il KG MEMORIZZA LE ANALISI (non documenti): namespace dedicato per il push
+    # del riassunto (F3b) e per il recupero delle analisi passate (kg_query) →
+    # riuso e risparmio token. Attivo solo se kg_api_url è configurato.
     kg_analysis_namespace_prefix: str = Field(default="analisi-")
     enable_kg_analysis_push: bool = Field(default=True)
-    # Tetto dimensione upload documenti (25 MB).
-    documenti_max_bytes: int = Field(default=25 * 1024 * 1024)
-    # Base URL della UI del KG per i locator delle citazioni
-    # ({kg_ui_url}/documents/{doc_id}); vuoto → riferimento sintetico kg://.
+    # Base URL della UI del KG per i locator delle citazioni; vuoto → kg://.
     kg_ui_url: str | None = Field(default=None)
 
     # ── Programma evidence-based (POST /programma, verticale PA) ─────

@@ -8,7 +8,7 @@ const FONTE_LABEL: Record<string, string> = {
   oecd: "OCSE",
   osm: "OpenStreetMap",
   ispra: "ISPRA",
-  kg: "Documenti PA",
+  kg: "Analisi precedente",
   web: "Web",
 };
 
@@ -31,7 +31,8 @@ const FONTE_BADGE: Record<string, string> = {
  */
 export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
   const label = FONTE_LABEL[evidenza.fonte] ?? evidenza.fonte;
-  const documentale = evidenza.tier === "documentale" || evidenza.fonte === "kg";
+  // Il KG ora è memoria di ANALISI passate (riuso), non dati ufficiali.
+  const daAnalisi = evidenza.tier === "documentale" || evidenza.fonte === "kg";
   // Marketing (Pezzo 10): precedente esterno da cui prendere spunto, non prova.
   const esterna = evidenza.fonte_tipo === "ispirazione_esterna" || evidenza.fonte === "web";
   // I locator sintetici kg:// non sono URL navigabili — niente link rotto.
@@ -43,12 +44,12 @@ export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
       >
         {label}
       </span>
-      {documentale ? (
+      {daAnalisi ? (
         <span
           className="badge flex-shrink-0 border text-dark bg-white"
-          title="Fatto tratto da un documento comunale ingerito (delibera, piano, bilancio), non da un dato aperto certificato"
+          title="Spunto da un'analisi precedente riusata dalla memoria (KG), non un dato aperto ufficiale"
         >
-          documento comunale
+          analisi precedente
         </span>
       ) : null}
       {esterna ? (

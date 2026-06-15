@@ -40,7 +40,7 @@ function sourceTooltip(source: string): string {
   if (source === "oecd") return "OCSE / OECD — statistica internazionale (SDMX)";
   if (source === "opencoesione") return "OpenCoesione — progetti delle politiche di coesione";
   if (source === "osm") return "OpenStreetMap — dati geografici (ODbL)";
-  if (source === "kg") return "Knowledge Graph — documenti comunali (evidenza documentale)";
+  if (source === "kg") return "Knowledge Graph — analisi precedenti (memoria di riuso)";
   return source;
 }
 

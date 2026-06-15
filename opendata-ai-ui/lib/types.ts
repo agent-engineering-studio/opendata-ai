@@ -66,7 +66,7 @@ export type Evidenza = {
   url: string;
   /** Cosa dice il dato (numeri inclusi), senza interpretazione. */
   dettaglio: string;
-  /** "certificato" = dato aperto ufficiale; "documentale" = documento comunale (KG). */
+  /** "certificato" = dato aperto ufficiale; "documentale" = analisi precedente dal KG (riuso). */
   tier?: "certificato" | "documentale";
   /** Marketing (Pezzo 10): "dato_locale" = premessa locale verificabile;
    * "ispirazione_esterna" = precedente web di un altro ente (spunto, non prova). */
@@ -182,19 +182,6 @@ export type ZoneListResponse = {
   zona_tipo: string;
   ref_istat: string;
   source_url?: string;
-};
-
-/** Documento PA ingerito nel KG (F2) — riga del file manager. */
-export type Documento = {
-  id: number;
-  cod_comune: string;
-  filename: string;
-  stato: "in_ingest" | "ingerito" | "errore" | (string & {});
-  pagine?: number | null;
-  mime_type?: string | null;
-  kg_document_id?: string | null;
-  errore?: string | null;
-  caricato_il?: string | null;
 };
 
 export type ProgrammaResponse = {

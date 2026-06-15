@@ -266,10 +266,9 @@ services:
       KG_AGENT_NAME: ${KG_AGENT_NAME:-kg}
       KG_NAMESPACE_PREFIX: ${KG_NAMESPACE_PREFIX:-comune-}
       KG_UI_URL: ${KG_UI_URL:-}
-      # F2 — upload documenti: base REST del KG (FastAPI) per ingest/delete e
-      # directory CONDIVISA col KG (il KG deve montare lo stesso volume sullo
-      # stesso path per leggere i file passati a POST /ingest). Vuoto → upload
-      # documenti disabilitato (endpoint 503).
+      # KG come MEMORIA DELLE ANALISI: base REST del KG (FastAPI) + directory
+      # CONDIVISA dove il backend scrive il riassunto analisi e chiama POST
+      # /ingest (il KG legge lo stesso volume). Vuoto → push analisi disabilitato.
       KG_API_URL: ${KG_API_URL:-}
       KG_UPLOAD_DIR: ${KG_UPLOAD_DIR:-/data/kg-uploads}
       # Fonte web (marketing P10): opt-in. Con ENABLE_WEB=true avvia anche il

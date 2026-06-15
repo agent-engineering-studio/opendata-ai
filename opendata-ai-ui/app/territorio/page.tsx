@@ -10,7 +10,6 @@ import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
 import { ZoneSelector, type ZoneSelection } from "@/components/territorio/ZoneSelector";
-import { DocumentiManager } from "@/components/territorio/DocumentiManager";
 import { downloadSchedaMarkdown } from "@/lib/programmaMarkdown";
 import { downloadSchedaPdf } from "@/lib/programmaPdf";
 
@@ -44,7 +43,7 @@ const FONTE_LABEL: Record<string, string> = {
   opencoesione: "OpenCoesione",
   osm: "OpenStreetMap",
   ispra: "ISPRA",
-  kg: "Documenti PA",
+  kg: "Analisi (memoria)",
   sintesi: "Sintesi del report",
 };
 
@@ -69,7 +68,7 @@ const TOOL_LABEL: Record<string, string> = {
   osm_lookup_comune: "OpenStreetMap · ricerca comune",
   osm_list_zones: "OpenStreetMap · zone riconosciute",
   osm_get_zone: "OpenStreetMap · geometria zona",
-  kg_query: "Documenti PA · interrogazione",
+  kg_query: "Memoria analisi · interrogazione",
 };
 
 function toolLabel(name: string): string {
@@ -340,17 +339,6 @@ function TerritorioInner() {
             ) : null}
           </div>
         </form>
-
-        {codComune ? (
-          <details className="card shadow-sm mb-4">
-            <summary className="card-header fw-semibold" style={{ cursor: "pointer" }}>
-              Documenti del comune (base di conoscenza)
-            </summary>
-            <div className="card-body">
-              <DocumentiManager codComune={codComune} comuneNome={selection?.comune_nome} />
-            </div>
-          </details>
-        ) : null}
 
         {stato.fase === "errore" ? (
           <div className="alert alert-danger" role="alert">
