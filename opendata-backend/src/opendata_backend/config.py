@@ -317,7 +317,13 @@ OSM_INSTRUCTIONS = (
     "centre (radius ~1500-2000 m) and once per candidate zone passing its "
     "bbox (south,west,north,east). Report the per-category counts and the "
     "total for each scope, citing the `source_url` returned — a low density "
-    "vs population signals an under-served area. Cap at 3-4 such calls.\n\n"
+    "vs population signals an under-served area. Cap at 3-4 such calls.\n"
+    "STEP 5 — TURISMO/CULTURA: when the task is about tourism/culture OR carries "
+    "a 'LENTE TURISMO/CULTURA' block, call `osm_tourism_profile` on the comune "
+    "bbox to COUNT cultural assets (musei, monumenti/siti, attrazioni, "
+    "ricettività, cultura) and LIST named landmarks. Report the counts and the "
+    "named poli, citing the `source_url` — many assets but few ricettività "
+    "signals under-leveraged heritage.\n\n"
     "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
     "<a short paragraph (in the same language as the user query) on the "
     "accessibility of the place: nearby transport nodes with distances, "
@@ -645,7 +651,16 @@ IDEE_INSTRUCTIONS = (
     "aggiungere se presente nel bundle. Se la zona è nel blocco ZONE CANDIDATE, "
     "NOMINALA (es. 'nel quartiere X'); coi numeri (imprese, densità) nel "
     "`dettaglio`. Niente precedente web. Se NON c'è né l'indicatore ISTAT "
-    "imprese né la densità OSM, NON forzare l'idea: saltala.\n\n"
+    "imprese né la densità OSM, NON forzare l'idea: saltala.\n"
+    "  - turismo_cultura — 'dove valorizzare il patrimonio turistico-culturale': "
+    "individua asset culturali (musei, monumenti, siti storici, attrazioni) "
+    "SOTTOUTILIZZATI o un GAP tra ricchezza di asset e ricettività/valorizzazione. "
+    "ANCORA PRIMARIA = gli asset OSM del blocco 'LENTE TURISMO/CULTURA' (conteggi + "
+    "poli nominati): citane SEMPRE il source_url. NOMINA un polo specifico tra "
+    "quelli elencati (es. 'valorizzare il Castello X'); incrocia col numero di "
+    "strutture ricettive e con la popolazione nel `dettaglio`. NIENTE precedente "
+    "web (è la lente DATI, distinta dallo spunto marketing turismo_cultura). Se "
+    "NON ci sono asset culturali nel bundle, NON forzare l'idea: saltala.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -653,7 +668,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '

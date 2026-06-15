@@ -510,3 +510,55 @@ async def commercial_profile(
             "sources": _zone_sources(src),
         }
     )
+
+
+async def tourism_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 3000,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+    landmarks_limit: int = 25,
+) -> str:
+    """Profilo TURISTICO-CULTURALE: conta gli asset (musei, monumenti/siti
+    storici, attrazioni, ricettività, cultura) ed elenca i poli NOMINATI in un
+    raggio attorno a un punto o in un bbox. Misura quanto il patrimonio è
+    presente e capitalizzato (lente Turismo/Cultura).
+
+    Passa (lat, lon, radius_m) OPPURE (south, west, north, east) — quest'ultimo
+    per profilare l'intero comune usando il suo bbox (es. da geocoding).
+    `landmarks` elenca i poli con nome citabili in un'idea di valorizzazione.
+    """
+    if None not in (south, west, north, east):
+        bbox = (south, west, north, east)
+        counts = await osm_client.overpass_tourism_counts(bbox=bbox)
+        landmarks = await osm_client.overpass_tourism_landmarks(bbox=bbox, limit=landmarks_limit)
+        clat, clon = (south + north) / 2, (west + east) / 2
+        scope: dict[str, Any] = {"bbox": [south, west, north, east]}
+    elif lat is not None and lon is not None:
+        counts = await osm_client.overpass_tourism_counts(around=(lat, lon, radius_m))
+        half = radius_m / 111_320  # ~deg per metro (lat); bbox grezzo per i landmark
+        landmarks = await osm_client.overpass_tourism_landmarks(
+            bbox=(lat - half, lon - half, lat + half, lon + half), limit=landmarks_limit
+        )
+        clat, clon = lat, lon
+        scope = {"lat": lat, "lon": lon, "radius_m": radius_m}
+    else:
+        return _json({"error": "fornire (lat, lon[, radius_m]) oppure (south, west, north, east)"})
+    totale = counts.pop("totale", 0)
+    ricettivita = counts.get("ricettivita", 0)
+    totale_culturale = totale - ricettivita if totale >= ricettivita else totale
+    src = f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}"
+    return _json(
+        {
+            "scope": scope,
+            "counts": counts,
+            "landmarks": landmarks,
+            "totale_culturale": totale_culturale,
+            "totale_ricettivita": ricettivita,
+            "source_url": src,
+            "sources": _zone_sources(src),
+        }
+    )

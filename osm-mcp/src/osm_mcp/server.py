@@ -341,6 +341,38 @@ async def osm_commercial_profile(
 
 
 @mcp.tool()
+async def osm_tourism_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 3000,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+    landmarks_limit: int = 25,
+) -> str:
+    """Tourism/culture profile: count cultural assets (museums, monuments/
+    historic sites, attractions, accommodation, culture) AND list the NAMED
+    landmarks of an area (tourism/culture lens). Counts via Overpass `out count`;
+    landmarks via a bounded `out tags` enumeration.
+
+    Pass (lat, lon, radius_m) for a point+radius, OR (south, west, north, east)
+    to profile a whole comune using its bbox (e.g. from geocoding).
+
+    Returns JSON: { scope, counts: { musei, monumenti_siti, attrazioni,
+    ricettivita, cultura }, landmarks: [{name, kind}], totale_culturale,
+    totale_ricettivita, source_url, sources }. Use `landmarks` to name a specific
+    asset to valorise; cross assets with population/accommodation to judge
+    under-leveraged heritage — do not invent thresholds.
+    """
+    return await tools.tourism_profile(
+        lat=lat, lon=lon, radius_m=radius_m,
+        south=south, west=west, north=north, east=east,
+        landmarks_limit=landmarks_limit,
+    )
+
+
+@mcp.tool()
 async def osm_get_zone(osm_type: str, osm_id: str) -> str:
     """Fetch the full GeoJSON Feature of one zone by its OSM id.
 

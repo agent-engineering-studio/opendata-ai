@@ -68,7 +68,7 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # dichiarata rispetto alla spec: il controllo "comune ≠ quello in esame" via
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
-              "commercio_duc")
+              "commercio_duc", "turismo_cultura")
 
 # Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
 # differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
@@ -81,6 +81,9 @@ _INDICATORE_HOSTS = ("istat.it", "isprambiente.it", "openstreetmap.org", "overpa
 # Host validi come premessa di COMMERCIO: imprese ISTAT o densità OSM. ISPRA
 # (ambiente) NON è un indicatore di commercio → escluso (evita il loophole).
 _COMMERCIO_HOSTS = ("istat.it", "openstreetmap.org", "overpass-api.de")
+# Host validi come premessa di TURISMO/CULTURA: asset culturali OSM o ricettività
+# ISTAT (capacità esercizi ricettivi — ancora primaria del follow-up).
+_TURISMO_HOSTS = ("openstreetmap.org", "overpass-api.de", "istat.it")
 
 
 def _evidence_hosts(evidenze: list) -> list[str]:
@@ -122,6 +125,11 @@ def _generatore_ok(prop) -> bool:
         # Lente Commercio/DUC: premessa LOCALE = imprese ISTAT o densità OSM
         # (NON ISPRA: l'ambiente non misura il commercio). Nessun requisito web.
         return any(any(d in h for d in _COMMERCIO_HOSTS) for h in hosts)
+    if prop.generatore == "turismo_cultura":
+        # Lente Turismo/Cultura: premessa LOCALE = asset culturali OSM o
+        # ricettività ISTAT. Nessun requisito web (lo spunto marketing
+        # turismo_cultura, web-based, è un'altra cosa).
+        return any(any(d in h for d in _TURISMO_HOSTS) for h in hosts)
     return False  # generatore mancante o sconosciuto
 
 
