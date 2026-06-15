@@ -5,6 +5,20 @@ SHELL := /bin/bash
 ENV_FILE ?= .env.local
 
 COMPOSE := docker compose --env-file $(ENV_FILE)
+
+# Profili compose opzionali extra (es. web). Uso: `make up PROFILES="web"`.
+PROFILES ?=
+_PROFILE_FLAGS := $(foreach p,$(PROFILES),--profile $(p))
+
+# Overpass self-hosted incluso nel `make up` di default. Spegnilo con
+# `make up OVERPASS=0` (resta avviabile a parte con `make overpass-up`).
+# Pesante: ~25-50GB di disco e init ~1-2h alla PRIMA accensione (download .pbf
+# Italia + build del DB). Vedi infra/overpass/README.md.
+OVERPASS ?= 1
+ifeq ($(OVERPASS),1)
+_OVERPASS_PROFILE := --profile overpass
+_OVERPASS_SVC := overpass
+endif
 # Baked Ollama model. Default qwen2.5:32b → qwen2.5:32k (num_ctx 16384,
 # temperature 0) for best faithfulness on a 48GB Apple-Silicon box; override
 # e.g. `make build-ollama OLLAMA_BASE_MODEL=qwen2.5:14b OLLAMA_MODEL=qwen2.5:14k`.
@@ -36,10 +50,10 @@ help: ## Show this help
 up: up-cpu ## Start the stack (CPU profile — default)
 
 up-cpu: ## Start the stack with CPU-only Ollama (Dockerized)
-	$(COMPOSE) --profile cpu up -d
+	$(COMPOSE) --profile cpu $(_OVERPASS_PROFILE) $(_PROFILE_FLAGS) up -d
 
 up-gpu: ## Start the stack with GPU-enabled Ollama (Linux + NVIDIA only)
-	$(COMPOSE) --profile gpu up -d
+	$(COMPOSE) --profile gpu $(_OVERPASS_PROFILE) $(_PROFILE_FLAGS) up -d
 
 up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ollama). Best on macOS for Metal GPU.
 	@if ! curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then \
@@ -47,7 +61,7 @@ up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ol
 		exit 1; \
 	fi
 	@echo "✅ Host Ollama reachable. Bringing up stack without the Ollama container…"
-	$(COMPOSE) up -d $(CUSTOM_SERVICES)
+	$(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
 
 up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANTHROPIC_API_KEY in $(ENV_FILE).
 	@if ! grep -qE '^ANTHROPIC_API_KEY=.+' $(ENV_FILE); then \
@@ -55,17 +69,23 @@ up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANT
 		exit 1; \
 	fi
 	@echo "✅ Using Claude as LLM provider. Bringing up stack without the Ollama container…"
-	LLM_PROVIDER=claude $(COMPOSE) up -d $(CUSTOM_SERVICES)
+	LLM_PROVIDER=claude $(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
 
-.PHONY: down logs ps
+.PHONY: down logs ps overpass-up overpass-logs
 down: ## Stop the stack
-	$(COMPOSE) --profile cpu --profile gpu down
+	$(COMPOSE) --profile cpu --profile gpu --profile overpass --profile web down
 
 logs: ## Tail logs for all services
 	$(COMPOSE) logs -f --tail=100
 
 ps: ## Show service status
 	$(COMPOSE) ps
+
+overpass-up: ## Avvia (o aggiorna) solo l'istanza Overpass self-hosted
+	$(COMPOSE) --profile overpass up -d overpass
+
+overpass-logs: ## Segui i log di Overpass (utile durante l'init iniziale ~1-2h)
+	$(COMPOSE) --profile overpass logs -f overpass
 
 .PHONY: build-ollama
 build-ollama: ## Build the Ollama image with $(OLLAMA_MODEL) baked in (local, ~7 GB)

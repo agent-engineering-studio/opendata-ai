@@ -105,6 +105,13 @@ function TerritorioInner() {
 
   const codComune = (codManuale.trim() || selection?.cod_comune) ?? "";
 
+  // Un solo messaggio di stato per la barra di avanzamento: l'attività in corso
+  // (ultimo step ancora "start"), con fallback all'ultimo step noto.
+  const statusLabel =
+    [...steps].reverse().find((s) => s.phase === "start")?.label ??
+    steps[steps.length - 1]?.label ??
+    "Preparazione dell'analisi…";
+
   function pushStep(step: Step) {
     setSteps((prev) => {
       // L'evento "end/error" aggiorna lo step aperto con la stessa chiave.
@@ -296,45 +303,27 @@ function TerritorioInner() {
               >
                 {stato.fase === "loading" ? "Analisi in corso…" : "Genera analisi"}
               </button>
-              {stato.fase === "loading" ? (
-                <span className="small text-muted" role="status">
-                  Analisi in corso — {attesaSec}s
-                </span>
-              ) : !codComune ? (
+              {stato.fase !== "loading" && !codComune ? (
                 <span className="small text-muted">
                   Seleziona un comune per generare la scheda.
                 </span>
               ) : null}
             </div>
 
-            {stato.fase === "loading" && steps.length > 0 ? (
-              <div
-                className="mt-3 rounded p-3 small"
-                style={{ backgroundColor: "var(--color-bg-muted)" }}
-                role="log"
-                aria-label="Avanzamento dell'analisi"
-              >
-                <ul className="list-unstyled mb-0 d-flex flex-column gap-1">
-                  {steps.slice(-9).map((s, i) => (
-                    <li
-                      key={`${s.key}-${i}`}
-                      className={s.kind === "tool" ? "ms-3" : "fw-semibold"}
-                      style={{
-                        color:
-                          s.phase === "error"
-                            ? "var(--color-danger)"
-                            : s.phase === "end"
-                              ? "var(--color-text-muted)"
-                              : "var(--color-text)",
-                      }}
-                    >
-                      {s.phase === "start" ? "⏳" : s.phase === "error" ? "⚠️" : "✓"}{" "}
-                      {s.label}
-                      {s.phase === "start" ? "…" : null}
-                      {s.phase === "error" ? " (errore, proseguo)" : null}
-                    </li>
-                  ))}
-                </ul>
+            {stato.fase === "loading" ? (
+              <div className="mt-3" role="status" aria-label="Avanzamento dell'analisi">
+                <div className="progress" style={{ height: "0.5rem" }}>
+                  <div
+                    className="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    aria-valuetext={statusLabel}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div className="small text-muted mt-2 d-flex align-items-center justify-content-between gap-2">
+                  <span className="text-truncate">{statusLabel}</span>
+                  <span className="flex-shrink-0 font-monospace">{attesaSec}s</span>
+                </div>
               </div>
             ) : null}
           </div>

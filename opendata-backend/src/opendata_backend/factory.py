@@ -22,7 +22,12 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
+import httpx
 from agent_framework import Agent, MCPStreamableHTTPTool
+from opendata_core.osm.client import OverpassError
+from opendata_core.sdmx.client import SdmxError
+
+from .cache.store import cache_get, cache_set
 
 from .config import (
     CKAN_INSTRUCTIONS,
@@ -51,6 +56,50 @@ from .orchestrator.synth import build_aggregator
 from .orchestrator.workflow import build_workflow
 
 log = logging.getLogger("orchestrator.factory")
+
+# Upstream sources for the best-effort lenses (Overpass, Nominatim, ISTAT SDMX) are
+# routinely unreachable, throttled or slow — that is an expected operating
+# condition, not a bug. We log those at WARNING as a single line (the lens is just
+# skipped) and reserve full tracebacks for genuinely unexpected errors so real
+# bugs still stand out. OverpassError/SdmxError both subclass RuntimeError.
+_EXPECTED_LENS_ERRORS: tuple[type[BaseException], ...] = (
+    TimeoutError,
+    OSError,
+    httpx.HTTPError,
+    OverpassError,
+    SdmxError,
+)
+
+
+def _log_lens_skip(msg: str, *args: object, exc: BaseException) -> None:
+    """Log a skipped best-effort lens, suppressing the traceback for expected outages."""
+    if isinstance(exc, _EXPECTED_LENS_ERRORS):
+        log.warning(f"{msg} (%s: %s)", *args, type(exc).__name__, exc)
+    else:
+        log.warning(msg, *args, exc_info=exc)
+
+
+# Le ancore deterministiche (zona/commercio/turismo) interrogano fonti statiche
+# (confini/zone OSM, ASIA ISTAT) lente o intermittenti. Le memorizziamo su Redis
+# 24h così, una volta ottenute, /programma le riusa senza re-interrogare Overpass
+# /SDMX (sopravvive ai restart, condivisa tra worker). Solo i risultati POSITIVI
+# vengono messi in cache: un'assenza dovuta a un'outage transitoria NON deve
+# oscurare la lente per 24h — si ritenta alla richiesta successiva.
+_LENS_TTL = 24 * 3600
+
+
+async def _lens_cached(parts: tuple[str, ...], producer):  # noqa: ANN001, ANN202
+    """Cache-aside su Redis per un'ancora best-effort. `producer` è una factory
+    che ritorna la coroutine da eseguire al cache-miss. Fail-open: se Redis non
+    c'è, `cache_get`/`cache_set` sono no-op e si esegue sempre il producer."""
+    key = "od:lens:" + ":".join(p for p in parts if p)
+    cached = await cache_get(key)
+    if cached is not None:
+        return cached
+    result = await producer()
+    if result is not None:
+        await cache_set(key, result, ttl_seconds=_LENS_TTL)
+    return result
 
 
 def build_chat_client(settings: Settings) -> Any:
@@ -372,6 +421,16 @@ class OrchestratorSession:
 
     @staticmethod
     async def _resolve_zona(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora ZONA con cache Redis 24h (vedi `_lens_cached`)."""
+        if not req.zona_osm_id:
+            return None
+        return await _lens_cached(
+            ("zona", req.zona_osm_id),
+            lambda: OrchestratorSession._resolve_zona_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_zona_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Zona OSM selezionata (Pezzo 6) → {name, centroid, bbox} per il task.
 
         Best-effort: se Overpass non risponde si procede senza zona risolta
@@ -409,13 +468,25 @@ class OrchestratorSession:
                 "centroid": {"lat": (bbox[0] + bbox[2]) / 2, "lon": (bbox[1] + bbox[3]) / 2},
                 "bbox": bbox,
             }
-        except Exception:
-            log.warning("zona OSM %s non risolta — procedo a livello comune",
-                        req.zona_osm_id, exc_info=True)
+        except Exception as exc:
+            _log_lens_skip("zona OSM %s non risolta — procedo a livello comune",
+                           req.zona_osm_id, exc=exc)
             return None
 
     @staticmethod
     async def _resolve_zone_commerciali(req: ProgrammaRequest) -> list[dict[str, Any]] | None:
+        """Ancora ZONE COMMERCIALI con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("zone_commerciali", req.cod_comune, req.comune_nome or ""),
+            lambda: OrchestratorSession._resolve_zone_commerciali_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_zone_commerciali_uncached(
+        req: ProgrammaRequest,
+    ) -> list[dict[str, Any]] | None:
         """Zone candidate per localizzare il gap COMMERCIO (lente Commercio/DUC).
 
         Cerca le aree a vocazione commerciale (landuse retail/commercial); se la
@@ -446,13 +517,23 @@ class OrchestratorSession:
                         for c in cand[:2]
                     ]
             return None
-        except Exception:
-            log.warning("zone commerciali non risolte per %s — gap commercio a livello comune",
-                        req.cod_comune, exc_info=True)
+        except Exception as exc:
+            _log_lens_skip("zone commerciali non risolte per %s — gap commercio a livello comune",
+                           req.cod_comune, exc=exc)
             return None
 
     @staticmethod
     async def _resolve_commercio(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora COMMERCIO con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("commercio", req.cod_comune),
+            lambda: OrchestratorSession._resolve_commercio_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_commercio_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora COMMERCIO deterministica: imprese/UL+addetti ISTAT ASIA del comune.
 
         L'agente ISTAT (LLM) si è dimostrato inaffidabile nel far emergere questo
@@ -472,13 +553,23 @@ class OrchestratorSession:
                 fetch_imprese_comune(req.cod_comune), timeout=30.0
             )
             return res if res and res.get("trovato") else None
-        except Exception:
-            log.warning("ancora commercio ISTAT ASIA non risolta per %s — lente commercio assente",
-                        req.cod_comune, exc_info=True)
+        except Exception as exc:
+            _log_lens_skip("ancora commercio ISTAT ASIA non risolta per %s — lente commercio assente",
+                           req.cod_comune, exc=exc)
             return None
 
     @staticmethod
     async def _resolve_turismo(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora TURISMO con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("turismo", req.cod_comune, req.comune_nome or ""),
+            lambda: OrchestratorSession._resolve_turismo_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_turismo_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora TURISMO/CULTURA deterministica: asset culturali + ricettività OSM.
 
         Geocoda il comune → bbox, conta i POI turistico-culturali (musei,
@@ -519,9 +610,9 @@ class OrchestratorSession:
                 }
 
             return await asyncio.wait_for(_work(), timeout=40.0)
-        except Exception:
-            log.warning("ancora turismo OSM non risolta per %s — lente turismo assente",
-                        req.cod_comune, exc_info=True)
+        except Exception as exc:
+            _log_lens_skip("ancora turismo OSM non risolta per %s — lente turismo assente",
+                           req.cod_comune, exc=exc)
             return None
 
     async def run_programma_streaming(

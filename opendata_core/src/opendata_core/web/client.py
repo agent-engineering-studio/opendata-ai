@@ -110,8 +110,13 @@ class WebClient:
         params: dict[str, Any] = {"q": query, "format": "json"}
         if categories:
             params["categories"] = categories
+        # SearXNG's bot-detection logs an ERROR ("X-Forwarded-For nor X-Real-IP
+        # header is set!") when no client IP is visible. We call it directly over
+        # the compose network with no proxy, so we forward a loopback IP to satisfy
+        # the lookup. Scoped to the search call — `fetch()` hits arbitrary external
+        # hosts and must not leak this header.
         try:
-            resp = await self._client.get(url, params=params)
+            resp = await self._client.get(url, params=params, headers={"X-Forwarded-For": "127.0.0.1"})
         except httpx.HTTPError as exc:
             raise WebSearchError(f"Transport error querying SearXNG at {url}: {exc}") from exc
 
