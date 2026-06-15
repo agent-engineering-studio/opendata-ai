@@ -250,3 +250,292 @@ async def test_eurostat_substring_does_not_get_tagged_as_istat() -> None:
     assert _normalise_source_tag("istat-agent") == "istat"
     assert _normalise_source_tag("oecd-agent") == "oecd"
     assert _normalise_source_tag("ckan-it") == "ckan"
+    assert _normalise_source_tag("opencoesione") == "opencoesione"
+    assert _normalise_source_tag("OpenCoesione-agent") == "opencoesione"
+
+
+# ───────────────────── opencoesione participant ─────────────────────
+
+
+@dataclass
+class _StubFunctionResult:
+    type: str
+    result: Any
+
+
+@dataclass
+class _StubMessage:
+    contents: list[Any]
+
+
+@dataclass
+class _StubInnerResponseWithMessages:
+    text: str
+    messages: list[Any]
+
+
+_OC_CAPACITY_PAYLOAD = {
+    "territorio": "Barletta",
+    "slug": "barletta-comune",
+    "spend_ratio": 0.3841,
+    "progetti_totali": 2616,
+    "progetti_conclusi": 2152,
+    "source_url": "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comune.json",
+}
+
+_OC_SEARCH_PAYLOAD = {
+    "total": 26,
+    "results": [{"clp": "X1"}],
+    "source_url": (
+        "https://opencoesione.gov.it/it/api/progetti.json"
+        "?page=1&page_size=3&tema=ambiente&territorio=barletta-comune"
+    ),
+}
+
+_OC_RESOLVE_PAYLOAD = {
+    "found": True,
+    "slug": "barletta-comune",
+    "source_url": "https://opencoesione.gov.it/it/api/territori.json?denominazione=Barletta",
+}
+
+
+def _oc_result(raw_text: str, payloads: list[dict[str, Any]]) -> _StubResult:
+    messages = [
+        _StubMessage(contents=[_StubFunctionResult(type="function_result", result=json.dumps(p))])
+        for p in payloads
+    ]
+    return _StubResult(
+        executor_id="opencoesione",
+        agent_response=_StubInnerResponseWithMessages(text=raw_text, messages=messages),
+    )
+
+
+@pytest.mark.asyncio
+async def test_opencoesione_participant_tags_section_and_captures_source_urls() -> None:
+    """OpenCoesione: tag, synth section, and deterministic source_url capture
+    even when the LLM omits the citations from its RESOURCES_JSON block."""
+    synth = _StubAgent("Sintesi con evidenza finanziaria.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    oc_raw = (
+        "A Barletta insistono 26 progetti sul tema ambiente; spend ratio 0,38.\n"
+        "<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"  # LLM omitted citations
+    )
+    results = [
+        _result("ckan", _ckan_reply([])),
+        _oc_result(oc_raw, [_OC_RESOLVE_PAYLOAD, _OC_SEARCH_PAYLOAD, _OC_CAPACITY_PAYLOAD]),
+    ]
+    out = await aggregate(results)
+    block = _extract_block(out.text)
+
+    oc_resources = [r for r in block if r["source"] == "opencoesione"]
+    urls = {r["url"] for r in oc_resources}
+    # Search + capacity captured from tool results; the resolve lookup is
+    # infrastructure and must NOT become a citation.
+    assert _OC_CAPACITY_PAYLOAD["source_url"] in urls
+    assert _OC_SEARCH_PAYLOAD["source_url"] in urls
+    assert _OC_RESOLVE_PAYLOAD["source_url"] not in urls
+    # Citations are API links: JSON format, no content to download.
+    assert all(r["format"] == "JSON" and r["content"] is None for r in oc_resources)
+    # Capacity citation carries a meaningful name.
+    cap = next(r for r in oc_resources if r["url"] == _OC_CAPACITY_PAYLOAD["source_url"])
+    assert "capacità di spesa" in cap["name"] and "Barletta" in cap["name"]
+
+    # The synth prompt has the OPENCOESIONE section with the narrative.
+    prompt = synth.last_prompt or ""
+    assert "=== OPENCOESIONE ===" in prompt
+    assert "spend ratio 0,38" in prompt
+
+
+@pytest.mark.asyncio
+async def test_osm_and_ispra_participants_tag_section_and_capture() -> None:
+    """7A/7B: tag corretti, sezioni synth, cattura deterministica via source_url.
+
+    I lookup OSM (liste di candidati) NON diventano citazioni; le entità
+    singole (osm_get_zone) e gli indicatori ISPRA sì.
+    """
+    synth = _StubAgent("Sintesi con accessibilità e vincoli.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    osm_zone_payload = {
+        "feature": {"type": "Feature"},
+        "name": "Zona Industriale di Bari",
+        "source_url": "https://www.openstreetmap.org/relation/20799475",
+    }
+    osm_list_payload = {  # lookup → NON è una citazione
+        "candidates": [{"osm_id": "way/1"}],
+        "fallback_level": 1,
+        "source_url": "https://overpass-api.de/api/interpreter?data=...",
+    }
+    ispra_payload = {
+        "cod_comune": "110002",
+        "nome": "Barletta",
+        "frane_p3p4": {"area_pct": 0.04},
+        "source_url": "https://idrogeo.isprambiente.it/api/pir/comuni/110002",
+    }
+
+    def _participant_with_tools(executor_id: str, narrative: str, payloads: list[dict]) -> Any:
+        msgs = [
+            _StubMessage(contents=[
+                _StubFunctionResult(type="function_result", result=json.dumps(p))
+            ])
+            for p in payloads
+        ]
+        raw = f"{narrative}\n<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"
+        return _StubResult(
+            executor_id=executor_id,
+            agent_response=_StubInnerResponseWithMessages(text=raw, messages=msgs),
+        )
+
+    results = [
+        _participant_with_tools(
+            "osm", "La zona è a 2 km dalla stazione.", [osm_list_payload, osm_zone_payload]
+        ),
+        _participant_with_tools(
+            "ispra", "Pericolosità frane P3+P4 trascurabile (0,04%).", [ispra_payload]
+        ),
+    ]
+    out = await aggregate(results)
+    block = _extract_block(out.text)
+    by_source = {}
+    for r in block:
+        by_source.setdefault(r["source"], []).append(r)
+
+    assert [r["url"] for r in by_source["osm"]] == [
+        "https://www.openstreetmap.org/relation/20799475"
+    ]
+    assert "Zona Industriale di Bari" in by_source["osm"][0]["name"]
+    assert by_source["ispra"][0]["url"].endswith("/pir/comuni/110002")
+    assert "Barletta" in by_source["ispra"][0]["name"]
+
+    prompt = synth.last_prompt or ""
+    assert "=== OSM ===" in prompt and "=== ISPRA ===" in prompt
+    from opendata_backend.orchestrator.synth import _normalise_source_tag
+
+    assert _normalise_source_tag("osm") == "osm"
+    assert _normalise_source_tag("ispra-agent") == "ispra"
+
+
+@pytest.mark.asyncio
+async def test_web_participant_captures_search_results() -> None:
+    """Web (Pezzo 10): i risultati di web_search diventano citazioni WEB
+    taggate source='web' (l'ispirazione esterna del guardrail marketing)."""
+    from opendata_backend.orchestrator.synth import (
+        _capture_tool_resources,
+        _normalise_source_tag,
+    )
+
+    assert _normalise_source_tag("web") == "web"
+
+    payload = {
+        "query": "comune turismo lento site:gov.it",
+        "results": [
+            {"title": "Borgo che riparte", "url": "https://comune-x.gov.it/turismo",
+             "snippet": "turismo lento e cammini", "date": "2025-09-01"},
+            {"title": "senza url", "snippet": "scartato"},  # no url → dropped
+        ],
+    }
+    msgs = [_StubMessage(contents=[
+        _StubFunctionResult(type="function_result", result=json.dumps(payload))
+    ])]
+    result = _StubResult(
+        executor_id="web",
+        agent_response=_StubInnerResponseWithMessages(text="…", messages=msgs),
+    )
+    captured = _capture_tool_resources(result, "web")
+    assert len(captured) == 1
+    r = captured[0]
+    assert r.source == "web" and r.format == "WEB"
+    assert r.url == "https://comune-x.gov.it/turismo"
+    assert "turismo lento" in (r.description or "")
+
+
+@pytest.mark.asyncio
+async def test_kg_participant_captures_document_provenance(monkeypatch) -> None:
+    """KG (spec 09): le SourceReference del kg_query diventano citazioni DOC
+    con provenienza documento+pagina; con KG_UI_URL il locator è navigabile."""
+    monkeypatch.setenv("KG_UI_URL", "https://kg.example.org")
+    synth = _StubAgent("Sintesi con evidenza documentale.")
+    aggregate = build_aggregator(synth)  # type: ignore[arg-type]
+
+    kg_payload = {
+        "answer": "Il PUG destina l'area a servizi.",
+        "namespace": "comune-110002",
+        "sources": [
+            {"doc_id": "doc-123", "document_name": "PUG Barletta 2024",
+             "page_number": 11, "total_pages": 240, "text_preview": "…"},
+            {"doc_id": "doc-456", "document_name": "Delibera CC 45/2025",
+             "page_number": 2, "total_pages": 8, "text_preview": "…"},
+        ],
+    }
+    msgs = [_StubMessage(contents=[
+        _StubFunctionResult(type="function_result", result=json.dumps(kg_payload))
+    ])]
+    raw = "Dal PUG risulta…\n<!--RESOURCES_JSON-->\n[]\n<!--/RESOURCES_JSON-->"
+    result = _StubResult(
+        executor_id="kg",
+        agent_response=_StubInnerResponseWithMessages(text=raw, messages=msgs),
+    )
+    out = await aggregate([result, _result("ckan", _ckan_reply([]))])
+    block = _extract_block(out.text)
+    kg_res = [r for r in block if r["source"] == "kg"]
+    assert {r["name"] for r in kg_res} == {"PUG Barletta 2024", "Delibera CC 45/2025"}
+    by_name = {r["name"]: r for r in kg_res}
+    assert by_name["PUG Barletta 2024"]["url"] == "https://kg.example.org/documents/doc-123"
+    assert by_name["PUG Barletta 2024"]["format"] == "DOC"
+    assert by_name["PUG Barletta 2024"]["description"] == "p.12/240"
+    assert "=== KG ===" in (synth.last_prompt or "")
+
+
+@pytest.mark.asyncio
+async def test_kg_synthetic_locator_without_ui_url(monkeypatch) -> None:
+    monkeypatch.delenv("KG_UI_URL", raising=False)
+    from opendata_backend.orchestrator.synth import _kg_resources_from_payload
+
+    res = _kg_resources_from_payload(
+        {"namespace": "comune-110002",
+         "sources": [{"doc_id": "d1", "document_name": "Delibera", "page_number": 3,
+                      "total_pages": 10}]}
+    )
+    assert res[0].url == "kg://comune-110002/d1#p=3"
+    assert res[0].source == "kg" and res[0].description == "p.4/10"
+
+
+@pytest.mark.asyncio
+async def test_geo_filter_keeps_osm_entity_for_comune_query() -> None:
+    """Le risorse OSM (osm.org/way|relation) non portano nomi di comuni →
+    il filtro geografico non deve scartarle."""
+    from opendata_backend.orchestrator.geo_filter import filter_resources
+
+    osm_res = Resource(
+        name="OpenStreetMap — Zona Industriale di Bari",
+        url="https://www.openstreetmap.org/relation/20799475",
+        format="JSON",
+        source="osm",
+    )
+    kept = filter_resources([osm_res], "zona industriale a Bari")
+    assert kept == [osm_res]
+
+
+@pytest.mark.asyncio
+async def test_geo_filter_keeps_matching_opencoesione_resources() -> None:
+    """OpenCoesione URLs carry the comune slug — the geographic post-filter must
+    keep the queried comune and drop a different one."""
+    from opendata_backend.orchestrator.geo_filter import filter_resources
+
+    barletta = Resource(
+        name="OpenCoesione — ricerca progetti",
+        url=_OC_SEARCH_PAYLOAD["source_url"],
+        format="JSON",
+        source="opencoesione",
+    )
+    taranto = Resource(
+        name="OpenCoesione — capacità di spesa Taranto",
+        url="https://opencoesione.gov.it/it/api/aggregati/territori/taranto-comune.json",
+        format="JSON",
+        source="opencoesione",
+    )
+    kept = filter_resources([barletta, taranto], "zona industriale a Barletta")
+    urls = {r.url for r in kept}
+    assert barletta.url in urls
+    assert taranto.url not in urls

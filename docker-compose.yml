@@ -111,13 +111,58 @@ services:
       PORT: "8081"
       MCP_PATH: /mcp
       ISTAT_SDMX_BASE_URL: ${ISTAT_SDMX_BASE_URL:-https://esploradati.istat.it/SDMXWS/rest}
-      ISTAT_HTTP_TIMEOUT: "60"
+      # esploradati.istat.it supera regolarmente i 60s sul primo fetch del
+      # catalogo (visto live: transport error a 60.1s); la cache L2 rende
+      # veloci le chiamate successive.
+      ISTAT_HTTP_TIMEOUT: "120"
       # L2 persistent cache for the dataflow catalogue (slow + rarely changes).
       SDMX_PERSISTENT_CACHE_DIR: /var/cache/sdmx
       SDMX_PERSISTENT_CACHE_TTL_SECONDS: ${SDMX_PERSISTENT_CACHE_TTL_SECONDS:-86400}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - sdmx_cache:/var/cache/sdmx
+    restart: unless-stopped
+
+  # ───── OpenCoesione MCP server (Streamable HTTP) ─────
+  opencoesione-mcp:
+    build:
+      context: .
+      dockerfile: opencoesione-mcp-server/Dockerfile
+    image: opencoesione-mcp-server:local
+    container_name: opencoesione-mcp
+    ports:
+      - "${OPENCOESIONE_MCP_PORT:-18082}:8082"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8082"
+      MCP_PATH: /mcp
+      OPENCOESIONE_BASE_URL: ${OPENCOESIONE_BASE_URL:-https://opencoesione.gov.it/it/api}
+      OPENCOESIONE_HTTP_TIMEOUT: "60"
+      OPENCOESIONE_CACHE_TTL_SECONDS: ${OPENCOESIONE_CACHE_TTL_SECONDS:-3600}
+      # Local-aggregates tool (opencoesione_query_local): read-only mirror of
+      # opendata.oc_progetti, populated by `make oc-sync`. Empty = tool off.
+      OPENCOESIONE_DB_URL: ${OPENCOESIONE_DB_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── ISPRA IdroGEO MCP server (Streamable HTTP) ─────
+  ispra-mcp:
+    build:
+      context: .
+      dockerfile: ispra-mcp-server/Dockerfile
+    image: ispra-mcp-server:local
+    container_name: ispra-mcp
+    ports:
+      - "${ISPRA_MCP_PORT:-18083}:8083"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8083"
+      MCP_PATH: /mcp
+      ISPRA_IDROGEO_BASE_URL: ${ISPRA_IDROGEO_BASE_URL:-https://idrogeo.isprambiente.it/api}
+      ISPRA_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
@@ -136,6 +181,45 @@ services:
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8080"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── SearXNG — meta-search backend per la fonte web (marketing P10) ─────
+  # Profilo "web": opt-in (start con COMPOSE_PROFILES=web o `--profile web`),
+  # serve solo quando ENABLE_WEB=true. JSON API abilitata in infra/searxng.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: opendata-ai-searxng
+    profiles: ["web"]
+    ports:
+      - "${SEARXNG_PORT:-18099}:8080"
+    volumes:
+      - ./infra/searxng:/etc/searxng:ro
+    environment:
+      SEARXNG_BASE_URL: http://localhost:${SEARXNG_PORT:-18099}/
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ───── Web MCP — web_search/web_fetch su SearXNG (ispirazioni marketing) ─────
+  web-mcp:
+    build:
+      context: .
+      dockerfile: web-mcp/Dockerfile
+    image: web-mcp:local
+    container_name: web-mcp
+    profiles: ["web"]
+    ports:
+      - "${WEB_MCP_PORT:-18088}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-searxng}
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+      WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-8}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - searxng
     restart: unless-stopped
 
   # ───── Unified backend (multi-source fan-out + /datasets/* + stubs) — main UI entry on :8000 ─────
@@ -157,6 +241,7 @@ services:
       ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}
       OECD_MCP_URL: ${OECD_MCP_URL:-}
+      OPENCOESIONE_MCP_URL: ${OPENCOESIONE_MCP_URL:-http://opencoesione-mcp:8082/mcp}
       OSM_MCP_URL: ${OSM_MCP_URL:-http://osm-mcp:8080/mcp}
       ENABLE_OSM_MAPS: ${ENABLE_OSM_MAPS:-true}
       CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
@@ -167,6 +252,32 @@ services:
       ENABLE_ISTAT: ${ENABLE_ISTAT:-true}
       ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-false}
       ENABLE_OECD: ${ENABLE_OECD:-false}
+      ENABLE_OPENCOESIONE: ${ENABLE_OPENCOESIONE:-false}
+      OPENCOESIONE_AGENT_NAME: ${OPENCOESIONE_AGENT_NAME:-opencoesione}
+      ENABLE_OSM: ${ENABLE_OSM:-false}
+      OSM_AGENT_NAME: ${OSM_AGENT_NAME:-osm}
+      ENABLE_ISPRA: ${ENABLE_ISPRA:-false}
+      ISPRA_MCP_URL: ${ISPRA_MCP_URL:-http://ispra-mcp:8083/mcp}
+      ISPRA_AGENT_NAME: ${ISPRA_AGENT_NAME:-ispra}
+      # Knowledge Graph: deployment esterno (repo knowledge-graph), nessun
+      # servizio in questo compose — solo il puntatore.
+      ENABLE_KG: ${ENABLE_KG:-false}
+      KG_MCP_URL: ${KG_MCP_URL:-}
+      KG_AGENT_NAME: ${KG_AGENT_NAME:-kg}
+      KG_NAMESPACE_PREFIX: ${KG_NAMESPACE_PREFIX:-comune-}
+      KG_UI_URL: ${KG_UI_URL:-}
+      # KG come MEMORIA DELLE ANALISI: base REST del KG (FastAPI) + directory
+      # CONDIVISA dove il backend scrive il riassunto analisi e chiama POST
+      # /ingest (il KG legge lo stesso volume). Vuoto → push analisi disabilitato.
+      KG_API_URL: ${KG_API_URL:-}
+      KG_UPLOAD_DIR: ${KG_UPLOAD_DIR:-/data/kg-uploads}
+      # Fonte web (marketing P10): opt-in. Con ENABLE_WEB=true avvia anche il
+      # profilo "web" (searxng + web-mcp): COMPOSE_PROFILES=web make up.
+      ENABLE_WEB: ${ENABLE_WEB:-false}
+      WEB_MCP_URL: ${WEB_MCP_URL:-http://web-mcp:8080/mcp}
+      WEB_AGENT_NAME: ${WEB_AGENT_NAME:-web}
+      # Ambito territoriale (vuoto = nessun limite; prod = Puglia).
+      TERRITORIO_PROVINCE: ${TERRITORIO_PROVINCE:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
       CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}

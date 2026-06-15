@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 48" role="img" aria-label="OpenData AI">
+  <rect width="48" height="48" rx="11" fill="#0066cc"/>
+  <path d="M24 9c-7.18 0-13 5.6-13 12.5C11 31 24 40 24 40s13-9 13-18.5C37 14.6 31.18 9 24 9z" fill="#ffffff"/>
+  <circle cx="24" cy="21.5" r="5" fill="#00cf86"/>
+  <text x="60" y="31" font-family="'Titillium Web', system-ui, sans-serif" font-size="22" font-weight="700" fill="#002b56">OpenData<tspan fill="#0066cc"> AI</tspan></text>
+</svg>

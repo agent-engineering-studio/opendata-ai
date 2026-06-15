@@ -86,3 +86,40 @@
     font-style: italic;
   }
 }
+
+/* ── Stampa della scheda programma (/territorio → "Esporta PDF") ──
+ * window.print() senza librerie: nascondiamo chrome di pagina e form,
+ * resta la sola scheda con citazioni leggibili. */
+@media print {
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  #scheda-programma {
+    max-width: 100%;
+  }
+  #scheda-programma .card {
+    border: 1px solid #ccc;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  #scheda-programma a {
+    color: #000;
+  }
+  /* Le fonti devono restare verificabili anche su carta: URL esplicito. */
+  #scheda-programma a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    word-break: break-all;
+  }
+  #scheda-programma details {
+    display: block;
+  }
+  #scheda-programma details > * {
+    display: block;
+  }
+}

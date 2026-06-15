@@ -34,3 +34,25 @@ async def test_get_json_raises_on_http_error(httpx_mock: HTTPXMock) -> None:
     async with SdmxClient(base_url=base) as c:
         with pytest.raises(SdmxError):
             await c.get_json("dataflow", cache=False)
+
+
+async def test_circuit_breaker_fails_fast_after_transport_errors(httpx_mock: HTTPXMock) -> None:
+    """Visto live: esploradati appende fino al timeout quando l'IP è rate-limitato.
+    Dopo N transport error consecutivi il client va in fail-fast (cooldown)."""
+    import httpx as _httpx
+
+    from opendata_core.sdmx import client as sdmx_mod
+
+    base = "https://esploradati.istat.it/SDMXWS/rest"
+    SdmxClient._circuit.clear()
+    httpx_mock.add_exception(_httpx.ReadTimeout("hang"), is_reusable=True)
+    try:
+        async with SdmxClient(base_url=base) as c:
+            for _ in range(sdmx_mod.CIRCUIT_THRESHOLD):
+                with pytest.raises(SdmxError, match="Transport error"):
+                    await c.get_json("dataflow/IT1", cache=False)
+            # Circuito aperto: errore IMMEDIATO e actionable, niente richiesta.
+            with pytest.raises(SdmxError, match="cooldown"):
+                await c.get_json("dataflow/IT1", cache=False)
+    finally:
+        SdmxClient._circuit.clear()

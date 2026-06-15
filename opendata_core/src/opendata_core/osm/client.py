@@ -11,6 +11,9 @@ directly by the MCP tool layer.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
 from typing import Any, Literal
 
 import httpx
@@ -103,6 +106,61 @@ def _overpass_filter(category: str) -> str:
     return f'["amenity"="{safe}"]'
 
 
+# Le istanze Overpass pubbliche throttlano (429) e vanno in 504 sotto carico:
+# OGNI chiamata Overpass del repo passa da `overpass_post`, che ritenta con
+# backoff e RUOTA sui mirror di fallback (env OVERPASS_FALLBACK_URLS).
+OVERPASS_FALLBACK_URLS = [
+    u.strip()
+    for u in os.getenv(
+        "OVERPASS_FALLBACK_URLS", "https://overpass.kumi.systems/api/interpreter"
+    ).split(",")
+    if u.strip()
+]
+_OVERPASS_MAX_RETRIES = 3
+_OVERPASS_RETRYABLE = (429, 502, 504)
+
+log = logging.getLogger("opendata-core.osm")
+
+
+class OverpassError(RuntimeError):
+    """Overpass non raggiungibile o in errore dopo retry e rotazione mirror."""
+
+
+def overpass_endpoints() -> list[str]:
+    primary = settings.OVERPASS_URL
+    return [primary] + [u for u in OVERPASS_FALLBACK_URLS if u != primary]
+
+
+async def overpass_post(
+    query: str,
+    *,
+    timeout: float = 30.0,
+    backoff_base: float = 4.0,
+    max_retries: int = _OVERPASS_MAX_RETRIES,
+) -> list[dict[str, Any]]:
+    """POST a Overpass con retry/backoff e rotazione degli endpoint."""
+    last = ""
+    endpoints = overpass_endpoints()
+    async with await _http() as client:
+        for attempt in range(max_retries):
+            endpoint = endpoints[attempt % len(endpoints)]
+            try:
+                resp = await client.post(endpoint, data={"data": query}, timeout=timeout)
+            except httpx.HTTPError as exc:
+                last = f"transport: {type(exc).__name__}"
+                log.warning("Overpass %s su %s — provo il mirror successivo", last, endpoint)
+                continue
+            if resp.status_code in _OVERPASS_RETRYABLE:
+                last = f"HTTP {resp.status_code}"
+                delay = backoff_base * (attempt + 1)
+                log.warning("Overpass %s su %s — retry in %.1fs", last, endpoint, delay)
+                await asyncio.sleep(delay)
+                continue
+            resp.raise_for_status()
+            return resp.json().get("elements", [])
+    raise OverpassError(f"Overpass non disponibile dopo {max_retries} tentativi ({last})")
+
+
 async def overpass_around(
     lat: float, lon: float, radius_m: int, category: str, limit: int = 30
 ) -> list[dict[str, Any]]:
@@ -118,10 +176,7 @@ async def overpass_around(
     );
     out center tags {limit};
     """
-    async with await _http() as client:
-        r = await client.post(settings.OVERPASS_URL, data={"data": query})
-        r.raise_for_status()
-        return r.json().get("elements", [])
+    return await overpass_post(query, timeout=30.0, backoff_base=2.0)
 
 
 async def overpass_bbox(
@@ -138,10 +193,7 @@ async def overpass_bbox(
     );
     out center tags {limit};
     """
-    async with await _http() as client:
-        r = await client.post(settings.OVERPASS_URL, data={"data": query})
-        r.raise_for_status()
-        return r.json().get("elements", [])
+    return await overpass_post(query, timeout=30.0, backoff_base=2.0)
 
 
 # ── OSRM ────────────────────────────────────────────────────────────

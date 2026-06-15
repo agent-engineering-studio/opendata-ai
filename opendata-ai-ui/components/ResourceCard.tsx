@@ -27,6 +27,9 @@ function sourceBadgeColor(source: string): string {
   if (source === "istat") return "bg-warning text-white";
   if (source === "eurostat") return "bg-secondary text-white";
   if (source === "oecd") return "bg-danger text-white";
+  if (source === "opencoesione") return "bg-success text-white";
+  if (source === "osm") return "bg-info text-white";
+  if (source === "kg") return "bg-secondary text-white";
   return "bg-slate-100 text-slate-700";
 }
 
@@ -35,6 +38,9 @@ function sourceTooltip(source: string): string {
   if (source === "istat") return "ISTAT — statistica ufficiale italiana (SDMX)";
   if (source === "eurostat") return "Eurostat — statistica UE (SDMX)";
   if (source === "oecd") return "OCSE / OECD — statistica internazionale (SDMX)";
+  if (source === "opencoesione") return "OpenCoesione — progetti delle politiche di coesione";
+  if (source === "osm") return "OpenStreetMap — dati geografici (ODbL)";
+  if (source === "kg") return "Knowledge Graph — analisi precedenti (memoria di riuso)";
   return source;
 }
 

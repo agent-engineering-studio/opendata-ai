@@ -128,6 +128,7 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
     based on the result *shape* (not a fragile name match), builds resources:
       - {"csv": ...}                 → istat_get_data    → CSV resource (content)
       - {"content": ..., "url": ...} → ckan_resource_download → resource (content)
+      - {"source_url": ...} + source == "opencoesione" → JSON API citation (no content)
     """
     captured: list[Resource] = []
     base = _SOURCE_BASE_URL.get(source or "", None)
@@ -138,6 +139,35 @@ def _capture_tool_resources(result: Any, source: str | None) -> list[Resource]:
                 continue
             payload = _coerce_tool_result(getattr(content, "result", None))
             if not payload:
+                continue
+
+            # ── knowledge graph: kg_query ritorna `sources` (SourceReference
+            # con doc_id/document_name/page_number) — provenienza documentale,
+            # una citazione per documento+pagina.
+            if source == "kg":
+                captured.extend(_kg_resources_from_payload(payload))
+                continue
+
+            # ── web (marketing-territoriale, Pezzo 10): web_search ritorna
+            # `results[]` (title/url/snippet/date), web_fetch una pagina con
+            # `content`. Diventano citazioni esterne (format WEB) — il guardrail
+            # marketing le tratta come `ispirazione_esterna`.
+            if source == "web":
+                captured.extend(_web_resources_from_payload(payload))
+                continue
+
+            # ── fonti "citation-style" (opencoesione / osm / ispra): i tool
+            # includono `source_url`, l'URL risolvibile di quella risposta.
+            # Sono citazioni (format JSON), mai file — catturate anche quando
+            # l'LLM le omette dal suo blocco RESOURCES_JSON.
+            if source in _CITATION_SOURCES:
+                cit = _citation_resource_from_payload(payload, source)
+                if cit is not None:
+                    captured.append(cit)
+                # query_local comparativi: ogni progetto dei comuni simili /
+                # fermo ha il SUO url → una citazione PER PROGETTO, così le
+                # idee possono linkare "cosa hanno fatto gli altri comuni".
+                captured.extend(_project_citations_from_rows(payload))
                 continue
 
             # ── istat_get_data: SDMX-CSV observations ──
@@ -257,6 +287,177 @@ def _ckan_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
     return out
 
 
+#: Fonti i cui tool emettono citazioni API (`source_url`) invece di file.
+_CITATION_SOURCES = ("opencoesione", "osm", "ispra")
+
+#: Quanti progetti per risultato comparativo diventano citazioni nominate.
+_MAX_PROJECT_CITATIONS = 10
+
+
+def _project_citations_from_rows(payload: dict[str, Any]) -> list[Resource]:
+    """Righe-progetto dei kind comparativi → citazioni nominate per progetto.
+
+    `opencoesione_query_local` (similar_projects / stalled_projects) ritorna
+    `rows.progetti[]` con `url` risolvibile per CLP: senza queste citazioni le
+    idee del brainstorming non potrebbero linkare i progetti dei comuni simili
+    (i guardrail scarterebbero URL mai raccolti).
+    """
+    rows = payload.get("rows")
+    if not isinstance(rows, dict) or not isinstance(rows.get("progetti"), list):
+        return []
+    out: list[Resource] = []
+    for proj in rows["progetti"][:_MAX_PROJECT_CITATIONS]:
+        if not isinstance(proj, dict):
+            continue
+        url = proj.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            continue
+        titolo = str(proj.get("titolo") or proj.get("clp") or "progetto")[:80]
+        comune = proj.get("comune")
+        name = f"OpenCoesione — {titolo}" + (f" ({comune})" if comune else "")
+        out.append(Resource(name=name[:120], url=url, format="JSON", source="opencoesione"))
+    return out
+
+
+#: Quante hit di web_search diventano citazioni (tieni piccolo il contesto LLM).
+_MAX_WEB_CITATIONS = 12
+
+
+def _web_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
+    """web_search / web_fetch → citazioni esterne (format WEB, source="web").
+
+    web_search ritorna ``{results: [{title,url,snippet,date}]}``; web_fetch
+    ritorna ``{url, content}``. Entrambi diventano risorse WEB taggate
+    ``source="web"`` — l'evidenza che le cita risulta `ispirazione_esterna`
+    (campo derivato su Evidenza) e il guardrail marketing richiede ALMENO una
+    di queste accanto a una premessa locale (Pezzo 10).
+    """
+    out: list[Resource] = []
+    results = payload.get("results")
+    if isinstance(results, list):
+        for r in results[:_MAX_WEB_CITATIONS]:
+            if not isinstance(r, dict):
+                continue
+            url = r.get("url")
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                continue
+            snippet = str(r.get("snippet") or "").strip()
+            date = str(r.get("date") or "").strip()
+            descr = (snippet[:140] + (f" — {date}" if date else "")).strip() or None
+            out.append(
+                Resource(
+                    name=str(r.get("title") or url)[:120],
+                    url=url,
+                    format="WEB",
+                    source="web",
+                    description=descr,
+                )
+            )
+        return out
+    # web_fetch: una singola pagina recuperata con contenuto.
+    url = payload.get("url")
+    content = payload.get("content")
+    if (
+        isinstance(url, str)
+        and url.startswith(("http://", "https://"))
+        and isinstance(content, str)
+        and content.strip()
+    ):
+        name = url.rstrip("/").split("/")[-1].split("?")[0] or url
+        out.append(
+            Resource(
+                name=name[:120],
+                url=url,
+                format="WEB",
+                source="web",
+                content=content[:_MAX_CAPTURED_CHARS],
+                description="(pagina recuperata)",
+            )
+        )
+    return out
+
+
+def _kg_resources_from_payload(payload: dict[str, Any]) -> list[Resource]:
+    """SourceReference del kg_query → citazioni documentali (doc + pagina).
+
+    Locator: `{KG_UI_URL}/documents/{doc_id}` quando la UI del KG è
+    configurata; altrimenti un riferimento sintetico `kg://…` comunque
+    tracciabile a documento+pagina (spec 09).
+    """
+    import os
+
+    refs = payload.get("sources")
+    if not isinstance(refs, list):
+        return []
+    ui_base = (os.getenv("KG_UI_URL") or "").rstrip("/")
+    namespace = payload.get("namespace") or payload.get("thread_id") or ""
+    out: list[Resource] = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        doc_id = ref.get("doc_id")
+        if not doc_id:
+            continue
+        page = ref.get("page_number")
+        total = ref.get("total_pages")
+        if ui_base:
+            url = f"{ui_base}/documents/{doc_id}"
+        else:
+            ns = f"{namespace}/" if namespace else ""
+            url = f"kg://{ns}{doc_id}" + (f"#p={page}" if page is not None else "")
+        descr = f"p.{(page or 0) + 1}/{total or '?'}"
+        out.append(
+            Resource(
+                name=str(ref.get("document_name") or doc_id)[:120],
+                url=url,
+                format="DOC",
+                source="kg",
+                description=descr,
+            )
+        )
+    return out
+
+
+def _citation_resource_from_payload(payload: dict[str, Any], source: str) -> Resource | None:
+    """Build the JSON API citation for a citation-style tool result.
+
+    The tools of these sources return a `source_url` field (the resolvable URL
+    of that exact response). The name is derived from the payload shape so the
+    citation reads meaningfully in the UI. Lookup/infrastructure responses
+    (territory resolution, comune autocomplete) are not evidence — skipped.
+    """
+    source_url = payload.get("source_url")
+    if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
+        return None
+    if "found" in payload:  # opencoesione_resolve_territorio — not a citation
+        return None
+
+    if source == "opencoesione":
+        if "spend_ratio" in payload:
+            where = payload.get("territorio") or payload.get("slug") or ""
+            name = f"OpenCoesione — capacità di spesa {where}".strip()
+        elif "aggregati" in payload:
+            ctx = payload.get("contesto") or {}
+            name = f"OpenCoesione — aggregati territoriali {ctx.get('nome_territorio') or ''}".strip()
+        elif "cod_locale_progetto" in payload:
+            name = f"OpenCoesione — progetto {payload['cod_locale_progetto']}"
+        elif "results" in payload:
+            kind = "soggetti" if "/soggetti" in source_url else "progetti"
+            name = f"OpenCoesione — ricerca {kind} ({payload.get('total', '?')} risultati)"
+        else:
+            name = "OpenCoesione — risposta API"
+    elif source == "osm":
+        if "candidates" in payload:  # osm_list_zones — lookup, not evidence
+            return None
+        name = f"OpenStreetMap — {payload.get('name') or 'entità'}"
+    elif source == "ispra":
+        nome = payload.get("nome") or payload.get("cod_comune") or ""
+        name = f"ISPRA IdroGEO — indicatori di rischio {nome}".strip()
+    else:  # pragma: no cover — _CITATION_SOURCES is closed
+        name = f"{source.upper()} — risposta API"
+    return Resource(name=name[:120], url=source_url, format="JSON", source=source)  # type: ignore[arg-type]
+
+
 _PLACEHOLDER_SEGMENTS = ("uuid", "example", "your-", "path", "<", "{", "...")
 
 
@@ -273,13 +474,15 @@ def _is_placeholder_url(url: str) -> bool:
 def _normalise_source_tag(executor_id: str) -> str | None:
     """Map the participant's executor_id to a clean source tag.
 
-    Recognised tags: 'ckan', 'istat', 'eurostat', 'oecd'. Match is substring-based
-    against a lowercased executor_id so renames at the Settings level (e.g.
-    `ckan_agent_name="ckan-it"`) keep working.
+    Recognised tags: 'ckan', 'istat', 'eurostat', 'oecd', 'opencoesione'.
+    Match is substring-based against a lowercased executor_id so renames at the
+    Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("eurostat", "oecd", "istat", "ckan"):
-        # eurostat before istat so a literal "eurostat" doesn't get matched as istat
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm", "web", "kg"):
+        # longest-first: eurostat before istat so a literal "eurostat" doesn't
+        # get matched as istat; opencoesione first for the same reason. "kg"
+        # è ultimo perché cortissimo (matcherebbe dentro nomi più lunghi).
         if tag in lower:
             return tag
     return None
@@ -312,7 +515,9 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-_SYNTH_SOURCE_ORDER = ("ckan", "istat", "eurostat", "oecd")
+_SYNTH_SOURCE_ORDER = (
+    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg", "web"
+)
 
 
 def _build_synth_prompt(narratives_by_source: dict[str, str]) -> str:

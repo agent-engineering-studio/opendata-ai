@@ -397,3 +397,75 @@ async def compose_map_from_resources(
         zoom=zoom,
     )
     return [_summary_block(summary), _html_block(html, kind="composed")]
+
+
+# ── Zone riconosciute (spec 06 — selezione territorio via tag OSM) ────────
+
+_ODBL = "© OpenStreetMap contributors — ODbL 1.0"
+
+
+def _zone_sources(*urls: str | None) -> list[dict[str, str]]:
+    from datetime import date
+
+    seen: list[str] = []
+    for u in urls:
+        if u and u not in seen:
+            seen.append(u)
+    return [{"url": u, "estratto_il": date.today().isoformat(), "licenza": _ODBL} for u in seen]
+
+
+async def lookup_comune(nome: str, limit: int = 8) -> str:
+    from opendata_core.osm import zones
+
+    results = await zones.lookup_comune(nome, limit=limit)
+    src = results[0]["osm_url"] if results else None
+    return _json(
+        {
+            "results": results,
+            "count": len(results),
+            "source_url": src,
+            "sources": _zone_sources(src),
+        }
+    )
+
+
+async def list_zones(cod_comune: str, zona_tipo: str, comune_nome: str | None = None) -> str:
+    from opendata_core.osm import zones
+
+    out = await zones.list_zones(cod_comune, zona_tipo, comune_nome=comune_nome)
+    # La geometria completa pesa (poligoni da centinaia di punti): nel tool di
+    # lista restano bbox/centroide; la Feature intera arriva da osm_get_zone.
+    candidates = [{k: v for k, v in c.items() if k != "geometry"} for c in out["candidates"]]
+    urls = [c["osm_url"] for c in candidates[:5]]
+    return _json(
+        {
+            "candidates": candidates,
+            "count": len(candidates),
+            "fallback_level": out["fallback_level"],
+            "fallback_note": {
+                1: "match per tag dentro il confine comunale",
+                2: "area nominata trovata via Nominatim (nessun match per tag)",
+                3: "nessuna geometria trovata: degrada all'analisi a livello comune",
+            }[out["fallback_level"]],
+            "source_url": out.get("source_url"),
+            "sources": _zone_sources(out.get("source_url"), *urls),
+        }
+    )
+
+
+async def get_zone(osm_type: str, osm_id: str) -> str:
+    from opendata_core.osm import zones
+
+    feature = await zones.get_zone(osm_type, osm_id)
+    if feature is None:
+        return _json({"error": f"zona {osm_type}/{osm_id} non trovata", "feature": None})
+    props = feature.get("properties") or {}
+    url = f"https://www.openstreetmap.org/{props.get('osm_type')}/{props.get('osm_id')}"
+    return _json(
+        {
+            "feature": feature,
+            "name": props.get("name"),
+            "source_url": url,
+            "sources": _zone_sources(url),
+        }
+    )

@@ -6,8 +6,12 @@ import pytest
 from opendata_backend.config import (
     CKAN_INSTRUCTIONS,
     EUROSTAT_INSTRUCTIONS,
+    ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
+    OPENCOESIONE_INSTRUCTIONS,
+    OSM_INSTRUCTIONS,
+    PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     Settings,
 )
@@ -107,14 +111,84 @@ def test_sdmx_specialists_share_template_but_differ_on_endpoint() -> None:
 
 
 def test_enable_flags_default_to_ckan_istat_only(monkeypatch) -> None:
-    """Eurostat / OECD must be opt-in so a stack upgrade doesn't triple LLM cost."""
-    for var in ("ENABLE_CKAN", "ENABLE_ISTAT", "ENABLE_EUROSTAT", "ENABLE_OECD"):
+    """Eurostat / OECD / OpenCoesione must be opt-in so a stack upgrade doesn't raise LLM cost."""
+    for var in (
+        "ENABLE_CKAN", "ENABLE_ISTAT", "ENABLE_EUROSTAT", "ENABLE_OECD", "ENABLE_OPENCOESIONE",
+    ):
         monkeypatch.delenv(var, raising=False)
     s = Settings()  # type: ignore[call-arg]
     assert s.enable_ckan is True
     assert s.enable_istat is True
     assert s.enable_eurostat is False
     assert s.enable_oecd is False
+    assert s.enable_opencoesione is False
+
+
+def test_opencoesione_settings_defaults(monkeypatch) -> None:
+    for var in ("OPENCOESIONE_MCP_URL", "OPENCOESIONE_AGENT_NAME"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings()  # type: ignore[call-arg]
+    assert s.opencoesione_mcp_url.endswith("/mcp")
+    # 8082 is the eurostat host-debug convention — opencoesione must not clash.
+    assert s.opencoesione_mcp_url != s.eurostat_mcp_url
+    assert s.opencoesione_agent_name == "opencoesione"
+
+
+def test_osm_ispra_settings_and_instructions_contract() -> None:
+    """7A/7B (R5): contratto RESOURCES_JSON + flag opt-in + niente clash di porte."""
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_osm is False and s.enable_ispra is False
+    assert s.osm_agent_name == "osm" and s.ispra_agent_name == "ispra"
+    taken = {s.ckan_mcp_url, s.istat_mcp_url, s.eurostat_mcp_url, s.oecd_mcp_url,
+             s.opencoesione_mcp_url, s.osm_mcp_url}
+    assert s.ispra_mcp_url not in taken
+
+    for instructions, tool in (
+        (OSM_INSTRUCTIONS, "find_nearby_places"),
+        (ISPRA_INSTRUCTIONS, "ispra_risk_indicators"),
+    ):
+        assert "<!--RESOURCES_JSON-->" in instructions
+        assert tool in instructions
+    # Il synth conosce le nuove sezioni; il programma integra i vincoli ambientali.
+    assert "=== OSM ===" in SYNTH_INSTRUCTIONS and "=== ISPRA ===" in SYNTH_INSTRUCTIONS
+    assert "VINCOLI AMBIENTALI" in PROGRAMMA_INSTRUCTIONS
+    assert "P3/P4" in PROGRAMMA_INSTRUCTIONS
+
+
+def test_kg_settings_and_instructions_contract() -> None:
+    """KG = memoria delle analisi (non documenti): il read recupera le analisi
+    passate dal namespace `analisi-` per riuso/risparmio token (R13: niente
+    tool di scrittura nel prompt)."""
+    from opendata_backend.config import KG_INSTRUCTIONS
+
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_kg is False
+    assert s.kg_agent_name == "kg"
+    assert s.kg_analysis_namespace_prefix == "analisi-"
+    assert s.kg_ui_url is None
+
+    assert "<!--RESOURCES_JSON-->" in KG_INSTRUCTIONS
+    assert "kg_query" in KG_INSTRUCTIONS
+    assert "analisi-" in KG_INSTRUCTIONS  # namespace delle analisi passate
+    # I tool write non devono mai essere menzionati all'agente (R13).
+    assert "kg_ingest" not in KG_INSTRUCTIONS
+    assert "kg_delete_document" not in KG_INSTRUCTIONS
+    assert "=== KG ===" in SYNTH_INSTRUCTIONS
+    # Il programma sa che il KG è memoria di analisi passate, non dato ufficiale.
+    assert "ANALISI PRECEDENTI" in PROGRAMMA_INSTRUCTIONS
+
+
+def test_opencoesione_instructions_contract() -> None:
+    """The R5 contract bits the parser + capture rely on must be present."""
+    assert "<!--RESOURCES_JSON-->" in OPENCOESIONE_INSTRUCTIONS
+    assert "source_url" in OPENCOESIONE_INSTRUCTIONS
+    assert "opencoesione_funding_capacity" in OPENCOESIONE_INSTRUCTIONS
+    assert "opencoesione_resolve_territorio" in OPENCOESIONE_INSTRUCTIONS
+    # Citations are JSON API links, never downloadable content.
+    assert '"format":"JSON"' in OPENCOESIONE_INSTRUCTIONS.replace(" ", "")
+    # The synth must know the new section exists.
+    assert "OPENCOESIONE" in SYNTH_INSTRUCTIONS
+    assert "=== OPENCOESIONE ===" in SYNTH_INSTRUCTIONS
 
 
 def test_eurostat_oecd_default_base_urls(monkeypatch) -> None:

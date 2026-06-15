@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     Text,
     UniqueConstraint,
     func,
@@ -122,6 +123,79 @@ class ApiKey(Base):
     user: Mapped[User] = relationship(back_populates="api_keys")
 
 
+class OcProgetto(Base):
+    """Local mirror of the OpenCoesione bulk dataset (progetti_esteso CSV).
+
+    One row per (project, comune): discovery on the real tracciato showed
+    COD_COMUNE is MULTI-VALUED (':::'-joined — a project can insist on several
+    comuni), so the spec's `clp unique` becomes `(clp, cod_comune)` unique and
+    the ingest explodes the localisation. Per-comune aggregations stay correct
+    (each project appears once per comune, full amounts — same convention as
+    the OpenCoesione territorial navigation); cross-comune sums would double
+    count multi-comune projects, so the query tools are comune-scoped.
+
+    Codes are normalised to ISTAT form at ingest: cod_comune 6-digit
+    ('072006'), cod_provincia 3-digit ('072'), cod_regione without leading
+    zeros ('16'). `tema`/`natura`/`stato` carry the CSV labels verbatim.
+    `raw` keeps the full 202-column record for audit on the FIRST comune row
+    of each project only (it would otherwise be duplicated per comune).
+    """
+
+    __tablename__ = "oc_progetti"
+    __table_args__ = (
+        UniqueConstraint("clp", "cod_comune", name="uq_oc_progetti_clp_comune"),
+        Index("ix_oc_progetti_comune_tema_ciclo", "cod_comune", "tema", "ciclo"),
+        Index("ix_oc_progetti_provincia", "cod_provincia"),
+        Index("ix_oc_progetti_regione", "cod_regione"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    clp: Mapped[str] = mapped_column(Text, nullable=False)
+    # '' (not NULL) when the project has no comune-level localisation, so the
+    # (clp, cod_comune) unique constraint still bites (NULLs compare distinct).
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    cod_provincia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cod_regione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tema: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ciclo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    natura: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stato: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finanziamento_totale: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    pagamenti: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    titolo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    soggetto_attuatore: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ComuneAnagrafica(Base):
+    """Anagrafica comuni con popolazione — base del peer group (spec 08).
+
+    Popolata da `opendata-comuni-sync` (dataset comuni-json, dati ISTAT,
+    censimento 2011 — per la fascia 0.5×–2× la stalenza è irrilevante e i
+    criteri sono sempre dichiarati negli output). Niente geometria (R4).
+    """
+
+    __tablename__ = "comuni_anagrafica"
+    __table_args__ = (
+        Index("ix_comuni_anagrafica_regione", "cod_regione"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    nome: Mapped[str] = mapped_column(Text, nullable=False)
+    cod_provincia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cod_regione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    popolazione: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class Classification(Base):
     __tablename__ = "classifications"
     __table_args__ = (
@@ -137,6 +211,55 @@ class Classification(Base):
     taxonomy_hash: Mapped[str] = mapped_column(Text, nullable=False)
     result: Mapped[dict] = mapped_column(JSON, nullable=False)
     model: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ComuneKnowledge(Base):
+    """Versione della "conoscenza" per comune (F1/F2).
+
+    Incrementata quando cambiano i documenti del comune nel KG (upload/delete,
+    F2). Entra nella chiave della cache analisi: bumpare la versione invalida
+    tutte le schede in cache di quel comune (rigenerate al prossimo accesso).
+    In F1 resta a 0 (nessun documento ancora), ma la colonna c'è già.
+    """
+
+    __tablename__ = "comune_knowledge"
+    __table_args__ = ({"schema": "opendata"},)
+
+    cod_comune: Mapped[str] = mapped_column(Text, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProgrammaCache(Base):
+    """Cache delle analisi /programma per il replay (query invece di rigenerare).
+
+    GLOBALE (non per-utente): la scheda di un comune dipende dai parametri e
+    dalle evidenze pubbliche, non da chi la chiede. Invalidata da
+    `knowledge_version` (per comune) + TTL (`expires_at`). `scheda_json` è la
+    `ProgrammaResponse` serializzata, restituita verbatim al hit.
+    """
+
+    __tablename__ = "programma_cache"
+    __table_args__ = (
+        Index("ix_programma_cache_comune", "cod_comune"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cache_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    cod_comune: Mapped[str] = mapped_column(Text, nullable=False)
+    tema: Mapped[str | None] = mapped_column(Text, nullable=True)
+    modalita: Mapped[str] = mapped_column(Text, nullable=False)
+    knowledge_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    scheda_json: Mapped[str] = mapped_column(Text, nullable=False)
+    generato_il: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

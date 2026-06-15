@@ -27,11 +27,25 @@ from agent_framework import Agent, MCPStreamableHTTPTool
 from .config import (
     CKAN_INSTRUCTIONS,
     EUROSTAT_INSTRUCTIONS,
+    IDEE_INSTRUCTIONS,
+    ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
+    KG_INSTRUCTIONS,
+    MARKETING_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
+    OPENCOESIONE_INSTRUCTIONS,
+    OSM_INSTRUCTIONS,
+    PROGRAMMA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
+    WEB_INSTRUCTIONS,
     Settings,
     resolve_provider,
+)
+from .orchestrator.programma import (
+    ProgrammaRequest,
+    ProgrammaResponse,
+    build_programma_aggregator,
+    build_programma_task,
 )
 from .orchestrator.synth import build_aggregator
 from .orchestrator.workflow import build_workflow
@@ -108,6 +122,9 @@ class OrchestratorSession:
         self._stack = AsyncExitStack()
         self._participants: list[Agent] = []
         self._synth_agent: Agent | None = None
+        self._programma_agent: Agent | None = None
+        self._idee_agent: Agent | None = None
+        self._marketing_agent: Agent | None = None
         self._enabled_sources: list[str] = []
         # agent-framework workflows reject concurrent .run() on the same instance,
         # and the participant Agents are shared — serialise requests with a lock.
@@ -144,11 +161,19 @@ class OrchestratorSession:
                 ("istat", s.enable_istat),
                 ("eurostat", s.enable_eurostat),
                 ("oecd", s.enable_oecd),
+                ("opencoesione", s.enable_opencoesione),
+                ("osm", s.enable_osm),
+                ("ispra", s.enable_ispra),
+                ("kg", s.enable_kg),
+                ("web", s.enable_web),
             )
             if on
         ]
         if not enabled:
-            raise RuntimeError("At least one source must be enabled (enable_ckan / istat / eurostat / oecd)")
+            raise RuntimeError(
+                "At least one source must be enabled "
+                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra / kg / web)"
+            )
         self._enabled_sources = enabled
         log.info(
             "OrchestratorSession starting | provider=%s sources=%s",
@@ -190,6 +215,80 @@ class OrchestratorSession:
             )
             participants.append(agent)
 
+        # OpenCoesione is a standalone specialist (like CKAN, outside the SDMX
+        # loop): financial/feasibility evidence, citations via `source_url`.
+        if s.enable_opencoesione:
+            oc_mcp = await self._enter_mcp_tool(
+                s.opencoesione_agent_name,
+                s.opencoesione_mcp_url,
+                "Tools to query OpenCoesione (Italian cohesion-policy funded projects).",
+            )
+            oc_agent = await self._enter_agent(
+                chat_client,
+                OPENCOESIONE_INSTRUCTIONS,
+                s.opencoesione_agent_name,
+                [oc_mcp],
+                default_options,
+            )
+            participants.append(oc_agent)
+
+        # OSM specialist (accessibility). Reuses the same osm-mcp server that
+        # already renders maps — here it joins the fan-out with the geocoding/
+        # POI/routing/zone tools.
+        if s.enable_osm:
+            osm_mcp = await self._enter_mcp_tool(
+                s.osm_agent_name,
+                s.osm_mcp_url,
+                "OpenStreetMap tools: geocoding, nearby places, routing, recognised zones.",
+            )
+            osm_agent = await self._enter_agent(
+                chat_client, OSM_INSTRUCTIONS, s.osm_agent_name, [osm_mcp], default_options,
+            )
+            participants.append(osm_agent)
+
+        # Knowledge Graph (deployment esterno): evidenza documentale da
+        # delibere/piani/bilanci ingeriti. Il server kg-mcp espone anche tool
+        # di scrittura (kg_ingest/kg_delete_document) — qui montiamo il suo
+        # endpoint read e le KG_INSTRUCTIONS NON menzionano i tool write; la
+        # protezione vera (esporre solo i read) sta nel deployment del KG.
+        if s.enable_kg:
+            kg_mcp = await self._enter_mcp_tool(
+                s.kg_agent_name,
+                s.kg_mcp_url,
+                "Read-only Knowledge Graph tools over ingested PA documents.",
+            )
+            kg_agent = await self._enter_agent(
+                chat_client, KG_INSTRUCTIONS, s.kg_agent_name, [kg_mcp], default_options,
+            )
+            participants.append(kg_agent)
+
+        # ISPRA IdroGEO specialist (environmental constraints).
+        if s.enable_ispra:
+            ispra_mcp = await self._enter_mcp_tool(
+                s.ispra_agent_name,
+                s.ispra_mcp_url,
+                "ISPRA IdroGEO tools: landslide/flood hazard indicators per comune.",
+            )
+            ispra_agent = await self._enter_agent(
+                chat_client, ISPRA_INSTRUCTIONS, s.ispra_agent_name, [ispra_mcp], default_options,
+            )
+            participants.append(ispra_agent)
+
+        # Web search specialist (marketing territoriale, Pezzo 10): web-mcp over
+        # a self-hosted SearXNG. Surfaces EXTERNAL initiatives by other public
+        # bodies to take inspiration from — the `ispirazione_esterna` half of the
+        # marketing (A)+(B) guardrail.
+        if s.enable_web:
+            web_mcp = await self._enter_mcp_tool(
+                s.web_agent_name,
+                s.web_mcp_url,
+                "Web search + fetch over external initiatives and territorial best practices.",
+            )
+            web_agent = await self._enter_agent(
+                chat_client, WEB_INSTRUCTIONS, s.web_agent_name, [web_mcp], default_options,
+            )
+            participants.append(web_agent)
+
         # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
         # orchestrator fans out to a remote A2A-compliant agent as a peer. It
         # appears in the same loop as CKAN / ISTAT — same lifecycle, same
@@ -211,10 +310,46 @@ class OrchestratorSession:
         if len(participants) < 1:
             raise RuntimeError("No participants enabled — refusing to start")
 
+        # Gli agenti tool-less di sintesi (synth/programma/idee) emettono l'output
+        # FINALE lungo (prosa + JSON ricco). Senza max_tokens il client Anthropic
+        # taglia a 1024 token → JSON troncato → report vuoto. Alziamo il tetto.
+        # temperature=0: per il JSON strutturato vogliamo determinismo, non
+        # creatività di sintassi (a T~1 il modello ogni tanto droppa una virgola).
+        synth_options: dict[str, object] = {
+            **default_options,
+            "temperature": 0.0,
+            "max_tokens": s.synth_max_tokens,
+        }
+
         synth_agent = await self._enter_agent(
-            chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, default_options,
+            chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, synth_options,
         )
         self._synth_agent = synth_agent
+
+        # Agente tool-less della scheda programma (come il synth, istruzioni
+        # diverse). Con provider claude può girare su un modello dedicato.
+        if s.enable_programma:
+            programma_client = chat_client
+            if s.programma_model and resolve_provider(s) == "claude":
+                from agent_framework_anthropic import AnthropicClient
+
+                programma_client = AnthropicClient(
+                    api_key=s.anthropic_api_key, model=s.programma_model,
+                )
+            self._programma_agent = await self._enter_agent(
+                programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
+                None, synth_options,
+            )
+            # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
+            self._idee_agent = await self._enter_agent(
+                programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
+                None, synth_options,
+            )
+            # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
+            self._marketing_agent = await self._enter_agent(
+                programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
+                None, synth_options,
+            )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
         # per request in run() / run_streaming() because (a) agent-framework
@@ -230,7 +365,261 @@ class OrchestratorSession:
     async def __aexit__(self, *exc: object) -> None:
         self._participants = []
         self._synth_agent = None
+        self._programma_agent = None
+        self._idee_agent = None
+        self._marketing_agent = None
         await self._stack.aclose()
+
+    @staticmethod
+    async def _resolve_zona(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Zona OSM selezionata (Pezzo 6) → {name, centroid, bbox} per il task.
+
+        Best-effort: se Overpass non risponde si procede senza zona risolta
+        (l'analisi degrada a livello comune, come da catena di fallback).
+        """
+        if not req.zona_osm_id:
+            return None
+        try:
+            from opendata_core.osm import zones as osm_zones
+
+            osm_type, _, osm_id = req.zona_osm_id.partition("/")
+            feature = await osm_zones.get_zone(osm_type, osm_id or osm_type)
+            if feature is None:
+                return None
+            geom = feature.get("geometry") or {}
+            props = feature.get("properties") or {}
+
+            def _coords():
+                t = geom.get("type")
+                if t == "Point":
+                    yield geom["coordinates"]
+                elif t == "Polygon":
+                    yield from geom.get("coordinates", [[]])[0]
+                elif t == "MultiPolygon":
+                    for poly in geom.get("coordinates", []):
+                        yield from poly[0]
+
+            lons = [c[0] for c in _coords()]
+            lats = [c[1] for c in _coords()]
+            if not lons:
+                return None
+            bbox = [min(lats), min(lons), max(lats), max(lons)]
+            return {
+                "name": props.get("name"),
+                "centroid": {"lat": (bbox[0] + bbox[2]) / 2, "lon": (bbox[1] + bbox[3]) / 2},
+                "bbox": bbox,
+            }
+        except Exception:
+            log.warning("zona OSM %s non risolta — procedo a livello comune",
+                        req.zona_osm_id, exc_info=True)
+            return None
+
+    async def run_programma_streaming(
+        self,
+        req: ProgrammaRequest,
+        *,
+        heartbeat_sec: float = 10.0,
+        total_timeout_sec: float = 900.0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Come `run_programma`, ma con eventi di avanzamento GRANULARI.
+
+        Oltre allo start/end per fonte (pattern di `run_streaming`), un
+        logging-handler intercetta i record del framework sugli strumenti
+        ("Function name: X" / "Function X succeeded") e li rilancia come
+        eventi `tool` — ogni chiamata MCP è visibile nella UI.
+
+        Eventi:
+            {"event":"status","source":"<fonte>","phase":"start|end","error"?}
+            {"event":"tool","name":"<tool>","phase":"start|end|error"}
+            {"event":"heartbeat","in_flight":[...],"elapsed_ms":int}
+            {"event":"result","scheda":{...}}   # ultimo, una volta sola
+            {"event":"error","message":str}
+        """
+        if not self._participants:
+            raise RuntimeError("OrchestratorSession not entered")
+        if self._programma_agent is None:
+            raise RuntimeError("Programma disabilitato (enable_programma=false)")
+        zona_info = await self._resolve_zona(req)
+
+        async with self._lock:
+            aggregator = build_programma_aggregator(
+                self._programma_agent, req,
+                idee_agent=self._idee_agent,
+                # Marketing nell'analisi unica solo se la fonte web è attiva
+                # (senza, gli spunti non avrebbero l'ispirazione esterna e
+                # verrebbero scartati dal guardrail A+B).
+                marketing_agent=self._marketing_agent if self._settings.enable_web else None,
+            )
+            task_text = build_programma_task(req, zona_info)
+            queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+            in_flight: set[str] = set()
+            t0 = asyncio.get_event_loop().time()
+
+            class _ToolEventHandler(logging.Handler):
+                """Rilancia i log del framework come eventi tool sulla coda."""
+
+                def emit(self, record: logging.LogRecord) -> None:
+                    try:
+                        msg = record.getMessage()
+                    except Exception:  # pragma: no cover — record malformato
+                        return
+                    ev: dict[str, Any] | None = None
+                    if msg.startswith("Function name: "):
+                        ev = {"event": "tool", "name": msg.removeprefix("Function name: ").strip(),
+                              "phase": "start"}
+                    elif msg.startswith("Function ") and msg.rstrip(".").endswith("succeeded"):
+                        name = msg.removeprefix("Function ").split(" ")[0]
+                        ev = {"event": "tool", "name": name, "phase": "end"}
+                    elif msg.startswith("Function failed"):
+                        ev = {"event": "tool", "name": "", "phase": "error"}
+                    if ev is not None:
+                        try:
+                            queue.put_nowait(ev)
+                        except Exception:  # pragma: no cover — coda piena
+                            pass
+
+            handler = _ToolEventHandler(level=logging.INFO)
+            fw_logger = logging.getLogger("agent_framework")
+            fw_logger.addHandler(handler)
+
+            per_specialist = self._settings.specialist_timeout_sec
+
+            async def _worker(agent: Agent) -> _WrappedAgentResult:
+                name = getattr(agent, "name", None) or "agent"
+                in_flight.add(name)
+                await queue.put({"event": "status", "source": name, "phase": "start"})
+                try:
+                    # Timeout PER SPECIALISTA: uno specialista lento (es. CKAN che
+                    # ritenta download 404) non deve bloccare l'intero report —
+                    # scaduto, viene escluso e gli altri proseguono.
+                    resp = await asyncio.wait_for(agent.run(task_text), timeout=per_specialist)
+                except asyncio.TimeoutError:
+                    in_flight.discard(name)
+                    await queue.put({
+                        "event": "status", "source": name, "phase": "end",
+                        "error": f"timeout dopo {int(per_specialist)}s",
+                    })
+                    raise
+                except Exception as exc:
+                    in_flight.discard(name)
+                    await queue.put(
+                        {"event": "status", "source": name, "phase": "end", "error": str(exc)}
+                    )
+                    raise
+                in_flight.discard(name)
+                await queue.put({"event": "status", "source": name, "phase": "end"})
+                return _WrappedAgentResult(executor_id=name, agent_response=resp)
+
+            tasks = [asyncio.create_task(_worker(p)) for p in self._participants]
+
+            async def _drain_then_sentinel() -> list[Any]:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                await queue.put(None)
+                return results
+
+            collector = asyncio.create_task(_drain_then_sentinel())
+            deadline = t0 + total_timeout_sec
+            timed_out = False
+
+            try:
+                while True:
+                    now = asyncio.get_event_loop().time()
+                    remaining = deadline - now
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    wait = min(heartbeat_sec, remaining)
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=wait)
+                    except asyncio.TimeoutError:
+                        if in_flight:
+                            elapsed_ms = int((asyncio.get_event_loop().time() - t0) * 1000)
+                            yield {
+                                "event": "heartbeat",
+                                "in_flight": sorted(in_flight),
+                                "elapsed_ms": elapsed_ms,
+                            }
+                        continue
+                    if event is None:
+                        break
+                    yield event
+
+                if timed_out:
+                    yield {
+                        "event": "error",
+                        "message": (
+                            f"Timeout dopo {int(total_timeout_sec)}s. Fonti ancora attive: "
+                            f"{', '.join(sorted(in_flight)) or '—'}."
+                        ),
+                    }
+                    return
+
+                results = await collector
+                real_results = [r for r in results if not isinstance(r, BaseException)]
+
+                fase = "report completo" if req.modalita == "completa" else req.modalita
+                yield {"event": "status", "source": "sintesi", "phase": "start",
+                       "detail": fase}
+                try:
+                    output = await aggregator(real_results)
+                except Exception as exc:
+                    log.exception("programma aggregator failed in streaming")
+                    yield {"event": "status", "source": "sintesi", "phase": "end",
+                           "error": str(exc)}
+                    yield {"event": "error", "message": f"Sintesi fallita: {exc}"}
+                    return
+                yield {"event": "status", "source": "sintesi", "phase": "end"}
+
+                resp = getattr(output, "response", None)
+                if not isinstance(resp, ProgrammaResponse):
+                    resp = ProgrammaResponse.model_validate_json(
+                        getattr(output, "text", None) or str(output)
+                    )
+                yield {"event": "result", "scheda": resp.model_dump(mode="json")}
+            finally:
+                fw_logger.removeHandler(handler)
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                if not collector.done():
+                    collector.cancel()
+                await asyncio.gather(*tasks, collector, return_exceptions=True)
+
+    async def run_programma(self, req: ProgrammaRequest) -> ProgrammaResponse:
+        """Fan-out delle evidenze sul comune + sintesi strutturata della scheda.
+
+        Stessi partecipanti di `run()`, aggregatore dedicato (programma) al
+        posto del synth. Serializzato con lo stesso lock: workflow single-shot
+        e agenti condivisi.
+        """
+        if not self._participants:
+            raise RuntimeError("OrchestratorSession not entered")
+        if self._programma_agent is None:
+            raise RuntimeError("Programma disabilitato (enable_programma=false)")
+        zona_info = await self._resolve_zona(req)
+        async with self._lock:
+            # L'aggregatore riceve entrambi gli agenti: la modalità decide se
+            # usarne uno solo (scheda/idee) o fonderli (completa).
+            aggregator = build_programma_aggregator(
+                self._programma_agent, req,
+                idee_agent=self._idee_agent,
+                # Marketing nell'analisi unica solo se la fonte web è attiva
+                # (senza, gli spunti non avrebbero l'ispirazione esterna e
+                # verrebbero scartati dal guardrail A+B).
+                marketing_agent=self._marketing_agent if self._settings.enable_web else None,
+            )
+            workflow = build_workflow(self._participants, aggregator)
+            events = await workflow.run(build_programma_task(req, zona_info))
+        outputs = events.get_outputs()
+        if not outputs:
+            raise RuntimeError("Programma workflow produced no outputs")
+        final = outputs[0]
+        response = getattr(final, "response", None)
+        if isinstance(response, ProgrammaResponse):
+            return response
+        # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
+        text = getattr(final, "text", None) or str(final)
+        return ProgrammaResponse.model_validate_json(text)
 
     async def run(self, query: str) -> str:
         """Fan out `query` to the enabled specialists in parallel and return the synth reply.
@@ -287,12 +676,23 @@ class OrchestratorSession:
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
 
+            per_specialist = self._settings.specialist_timeout_sec
+
             async def _worker(agent: Agent) -> _WrappedAgentResult:
                 name = getattr(agent, "name", None) or "agent"
                 in_flight.add(name)
                 await queue.put({"event": "status", "source": name, "phase": "start"})
                 try:
-                    resp = await agent.run(query)
+                    # Timeout PER SPECIALISTA (vedi run_programma_streaming): uno
+                    # specialista lento non blocca l'intero fan-out.
+                    resp = await asyncio.wait_for(agent.run(query), timeout=per_specialist)
+                except asyncio.TimeoutError:
+                    in_flight.discard(name)
+                    await queue.put({
+                        "event": "status", "source": name, "phase": "end",
+                        "error": f"timeout dopo {int(per_specialist)}s",
+                    })
+                    raise
                 except Exception as exc:
                     in_flight.discard(name)
                     await queue.put(
