@@ -26,6 +26,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -283,8 +284,37 @@ class Investment(Base):
     payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
 
 
+# ── ETL Layer 1 (raw versionato) ─────────────────────────────────────
+
+
+class RawIngest(Base):
+    """Snapshot grezzo versionato di una risorsa esterna (ETL Layer 1→2).
+
+    Idempotente per `sha` (hash del payload): la stessa risorsa non si duplica.
+    La licenza è tracciata per ogni record.
+    """
+
+    __tablename__ = "raw_ingest"
+    __table_args__ = (
+        Index("ix_raw_ingest_source_dataset", "source", "dataset_id"),
+        UniqueConstraint("sha", name="uq_raw_ingest_sha"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    dataset_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    license: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sha: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+
+
 __all__ = [
     "Entity",
+    "RawIngest",
     "DatasetQuality",
     "MaturityAssessment",
     "Place",
