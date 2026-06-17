@@ -73,9 +73,13 @@ function MaturitaInner() {
   }
 
   async function exportPdf(card: Scorecard) {
-    const pdfMake = (await import("pdfmake/build/pdfmake")).default as any;
-    const pdfFonts = (await import("pdfmake/build/vfs_fonts")) as any;
-    pdfMake.vfs = pdfFonts.vfs ?? pdfFonts.default?.vfs;
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const pdfMakeModule = await import("pdfmake/build/pdfmake");
+    const pdfFontsModule = await import("pdfmake/build/vfs_fonts");
+    const pdfMake: any = (pdfMakeModule as any).default ?? pdfMakeModule;
+    const fonts: any = pdfFontsModule as any;
+    pdfMake.vfs = fonts.pdfMake?.vfs ?? fonts.default?.pdfMake?.vfs ?? fonts.vfs ?? fonts.default?.vfs ?? pdfMake.vfs;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
     const d = card.dimensions;
     pdfMake.createPdf({
       content: [
