@@ -263,3 +263,9 @@ class ProgrammaCache(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+# Modello canonico territoriale + ente/maturità (Fase 0). Importato qui in coda
+# così che le sue tabelle siano registrate in Base.metadata (create_all nei test
+# e autogenerate Alembic). Import a valle: Base e _PK sono già definiti sopra.
+from . import territory_models  # noqa: E402,F401
