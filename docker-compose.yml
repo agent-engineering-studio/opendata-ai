@@ -40,9 +40,12 @@ services:
       retries: 6
       start_period: 5s
 
-  # ───── Postgres 16 — shared state for users / favorites / history / api-keys / classifications ─────
+  # ───── Postgres 16 + PostGIS — shared state + modello canonico territoriale ─────
+  # postgis/postgis:16-3.4 = stesso major (16) di postgres:16-alpine → riusa il
+  # volume esistente. PostGIS è disponibile nell'immagine; l'estensione viene
+  # creata dalla migrazione (CREATE EXTENSION postgis, solo su dialetto postgresql).
   postgres:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4
     container_name: opendata-ai-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-opendata}
