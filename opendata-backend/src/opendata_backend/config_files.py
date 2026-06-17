@@ -46,4 +46,10 @@ def value_taxonomy() -> dict[str, Any]:
     return _load_yaml("value_taxonomy.yaml")
 
 
-__all__ = ["maturity_weights", "value_taxonomy"]
+@lru_cache(maxsize=None)
+def civic_kpi() -> dict[str, Any]:
+    """KPI civici versionati (civic_kpi.yaml)."""
+    return _load_yaml("civic_kpi.yaml")
+
+
+__all__ = ["maturity_weights", "value_taxonomy", "civic_kpi"]
