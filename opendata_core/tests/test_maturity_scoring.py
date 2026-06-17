@@ -96,3 +96,16 @@ def test_dataset_quality_snapshot_present() -> None:
     res = assess_entity([DatasetInput.from_ckan(_good(1))], as_of=AS_OF)
     assert len(res.dataset_quality) == 1
     assert res.dataset_quality[0].dataset_id == "good-1"
+
+
+def test_reuse_demand_penalty_reduces_impact() -> None:
+    datasets = [DatasetInput.from_ckan(_good(i)) for i in range(10)]
+    base = assess_entity(datasets, as_of=AS_OF)
+    penalized = assess_entity(datasets, as_of=AS_OF, reuse_demand_penalty=0.5)
+    # l'anello: la domanda di riuso non soddisfatta riduce l'Impact (e quindi l'overall)
+    assert penalized.scores.impact < base.scores.impact
+    assert abs(penalized.scores.impact - base.scores.impact * 0.5) < 0.2
+    assert penalized.scores.overall <= base.scores.overall
+    # le altre dimensioni restano invariate
+    assert penalized.scores.quality == base.scores.quality
+    assert penalized.scores.policy == base.scores.policy

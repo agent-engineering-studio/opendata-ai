@@ -36,9 +36,14 @@ def _severity(gap: float) -> str:
 
 
 def score_dimensions(
-    pairs: list[_Pair], *, weights: dict[str, float] | None = None
+    pairs: list[_Pair], *, weights: dict[str, float] | None = None,
+    reuse_demand_penalty: float = 0.0,
 ) -> DimensionScores:
-    """Calcola le 4 dimensioni (0–100), l'overall pesato e il livello ODM."""
+    """Calcola le 4 dimensioni (0–100), l'overall pesato e il livello ODM.
+
+    `reuse_demand_penalty` ∈ [0,1] (anello valore⇄maturità): la domanda di riuso non
+    soddisfatta — i gap di dato rilevati nei report Territorio — riduce l'Impact.
+    """
     w = weights or DEFAULT_WEIGHTS
     if not pairs:
         return DimensionScores(0.0, 0.0, 0.0, 0.0, 0.0, odm_level(0.0))
@@ -62,7 +67,9 @@ def score_dimensions(
     quality = round(mean_composite * 100, 1)
     portal = round(_mean([share_open_license, share_machine, share_theme, coverage]) * 100, 1)
     policy = round(_mean([share_explicit_lic, share_open_license, mean_dcat]) * 100, 1)
-    impact = round(_mean([share_hvd, share_high_star, share_fresh]) * 100, 1)
+    impact_base = _mean([share_hvd, share_high_star, share_fresh]) * 100
+    penalty = max(0.0, min(1.0, reuse_demand_penalty))
+    impact = round(impact_base * (1.0 - penalty), 1)
     overall = round(
         w["policy"] * policy + w["portal"] * portal + w["quality"] * quality + w["impact"] * impact,
         1,
@@ -132,10 +139,12 @@ def assess_entity(
     weights: dict[str, float] | None = None,
     semantic: dict[str, float] | None = None,
     as_of: datetime | None = None,
+    reuse_demand_penalty: float = 0.0,
 ) -> MaturityResult:
     """Valuta tutti i dataset di un ente e aggrega in una MaturityResult.
 
     `semantic` (opzionale): mappa dataset_id → semantic_clarity ∈ [0,1] (Haiku).
+    `reuse_demand_penalty` ∈ [0,1]: penalità Impact da domanda di riuso non soddisfatta.
     """
     sem = semantic or {}
     pairs: list[_Pair] = []
@@ -143,7 +152,7 @@ def assess_entity(
         q = assess_quality(ds, semantic_clarity=sem.get(ds.id), as_of=as_of)
         pairs.append((ds, q))
 
-    scores = score_dimensions(pairs, weights=weights)
+    scores = score_dimensions(pairs, weights=weights, reuse_demand_penalty=reuse_demand_penalty)
     recommendations = build_recommendations(pairs)
     return MaturityResult(
         n_datasets=len(pairs),
