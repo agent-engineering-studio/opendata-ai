@@ -73,7 +73,14 @@ def score_dimensions(
 def build_recommendations(pairs: list[_Pair]) -> tuple[Recommendation, ...]:
     """Raccomandazioni azionabili dai gap aggregati dell'ente."""
     if not pairs:
-        return ()
+        return (
+            Recommendation(
+                code="no_open_data", severity="alta", dimension="portal",
+                message="L'ente non espone dataset su questo portale: pubblica i primi "
+                "dataset in formato aperto con licenza CC BY.",
+                affected_count=0,
+            ),
+        )
     n = len(pairs)
     recs: list[Recommendation] = []
 

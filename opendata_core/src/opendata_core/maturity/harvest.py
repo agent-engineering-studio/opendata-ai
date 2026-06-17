@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..ckan import CkanClient
+from ..ckan import CkanClient, CkanError
 from .models import DatasetInput
 
 
@@ -44,11 +44,17 @@ async def harvest_entity(
     if owns_client:
         await c.__aenter__()
     try:
-        org: dict[str, Any] = await c.action(
-            "organization_show",
-            base_url=base_url,
-            params={"id": entity, "include_datasets": "false"},
-        )
+        # L'organizzazione potrebbe non esistere su questo portale (es. un comune
+        # senza CKAN proprio su dati.gov.it): in tal caso NON è un errore, ma un
+        # ente con 0 dataset → scorecard "Beginner" azionabile.
+        try:
+            org: dict[str, Any] = await c.action(
+                "organization_show",
+                base_url=base_url,
+                params={"id": entity, "include_datasets": "false"},
+            )
+        except CkanError:
+            org = {}
         org_id = org.get("id")
         org_name = org.get("name")
         fq = f"owner_org:{org_id}" if org_id else f"organization:{org_name or entity}"
