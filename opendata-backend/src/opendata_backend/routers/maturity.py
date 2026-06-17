@@ -5,9 +5,11 @@ Tutti gli endpoint sono autenticati (Clerk) + rate-limited come gli altri.
 
 from __future__ import annotations
 
+import csv
+import io
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +59,34 @@ async def get_entity_scorecard(
     if scorecard is None:
         raise HTTPException(status_code=404, detail="ente o assessment non trovato")
     return scorecard
+
+
+@router.get("/maturity/entities/{entity_id}/scorecard.csv")
+async def scorecard_csv(
+    entity_id: int,
+    session: AsyncSession = Depends(get_db_session),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> Response:
+    """Export CSV della scorecard di maturità dell'ente."""
+    sc = await build_scorecard(session, entity_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="ente o assessment non trovato")
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["campo", "valore"])
+    w.writerow(["ente", sc["entity"]["name"]])
+    w.writerow(["livello", sc["level"]])
+    w.writerow(["overall", sc["overall"]])
+    for dim, val in sc["dimensions"].items():
+        w.writerow([f"dimensione_{dim}", val])
+    w.writerow(["n_datasets", sc.get("n_datasets")])
+    w.writerow(["domanda_riuso_non_soddisfatta", (sc.get("unmet_reuse_demand") or {}).get("count", 0)])
+    for r in sc.get("recommendations", []):
+        w.writerow([f"raccomandazione_{r['code']}", r["message"]])
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="scorecard-{entity_id}.csv"'},
+    )
 
 
 @router.get("/maturity/ranking")
