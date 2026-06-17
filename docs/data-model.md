@@ -126,6 +126,23 @@ Capability layer sopra il modello canonico, senza nuove migrazioni (riusa le tab
 - Pilota verificato end-to-end (Gioia del Colle): ApriQui top categorie ~88/100; PugliaTrip 9 POI OSM su 3
   giorni meteo-aware. (OSM/Open-Meteo/Wikidata/OpenCoesione live → fail-safe.)
 
+## Sito civico + accountability (Fase 4)
+- **Snapshot versionati** (`civic_snapshots`, mig 0009): `(istat_code, snapshot_id)` UNIQUE → NON si
+  sovrascrivono (2026-H1, 2026-H2…). `config_data/civic_kpi.yaml` definisce i KPI civici versionati.
+  `civic/snapshot.py` crea lo snapshot (stato + KPI), `civic/diff.py` confronta due snapshot
+  ("fatto vs non fatto" su opere programmato→concluso + KPI migliorati/peggiorati).
+- **Generatore sito** (`civic/site.py`, Jinja2): bundle statico self-contained multi-pagina (Stato
+  dell'arte/Investimenti/Opportunità/Rischi/Avanzamento/Community + Mappa + Scorecard maturità).
+  Grafici SVG inline, mappa Leaflet CDN. Ogni pagina riporta snapshot_id/data/sources_version/kpi_version
+  (riproducibilità) e linka fonte+licenza (neutralità). `POST /territory/{istat}/site/export` (zip),
+  `GET /territory/{istat}/site/preview`. Anello valore⇄maturità: la scorecard dell'ente è linkata nel sito.
+- **Community** (`/community/*`, tabelle `community_*`): thread per tema/opera/KPI/snapshot, post, ruoli
+  cittadino/moderatore/amministratore (Clerk), moderazione, dati personali minimi (GDPR). Il **check-in**
+  (`civic/checkin.py`) alla creazione di un nuovo snapshot apre un thread di revisione "cosa è cambiato".
+- `POST /territory/{istat}/snapshot` crea lo snapshot e lancia il check-in.
+- Pilota verificato end-to-end: Gioia del Colle con 2 snapshot (2026-H1/H2) → diff (3 opere concluse,
+  2 KPI in miglioramento) + thread community + sito esportabile.
+
 ## Applicare le migrazioni
 ```bash
 cd opendata-backend
