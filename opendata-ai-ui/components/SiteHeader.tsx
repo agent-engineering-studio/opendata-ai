@@ -24,6 +24,7 @@ const AUTH_NAV = [
   { href: "/valore", label: "Valore" },
   { href: "/territorio-report", label: "Report comune" },
   { href: "/usecases", label: "Casi d'uso" },
+  { href: "/sito-civico", label: "Sito civico" },
 ] as const;
 
 function KeyIcon() {
