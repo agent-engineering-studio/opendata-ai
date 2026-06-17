@@ -38,6 +38,7 @@ async def _maturity_for(session: AsyncSession, comune_name: str) -> dict[str, An
             "policy": float(ma.score_policy or 0), "portal": float(ma.score_portal or 0),
             "quality": float(ma.score_quality or 0), "impact": float(ma.score_impact or 0),
         },
+        "unmet_reuse_demand": (ma.details_jsonb or {}).get("unmet_reuse_demand"),
     }
 
 

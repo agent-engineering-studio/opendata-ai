@@ -206,10 +206,22 @@ def generate_site(
     # Scorecard maturità (anello valore⇄maturità)
     if maturity:
         dims = maturity.get("dimensions") or {}
+        demand = maturity.get("unmet_reuse_demand") or {}
+        demand_items = demand.get("items") or []
+        demand_html = ""
+        if demand_items:
+            lis = "".join(f"<li>{_esc(g)}</li>" for g in demand_items)
+            demand_html = (
+                "<h3>Domanda di riuso non soddisfatta</h3>"
+                "<p class='src'>Gap di dato del territorio che riducono l'Impact dell'ente "
+                "(anello valore⇄maturità):</p>"
+                f"<ul>{lis}</ul>"
+            )
         body = (
             f"<h2>Maturità open-data dell'ente</h2><p>Livello: <strong>{_esc(maturity.get('level'))}</strong> "
             f"({_esc(maturity.get('overall'))}/100).</p>"
             f"{_svg_bars([(k.title(), float(v)) for k, v in dims.items()], unit='/100')}"
+            f"{demand_html}"
         )
     else:
         body = "<h2>Maturità open-data dell'ente</h2><p>Scorecard non disponibile per questo comune.</p>"

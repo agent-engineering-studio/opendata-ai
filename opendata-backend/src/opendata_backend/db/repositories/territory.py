@@ -102,6 +102,14 @@ async def get_feature_store(session: AsyncSession, place_id: int) -> FeatureStor
     return res.scalar_one_or_none()
 
 
+async def latest_report(session: AsyncSession, place_id: int) -> TerritoryReport | None:
+    res = await session.execute(
+        select(TerritoryReport).where(TerritoryReport.place_id == place_id)
+        .order_by(TerritoryReport.created_at.desc(), TerritoryReport.id.desc()).limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
 async def save_report(
     session: AsyncSession, *, place_id: int, payload: dict[str, Any], created_at: datetime
 ) -> TerritoryReport:

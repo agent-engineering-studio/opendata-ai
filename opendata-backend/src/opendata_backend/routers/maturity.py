@@ -24,6 +24,9 @@ class AssessIn(BaseModel):
     entity: str
     base_url: str | None = None
     force: bool = False
+    # Collega l'ente a un comune (codice ISTAT): i gap di dato del territorio
+    # riducono l'Impact (anello valore⇄maturità).
+    istat_code: str | None = None
 
 
 @router.post("/maturity/assess")
@@ -38,7 +41,8 @@ async def assess(
     if not entity:
         raise HTTPException(status_code=422, detail="campo 'entity' obbligatorio")
     return await run_assessment(
-        session, entity=entity, base_url=body.base_url, settings=settings, force=body.force
+        session, entity=entity, base_url=body.base_url, settings=settings,
+        force=body.force, istat_code=body.istat_code,
     )
 
 

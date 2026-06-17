@@ -59,9 +59,13 @@ async def _semantic(harvest: HarvestResult, settings: Settings) -> dict[str, flo
 
 async def run_assessment(
     session: AsyncSession, *, entity: str, base_url: str | None, settings: Settings,
-    force: bool = False,
+    force: bool = False, istat_code: str | None = None,
 ) -> dict[str, Any]:
-    """Esegue (o riusa da cache) l'assessment di un ente e ritorna la scorecard."""
+    """Esegue (o riusa da cache) l'assessment di un ente e ritorna la scorecard.
+
+    `istat_code` (opzionale) collega l'ente a un comune: la domanda di riuso non
+    soddisfatta (gap di dato) riduce l'Impact — anello valore⇄maturità.
+    """
     key = _cache_key(entity, base_url)
     if not force:
         cached = await cache_get(key)
@@ -77,7 +81,16 @@ async def run_assessment(
             entity, len(harvest.datasets), harvest.total,
         )
     semantic = await _semantic(harvest, settings)
-    result = assess_entity(list(harvest.datasets), weights=_weights(), semantic=semantic)
+
+    demand = {"count": 0, "items": [], "penalty": 0.0}
+    if istat_code:
+        from .reuse_demand import unmet_reuse_demand
+
+        demand = await unmet_reuse_demand(session, istat_code=istat_code)
+    result = assess_entity(
+        list(harvest.datasets), weights=_weights(), semantic=semantic,
+        reuse_demand_penalty=demand["penalty"],
+    )
 
     assessed_at = datetime.now(timezone.utc)
     ent = await repo.upsert_entity(
@@ -87,9 +100,11 @@ async def run_assessment(
     await repo.save_dataset_quality(
         session, entity_id=ent.id, qualities=result.dataset_quality, assessed_at=assessed_at
     )
+    details = _details(result, harvest)
+    details["unmet_reuse_demand"] = demand
     await repo.save_assessment(
         session, entity_id=ent.id, scores=result.scores,
-        details=_details(result, harvest), assessed_at=assessed_at,
+        details=details, assessed_at=assessed_at,
     )
     await session.commit()
 
@@ -136,6 +151,7 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "recommendations": details.get("recommendations", []),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
+        "unmet_reuse_demand": details.get("unmet_reuse_demand", {"count": 0, "items": [], "penalty": 0.0}),
         "trend": trend,
         "cluster_median": await _cluster_median(session, ent.type),
     }
