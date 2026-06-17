@@ -108,6 +108,24 @@ Capability layer sopra il modello canonico, senza nuove migrazioni (riusa le tab
 - Pilota verificato end-to-end: Gioia del Colle (072021) — popolazione 27.889, ~127 POI commerciali OSM,
   50 progetti OpenCoesione (~€227M, top tema Trasporti/mobilità).
 
+## ETL, feature store, showcase, use case (Fase 3)
+- **Connettori** (`opendata_core`): `meteo` (Open-Meteo, CC BY), `gtfs` (parser→fermate),
+  `wikidata` (SPARQL, CC0), `portals` (registro CKAN regionali, es. dati.puglia.it). Licenza tracciata.
+- **ETL Layer 1→2**: `raw_ingest` (migrazione 0008, idempotente per sha, licenza) + `etl/` (record raw +
+  GTFS→`mobility_node`). Signals/investimenti restano popolati dal report di Fase 2.
+- **Feature store (Layer 3)**: `features/` materializza in `feature_store` densità competitor, accessibilità
+  servizi, family-friendly, walkability proxy, distanza-da-fermata (GTFS), permanenza turistica (proxy);
+  data-scarce (25–44/assunzioni/fragilità) → null + gap.
+- **Showcase-engine**: `showcase/` interpreta `showcases_data/*.yaml` (sorgente canonica, indicatore, join
+  spaziale per ISTAT, viz). GET `/showcases`, GET `/showcases/{id}/run`.
+- **Use case** (endpoint dedicati): **ApriQui AI** (`POST /usecases/apriqui`) score attrattività 0–100 su
+  10 categorie + spiegazione Sonnet + confronto; **PugliaTrip Brain** (`POST /usecases/pugliatrip`) itinerari
+  meteo-aware (POI OSM + Open-Meteo + mobility) + spiegazione. **Region-agnostici** (qualunque comune). Le
+  "idee di sviluppo" del report Territorio si popolano dalle top categorie ApriQui.
+- **Frontend**: galleria `/usecases` (ApriQui bar chart, PugliaTrip itinerario + mappa OSM, showcase).
+- Pilota verificato end-to-end (Gioia del Colle): ApriQui top categorie ~88/100; PugliaTrip 9 POI OSM su 3
+  giorni meteo-aware. (OSM/Open-Meteo/Wikidata/OpenCoesione live → fail-safe.)
+
 ## Applicare le migrazioni
 ```bash
 cd opendata-backend
