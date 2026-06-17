@@ -1,0 +1,7 @@
+# File eseguiti dentro i container Linux: devono restare LF anche se il
+# checkout avviene su Windows (altrimenti lo shebang diventa `bash\r` e
+# l'entrypoint va in crash-loop con exit 127).
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.Dockerfile text eol=lf
+migrate.sh  text eol=lf
