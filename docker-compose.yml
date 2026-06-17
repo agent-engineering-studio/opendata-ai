@@ -191,6 +191,27 @@ services:
       OVERPASS_FALLBACK_URLS: ${OVERPASS_FALLBACK_URLS:-https://overpass.osm.ch/api/interpreter}
     restart: unless-stopped
 
+  # ───── Maturity MCP server — assessment maturità open-data (ODM 2025) ─────
+  maturity-mcp:
+    build:
+      context: .
+      dockerfile: maturity-mcp-server/Dockerfile
+    image: maturity-mcp-server:local
+    container_name: maturity-mcp
+    ports:
+      - "${MATURITY_MCP_PORT:-18087}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      # Haiku SOLO per il giudizio semantico (comprensibilità descrizione); opzionale.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── Overpass self-hosted — istanza locale su estratto Italia (opt-in) ─────
   # Profilo "overpass" (start con `--profile overpass`): elimina rate limit (429)
   # e blocchi di rete verso i mirror pubblici. NON è nel set di default perché
