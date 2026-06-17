@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings
 from ..db.repositories import territory as repo
+from ..features.engineering import compute_features
+from ..usecases.apriqui import score_categories
 from .investments import fetch_investments, persist_investments, summarize_investments
 from .narrative import generate_report_narrative
 
@@ -68,8 +70,28 @@ async def build_report(
     await repo.save_signals(session, place_id=place.id, signals=signals, observed_at=now)
     await persist_investments(session, place_id=place.id, projects=inv["projects"], observed_at=now)
 
-    features = {"profile": signals, "investments": inv_summary}
+    # Feature store (Layer 3) + idee di sviluppo dall'output ApriQui (Fase 3).
+    feat = compute_features(
+        business=signals.get("business"), tourism=signals.get("tourism"),
+        mobility=[], population=population,
+    )
+    features = {
+        "profile": signals, "investments": inv_summary,
+        "features": feat["features"], "feature_gaps": feat["gaps"],
+    }
     await repo.upsert_feature_store(session, place_id=place.id, features=features, computed_at=now)
+
+    ideas = score_categories(
+        business=signals.get("business", {}), features=feat["features"], population=population
+    )[:3]
+    idee_sviluppo = [
+        {
+            "category": i["category"], "score": i["score"],
+            "rationale": f"opportunità {i['opportunity']} · domanda {i['demand']} · "
+                         f"accessibilità {i['accessibility']}",
+        }
+        for i in ideas
+    ]
 
     sezioni = {
         "profilo": signals,
@@ -79,7 +101,7 @@ async def build_report(
             "turismo_cultura": signals.get("tourism", {}),
         },
         "segnali": signals,
-        "idee_sviluppo": [],  # placeholder — popolato in Fase 3
+        "idee_sviluppo": idee_sviluppo,  # da ApriQui (Fase 3)
         "gap_dato": _gap_analysis(signals, inv_summary),
     }
     context = {

@@ -80,7 +80,9 @@ async def test_build_report_structure_and_persistence(session: AsyncSession) -> 
                         "idee_sviluppo", "gap_dato"}
     assert sez["profilo"]["population"] == {"total": 27000}
     assert sez["investimenti"]["finanziamento_totale"] == 350000.0
-    assert sez["idee_sviluppo"] == []  # placeholder Fase 3
+    # idee di sviluppo ora popolate da ApriQui (Fase 3): top categorie con score
+    assert 1 <= len(sez["idee_sviluppo"]) <= 3
+    assert all("category" in i and "score" in i for i in sez["idee_sviluppo"])
     assert report["narrativa"]  # fallback deterministico
 
     # persistenza
