@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import ClerkUser
+from ..civic.site import bundle_zip
+from ..civic.site_service import build_site
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..shared.ratelimit import enforce_rate_limit
@@ -56,3 +59,38 @@ async def territory_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail="profilo non disponibile: genera prima un report")
     return profile
+
+
+@router.post("/territory/{istat_code}/site/export")
+async def site_export(
+    istat_code: str,
+    snapshot_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_db_session),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> Response:
+    """Bundle zip del sito civico (pubblicabile su GitHub Pages/hosting comune)."""
+    files = await build_site(session, istat_code=istat_code.strip(), snapshot_id=snapshot_id)
+    if files is None:
+        raise HTTPException(status_code=404, detail="nessuno snapshot: crea prima uno snapshot civico")
+    data = bundle_zip(files)
+    return Response(
+        content=data, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="sito-civico-{istat_code}.zip"'},
+    )
+
+
+@router.get("/territory/{istat_code}/site/preview", response_class=HTMLResponse)
+async def site_preview(
+    istat_code: str,
+    page: str = Query(default="index.html"),
+    snapshot_id: str | None = Query(default=None),
+    session: AsyncSession = Depends(get_db_session),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> HTMLResponse:
+    """Anteprima HTML di una pagina del sito civico (default: Stato dell'arte)."""
+    files = await build_site(session, istat_code=istat_code.strip(), snapshot_id=snapshot_id)
+    if files is None:
+        raise HTTPException(status_code=404, detail="nessuno snapshot: crea prima uno snapshot civico")
+    if page not in files:
+        raise HTTPException(status_code=404, detail=f"pagina {page} non disponibile")
+    return HTMLResponse(content=files[page])
