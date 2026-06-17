@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import ClerkUser
+from ..civic.checkin import open_checkin_thread
 from ..civic.site import bundle_zip
 from ..civic.site_service import build_site
+from ..civic.snapshot import SnapshotError, create_snapshot
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..shared.ratelimit import enforce_rate_limit
@@ -29,6 +31,11 @@ class ReportIn(BaseModel):
     temi: list[str] | None = None
     anno_da: int | None = None
     anno_a: int | None = None
+
+
+class SnapshotIn(BaseModel):
+    snapshot_id: str
+    sources_version: str = "auto"
 
 
 @router.post("/territory/report")
@@ -59,6 +66,29 @@ async def territory_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail="profilo non disponibile: genera prima un report")
     return profile
+
+
+@router.post("/territory/{istat_code}/snapshot", status_code=201)
+async def snapshot_create(
+    istat_code: str,
+    body: SnapshotIn,
+    session: AsyncSession = Depends(get_db_session),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict[str, Any]:
+    """Crea uno snapshot civico versionato e apre il check-in community (se c'è un precedente)."""
+    istat = istat_code.strip()
+    try:
+        snap = await create_snapshot(
+            session, istat_code=istat, snapshot_id=body.snapshot_id.strip(),
+            sources_version=body.sources_version,
+        )
+    except SnapshotError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    checkin = await open_checkin_thread(session, istat_code=istat, snapshot_id=snap.snapshot_id)
+    await session.commit()
+    return {"snapshot_id": snap.snapshot_id, "kpi_version": snap.kpi_version,
+            "kpi": snap.kpi_jsonb, "checkin": checkin}
 
 
 @router.post("/territory/{istat_code}/site/export")
