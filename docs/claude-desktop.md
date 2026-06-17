@@ -1,7 +1,8 @@
 # Use the opendata-ai MCP servers from Claude Desktop
 
-This repo ships three FastMCP servers — `ckan-mcp-server`, `istat-mcp-server`,
-and `osm-mcp`. They all support the **stdio** transport that Claude Desktop
+This repo ships four FastMCP servers — `ckan-mcp-server`, `istat-mcp-server`,
+`osm-mcp`, and `maturity-mcp-server` (valutazione di maturità open-data, ODM
+2025). They all support the **stdio** transport that Claude Desktop
 and other MCP hosts expect, in addition to the streamable-HTTP transport used
 inside the Docker stack.
 
@@ -44,10 +45,23 @@ Add this to your `~/Library/Application Support/Claude/claude_desktop_config.jso
         "-e", "MCP_TRANSPORT=stdio",
         "ghcr.io/agent-engineering-studio/osm-mcp:latest"
       ]
+    },
+    "opendata-maturity": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "TRANSPORT=stdio",
+        "-e", "CKAN_DEFAULT_BASE_URL=https://www.dati.gov.it/opendata",
+        "ghcr.io/agent-engineering-studio/maturity-mcp-server:latest"
+      ]
     }
   }
 }
 ```
+
+> `maturity-mcp-server` accetta opzionalmente `ANTHROPIC_API_KEY` (+
+> `CLAUDE_CLASSIFY_MODEL`) per il giudizio semantico via Haiku; senza chiave lo
+> scoring resta deterministico.
 
 Override `CKAN_DEFAULT_BASE_URL` per portal — the same `ckan-mcp-server`
 image works against any CKAN portal (`dati.gov.it`, `data.gov.uk`,
@@ -80,6 +94,13 @@ console scripts on `$PATH` are enough:
       "command": "/Users/<you>/.venvs/opendata-ai/bin/python",
       "args": ["-m", "osm_mcp.server"],
       "env": { "MCP_TRANSPORT": "stdio" }
+    },
+    "opendata-maturity": {
+      "command": "/Users/<you>/.venvs/opendata-ai/bin/maturity-mcp-server",
+      "env": {
+        "TRANSPORT": "stdio",
+        "CKAN_DEFAULT_BASE_URL": "https://www.dati.gov.it/opendata"
+      }
     }
   }
 }

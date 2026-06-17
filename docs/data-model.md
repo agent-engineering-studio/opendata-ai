@@ -73,6 +73,22 @@ produce il dict per l'upsert in `entities` con chiave `ckan_org_id`.
 fallback a centroide/NULL) ed `entities` "Comune di Gioia del Colle". Rieseguibile
 senza duplicati. Richiede PostGIS. `--no-geometry` salta il fetch OSM.
 
+## Maturità (Fase 1)
+Le tabelle `entities`, `dataset_quality` e `maturity_assessments` sono popolate dal
+**motore di maturità** (`opendata_core.maturity`, ODM 2025 + AgID):
+- `dataset_quality`: uno snapshot per dataset/assessment (5-star, FAIR, DCAT-AP_IT,
+  ISO 25012 in `iso25012_jsonb`, HVD, freshness);
+- `maturity_assessments`: uno snapshot per ente/assessment con i 4 punteggi
+  (policy/portal/quality/impact), `score_overall`, `level` (scala ODM:
+  Beginner/Follower/Fast-tracker/Trend-setter) e `details_jsonb` (dimensioni +
+  raccomandazioni). Gli snapshot storicizzati alimentano il **trend**.
+- `entities` è upsertata per `ckan_org_id` (vedi `extract_publisher`).
+
+Esposto da: server `maturity-mcp` (tool) e router backend `/maturity`
+(`/assess`, `/entities/{id}`, `/ranking`) con cache Redis. Pesi/soglie in
+`config_data/maturity_weights.yaml`. Scorecard pilota verificata riproducibile per
+il Comune di Gioia del Colle (Beginner/0 su dati.gov.it: l'ente non vi espone dataset).
+
 ## Applicare le migrazioni
 ```bash
 cd opendata-backend
