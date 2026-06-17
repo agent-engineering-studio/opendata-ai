@@ -312,9 +312,99 @@ class RawIngest(Base):
     payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
 
 
+# ── Sito civico + community (Fase 4) ─────────────────────────────────
+
+
+class CivicSnapshot(Base):
+    """Snapshot pubblico versionato del sito civico (NON si sovrascrive)."""
+
+    __tablename__ = "civic_snapshots"
+    __table_args__ = (
+        UniqueConstraint("istat_code", "snapshot_id", name="uq_civic_snapshot"),
+        Index("ix_civic_snapshots_istat", "istat_code"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    istat_code: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(Text, nullable=False)  # es. "2026-H1"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    sources_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kpi_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+    kpi_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+
+
+class CommunityMember(Base):
+    """Ruolo di un utente Clerk nella community di un comune (dati minimi)."""
+
+    __tablename__ = "community_members"
+    __table_args__ = (
+        UniqueConstraint("clerk_user_id", "istat_code", name="uq_community_member"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    clerk_user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    istat_code: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, server_default="cittadino")
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class CommunityThread(Base):
+    """Thread di discussione civica (per tema/opera/KPI/snapshot)."""
+
+    __tablename__ = "community_threads"
+    __table_args__ = (
+        Index("ix_community_threads_istat", "istat_code"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    istat_code: Mapped[str] = mapped_column(Text, nullable=False)
+    topic_type: Mapped[str] = mapped_column(Text, nullable=False)  # tema|opera|kpi|snapshot
+    topic_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="open")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class CommunityPost(Base):
+    """Messaggio in un thread civico. `status` per la moderazione."""
+
+    __tablename__ = "community_posts"
+    __table_args__ = (
+        Index("ix_community_posts_thread", "thread_id"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    thread_id: Mapped[int] = mapped_column(
+        ForeignKey("opendata.community_threads.id", ondelete="CASCADE"), nullable=False
+    )
+    author: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="visible")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 __all__ = [
     "Entity",
     "RawIngest",
+    "CivicSnapshot",
+    "CommunityMember",
+    "CommunityThread",
+    "CommunityPost",
     "DatasetQuality",
     "MaturityAssessment",
     "Place",
