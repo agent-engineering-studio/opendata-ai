@@ -1,0 +1,24 @@
+# Tassonomia di "valore" per la valorizzazione del dato sul territorio (Fase 0).
+# Categorie usate per orientare classificazione dataset e schede di valore nelle
+# fasi successive. `id` stabile (chiave), `label` umana, `keywords` per il match.
+version: 1
+
+categories:
+  - id: trasparenza
+    label: "Trasparenza e accountability"
+    keywords: ["bilancio", "spesa", "appalti", "contratti", "delibere"]
+  - id: servizi
+    label: "Servizi al cittadino"
+    keywords: ["servizi", "anagrafe", "scuola", "sociale", "sportello"]
+  - id: economia
+    label: "Sviluppo economico e turismo"
+    keywords: ["turismo", "commercio", "imprese", "lavoro", "cultura"]
+  - id: ambiente
+    label: "Ambiente e territorio"
+    keywords: ["ambiente", "rifiuti", "verde", "energia", "rischio"]
+  - id: mobilita
+    label: "Mobilità e infrastrutture"
+    keywords: ["mobilità", "trasporti", "parcheggi", "strade", "piste"]
+  - id: salute
+    label: "Salute e welfare"
+    keywords: ["salute", "sanità", "assistenza", "farmacie"]
