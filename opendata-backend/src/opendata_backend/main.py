@@ -33,6 +33,7 @@ from .routers import (
     me,
     programma,
     territorio,
+    territory,
     value,
     webhooks,
 )
@@ -152,6 +153,7 @@ app.include_router(programma.router)
 app.include_router(territorio.router)
 app.include_router(maturity.router)
 app.include_router(value.router)
+app.include_router(territory.router)
 
 # Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
 # and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.
