@@ -9,9 +9,10 @@ weights:
   quality: 0.30   # qualità dei dataset: FAIR, DCAT-AP_IT, 5-stars, freschezza
   impact: 0.20    # impatto/uso: riuso, HVD, valorizzazione sul territorio
 
-# Soglie crescenti su score_overall (0..1) → etichetta di livello.
+# Soglie crescenti su score_overall (0..100) → livello scala ODM 2025.
+# Allineate ai default di opendata_core.maturity (DEFAULT_ODM_LEVELS).
 levels:
-  - {min: 0.00, name: "iniziale"}
-  - {min: 0.40, name: "base"}
-  - {min: 0.60, name: "avanzato"}
-  - {min: 0.80, name: "maturo"}
+  - {min: 0,  name: "Beginner"}
+  - {min: 40, name: "Follower"}
+  - {min: 60, name: "Fast-tracker"}
+  - {min: 80, name: "Trend-setter"}
