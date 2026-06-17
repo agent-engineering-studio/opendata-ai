@@ -84,6 +84,9 @@ class Resource(BaseModel):
     description: str | None = None
     # Self-contained Leaflet+OSM HTML map, rendered by osm-mcp for GeoJSON resources.
     preview_html: str | None = None
+    # Value card (Fase 2): stima art. 14 + combinabilità. Additivo e opzionale →
+    # i client esistenti che non lo leggono restano compatibili.
+    value_card: dict | None = None
 
 
 def _is_binary(raw: bytes) -> bool:
