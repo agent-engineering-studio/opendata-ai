@@ -38,6 +38,7 @@ def _details(result: MaturityResult, harvest: HarvestResult) -> dict[str, Any]:
         "n_datasets": result.n_datasets,
         "total_on_portal": harvest.total,
         "truncated": harvest.truncated,
+        "insufficient_data": result.insufficient_data,
         "dimensions": result.scores.as_dict(),
         "recommendations": [
             {"code": r.code, "severity": r.severity, "dimension": r.dimension,
@@ -151,6 +152,7 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "recommendations": details.get("recommendations", []),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
+        "insufficient_data": details.get("insufficient_data", False),
         "unmet_reuse_demand": details.get("unmet_reuse_demand", {"count": 0, "items": [], "penalty": 0.0}),
         "trend": trend,
         "cluster_median": await _cluster_median(session, ent.type),

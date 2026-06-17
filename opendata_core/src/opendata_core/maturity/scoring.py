@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from .models import (
+    DEFAULT_MIN_DATASETS,
     DEFAULT_WEIGHTS,
+    INSUFFICIENT_LEVEL,
     OPEN_FORMATS,
     DatasetInput,
     DimensionScores,
@@ -14,6 +16,7 @@ from .models import (
     Recommendation,
     odm_level,
 )
+from dataclasses import replace
 from .quality import assess_quality
 
 _Pair = tuple[DatasetInput, QualityScore]
@@ -140,11 +143,14 @@ def assess_entity(
     semantic: dict[str, float] | None = None,
     as_of: datetime | None = None,
     reuse_demand_penalty: float = 0.0,
+    min_datasets: int = DEFAULT_MIN_DATASETS,
 ) -> MaturityResult:
     """Valuta tutti i dataset di un ente e aggrega in una MaturityResult.
 
     `semantic` (opzionale): mappa dataset_id → semantic_clarity ∈ [0,1] (Haiku).
     `reuse_demand_penalty` ∈ [0,1]: penalità Impact da domanda di riuso non soddisfatta.
+    `min_datasets`: sotto soglia → insufficient_data=True e livello "Dato insufficiente"
+    (no punteggi falsi su basi troppo piccole).
     """
     sem = semantic or {}
     pairs: list[_Pair] = []
@@ -153,10 +159,14 @@ def assess_entity(
         pairs.append((ds, q))
 
     scores = score_dimensions(pairs, weights=weights, reuse_demand_penalty=reuse_demand_penalty)
+    insufficient = len(pairs) < min_datasets
+    if insufficient:
+        scores = replace(scores, level=INSUFFICIENT_LEVEL)
     recommendations = build_recommendations(pairs)
     return MaturityResult(
         n_datasets=len(pairs),
         scores=scores,
         recommendations=recommendations,
         dataset_quality=tuple(q for _, q in pairs),
+        insufficient_data=insufficient,
     )

@@ -98,6 +98,17 @@ def test_dataset_quality_snapshot_present() -> None:
     assert res.dataset_quality[0].dataset_id == "good-1"
 
 
+def test_insufficient_data_flag() -> None:
+    # < soglia (3) → dato insufficiente, niente punteggio falso
+    few = assess_entity([DatasetInput.from_ckan(_good(i)) for i in range(2)], as_of=AS_OF)
+    assert few.insufficient_data is True
+    assert few.scores.level == "Dato insufficiente"
+    # ≥ soglia → assessment normale
+    enough = assess_entity([DatasetInput.from_ckan(_good(i)) for i in range(3)], as_of=AS_OF)
+    assert enough.insufficient_data is False
+    assert enough.scores.level != "Dato insufficiente"
+
+
 def test_reuse_demand_penalty_reduces_impact() -> None:
     datasets = [DatasetInput.from_ckan(_good(i)) for i in range(10)]
     base = assess_entity(datasets, as_of=AS_OF)

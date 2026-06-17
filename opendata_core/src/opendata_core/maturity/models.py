@@ -59,6 +59,11 @@ DEFAULT_ODM_LEVELS: list[tuple[float, str]] = [
 
 DIMENSIONS = ("policy", "portal", "quality", "impact")
 
+# Sotto questa soglia di dataset l'assessment è marcato "dato insufficiente"
+# (no punteggi falsi su basi troppo piccole).
+DEFAULT_MIN_DATASETS = 3
+INSUFFICIENT_LEVEL = "Dato insufficiente"
+
 
 def odm_level(score_overall: float, levels: list[tuple[float, str]] | None = None) -> str:
     """Mappa un punteggio 0–100 al livello ODM via soglie crescenti."""
@@ -171,3 +176,4 @@ class MaturityResult:
     scores: DimensionScores
     recommendations: tuple[Recommendation, ...]
     dataset_quality: tuple[QualityScore, ...]
+    insufficient_data: bool = False
