@@ -1,0 +1,11 @@
+id: accessibilita-servizi
+title: Accessibilità ai servizi essenziali
+description: >
+  Quota di servizi essenziali (farmacia, supermercato, banca, ospedale, scuola,
+  carburante, bancomat) presenti nel comune, da POI OSM. Join spaziale per ISTAT.
+source: feature_store
+indicator: service_accessibility_score
+visualization:
+  type: gauge
+  unit: "/100"
+license: ODbL (OpenStreetMap)

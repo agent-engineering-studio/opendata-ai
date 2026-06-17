@@ -1,0 +1,11 @@
+id: competitor-density
+title: Densità competitor commerciali
+description: >
+  Numero di attività commerciali (POI OSM) ogni 1.000 abitanti del comune.
+  Join spaziale per codice ISTAT su feature_store.
+source: feature_store
+indicator: competitor_density_per_1k
+visualization:
+  type: number
+  unit: "per 1.000 ab."
+license: ODbL (OpenStreetMap) + CC-BY (popolazione ISTAT)
