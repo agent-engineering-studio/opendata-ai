@@ -62,6 +62,7 @@ opendata-backend-api = "opendata_backend.main:run"
 opendata-opencoesione-sync = "opendata_backend.ingest.opencoesione:main"
 opendata-comuni-sync = "opendata_backend.ingest.comuni:main"
 opendata-territorio-seed = "opendata_backend.ingest.territory_seed:main"
+opendata-batch = "opendata_backend.ingest.batch:main"
 
 [build-system]
 requires = ["hatchling"]
