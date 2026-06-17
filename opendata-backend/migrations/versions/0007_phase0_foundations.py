@@ -63,8 +63,10 @@ def upgrade() -> None:
     if is_pg:
         op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
 
+    # geometry generico (non MULTIPOLYGON): accoglie confini poligonali e il
+    # fallback a centroide (Point) del seed. SRID 4326.
     geom_type = (
-        Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False)
+        Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=False)
         if is_pg
         else sa.Text()
     )

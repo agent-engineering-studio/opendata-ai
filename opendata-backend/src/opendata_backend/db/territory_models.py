@@ -36,12 +36,14 @@ from .models import Base, _PK
 # JSONB su Postgres, JSON su SQLite (test). Centralizzato per coerenza.
 _JSONB = JSON().with_variant(JSONB(), "postgresql")
 
-# geometry(MULTIPOLYGON, 4326) su Postgres, TEXT su SQLite. Tipo BASE = Text:
-# così su SQLite geoalchemy2 NON aggancia gli hook SpatiaLite (RecoverGeometryColumn).
-# La migrazione crea la colonna geometry reale + l'indice GiST (solo su postgresql),
-# quindi spatial_index=False qui evita auto-indici in eventuali create_all.
+# geometry(Geometry,4326) su Postgres, TEXT su SQLite. Tipo generico (non
+# MULTIPOLYGON) per accogliere sia i confini poligonali sia il fallback a
+# centroide (Point) del seed. Tipo BASE = Text: così su SQLite geoalchemy2 NON
+# aggancia gli hook SpatiaLite (RecoverGeometryColumn). La migrazione crea la
+# colonna geometry reale + l'indice GiST (solo su postgresql); spatial_index=False
+# evita auto-indici in eventuali create_all.
 _GEOM = Text().with_variant(
-    Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False), "postgresql"
+    Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=False), "postgresql"
 )
 
 
