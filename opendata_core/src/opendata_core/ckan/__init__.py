@@ -7,6 +7,7 @@ from .client import (
     CkanClient,
     CkanError,
 )
+from .publisher import PublisherRef, extract_publisher, to_entity_fields
 
 __all__ = [
     "CkanClient",
@@ -14,4 +15,7 @@ __all__ = [
     "DEFAULT_BASE_URL",
     "DOWNLOADABLE_FORMATS",
     "MAX_DOWNLOAD_BYTES",
+    "PublisherRef",
+    "extract_publisher",
+    "to_entity_fields",
 ]
