@@ -28,6 +28,7 @@ from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
 from .routers import (
     api_keys,
+    community,
     datasets,
     maturity,
     me,
@@ -158,6 +159,7 @@ app.include_router(value.router)
 app.include_router(territory.router)
 app.include_router(showcases.router)
 app.include_router(usecases.router)
+app.include_router(community.router)
 
 # Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
 # and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.
