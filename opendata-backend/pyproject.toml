@@ -20,9 +20,14 @@ dependencies = [
     "pyjwt[crypto]>=2.9.0",
     "svix>=1.30.0",
     "sqlalchemy[asyncio]>=2.0.30",
+    "geoalchemy2>=0.15.0",
     "asyncpg>=0.29.0",
     "psycopg[binary]>=3.2.0",
     "alembic>=1.13.0",
+    # Pesi maturità + tassonomia di valore caricati da config/*.yaml (Fase 0).
+    "pyyaml>=6.0",
+    # Generatore sito civico statico (Fase 4): template HTML multi-pagina.
+    "jinja2>=3.1",
     "redis>=5.0.0",
     "anthropic>=0.40.0",
     "a2a-sdk[fastapi]>=1.1.0",
@@ -56,6 +61,8 @@ opendata-agent = "opendata_backend.cli:cli"
 opendata-backend-api = "opendata_backend.main:run"
 opendata-opencoesione-sync = "opendata_backend.ingest.opencoesione:main"
 opendata-comuni-sync = "opendata_backend.ingest.comuni:main"
+opendata-territorio-seed = "opendata_backend.ingest.territory_seed:main"
+opendata-batch = "opendata_backend.ingest.batch:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,18 @@
+# Pesi per dimensione del punteggio di maturità open-data di un ente (Fase 0).
+# score_overall = Σ (weights[dim] * score_dim), con score_dim in [0, 1].
+# I pesi devono sommare a 1.0. `level` deriva da score_overall via le soglie.
+version: 1
+
+weights:
+  policy: 0.25    # presenza di policy/linee guida open-data, licenze, governance
+  portal: 0.25    # qualità del portale: copertura, metadati, API, aggiornamento
+  quality: 0.30   # qualità dei dataset: FAIR, DCAT-AP_IT, 5-stars, freschezza
+  impact: 0.20    # impatto/uso: riuso, HVD, valorizzazione sul territorio
+
+# Soglie crescenti su score_overall (0..100) → livello scala ODM 2025.
+# Allineate ai default di opendata_core.maturity (DEFAULT_ODM_LEVELS).
+levels:
+  - {min: 0,  name: "Beginner"}
+  - {min: 40, name: "Follower"}
+  - {min: 60, name: "Fast-tracker"}
+  - {min: 80, name: "Trend-setter"}

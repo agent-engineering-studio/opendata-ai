@@ -30,6 +30,34 @@ Next.js 15 frontend:
   Uses `@clerk/nextjs` for auth and talks to the backend cross-origin via
   `lib/api.ts::apiFetch()` with a Bearer token.
 
+## Capability layer (Fasi 0–5)
+
+Costruito **sopra** il fan-out, senza riscritture (diagramma:
+`docs/architettura.md`; modello dati: `docs/data-model.md`). Pilota: Gioia del
+Colle (ISTAT 072021).
+
+- **Motori puri** in `opendata_core/` (no FastMCP/FastAPI/LLM — semantico Haiku e
+  pesi/penalità sono **iniettati**): `maturity/` (5-star/FAIR/DCAT-AP_IT/ISO25012/
+  HVD → 4 dimensioni ODM, `assess_entity`), `value/` (art.14 + combinabilità),
+  `territory/` (resolve + profilo), connettori `meteo`/`gtfs`/`wikidata`/`portals`,
+  `maturity/harvest.py` (CKAN), `opencoesione/` (client REST).
+- **Warehouse `opendata.*`** (migrazioni stub 0007–0009): `entities`,
+  `dataset_quality`, `maturity_assessments`, `place`+signal+`investment`+
+  `feature_store`+`territory_reports`, `raw_ingest`, `civic_snapshots`,
+  `community_*`. DDL geo/JSONB **dialect-aware** (PostGIS reale / SQLite nei test).
+- **Endpoint backend**: `/maturity/*` (+`scorecard.csv`), `/value/*` (+`value_card`
+  additivo in `/datasets/search`), `/territory/{istat}/report|profile|snapshot|site/*`,
+  `/usecases/{apriqui,pugliatrip}`, `/showcases/*`, `/community/*`.
+- **Console-script**: `opendata-territorio-seed`, `opendata-batch` (cron, idempotente).
+- **Anello valore⇄maturità (Fase 5)**: i gap dei report Territorio penalizzano
+  l'Impact dell'ente (`reuse_demand_penalty` iniettato) e compaiono come "domanda di
+  riuso non soddisfatta". Sotto soglia dataset → **"dato insufficiente"** (no punteggi
+  falsi). Tutto ciò che usa fonti live è **fail-safe**.
+- **Sito civico** (Fase 4): generatore Jinja2 self-contained (SVG inline + Leaflet
+  CDN), snapshot versionati non sovrascritti + diff, community con check-in.
+- Config YAML in-package `opendata_backend/config_data/` (pesi maturità, tassonomia
+  valore, KPI civici, target batch); showcase in `showcases_data/`.
+
 ## Architecture invariants
 
 - **Submodule for the schema.** `opendata.*` migrations live in

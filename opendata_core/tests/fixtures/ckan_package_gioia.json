@@ -1,0 +1,21 @@
+{
+  "result": {
+    "id": "pop-residente-gioia-2024",
+    "name": "popolazione-residente-gioia-del-colle-2024",
+    "title": "Popolazione residente — Gioia del Colle 2024",
+    "notes": "Serie storica della popolazione residente nel comune.",
+    "url": "https://www.dati.gov.it/opendata/dataset/popolazione-residente-gioia-del-colle-2024",
+    "organization": {
+      "id": "1a2b3c4d-comune-gioia",
+      "name": "comune-di-gioia-del-colle",
+      "title": "Comune di Gioia del Colle",
+      "description": "Ente titolare dei dati comunali."
+    },
+    "extras": [
+      {"key": "holder_identifier", "value": "c_e155"},
+      {"key": "holder_name", "value": "Comune di Gioia del Colle"},
+      {"key": "theme", "value": "POP"},
+      {"key": "frequency", "value": "ANNUAL"}
+    ]
+  }
+}

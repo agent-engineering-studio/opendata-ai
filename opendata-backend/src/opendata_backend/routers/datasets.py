@@ -144,6 +144,13 @@ async def _run_orchestrator(
                 log.info("attached %d OSM map(s)", n)
         except Exception:
             log.warning("attach_maps failed", exc_info=True)
+    # Value card (Fase 2): additiva, best-effort, non blocca la ricerca.
+    try:
+        from ..value.cards import attach_value_cards
+
+        attach_value_cards(resources)
+    except Exception:
+        log.warning("attach_value_cards failed", exc_info=True)
     return ChatResponse(text=text, resources=resources)
 
 

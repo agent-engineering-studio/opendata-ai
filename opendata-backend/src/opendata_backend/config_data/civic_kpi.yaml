@@ -1,0 +1,36 @@
+# KPI civici versionati (Fase 4) — definizioni PUBBLICHE e riproducibili.
+# `direction`: up = migliora se cresce, down = migliora se cala, context = neutro.
+# `source`: provenienza del numero (per la neutralità: ogni KPI è tracciabile).
+version: 1
+
+kpis:
+  - id: accessibilita_servizi
+    label: "Accessibilità ai servizi essenziali"
+    definition: "Quota di servizi essenziali (farmacia, supermercato, banca, ospedale, scuola, carburante, bancomat) presenti, da POI OSM."
+    source: feature_store.service_accessibility_score
+    unit: "/100"
+    direction: up
+  - id: investimento_procapite
+    label: "Investimento pubblico pro-capite"
+    definition: "Finanziamento totale OpenCoesione diviso la popolazione residente."
+    source: investment.finanziamento_totale / popolazione
+    unit: "€/ab."
+    direction: up
+  - id: progetti_conclusi_pct
+    label: "Quota progetti conclusi"
+    definition: "Percentuale di progetti OpenCoesione in stato 'concluso' sul totale tracciato."
+    source: investment.stato
+    unit: "%"
+    direction: up
+  - id: densita_competitor
+    label: "Densità attività commerciali"
+    definition: "Attività commerciali (POI OSM) ogni 1.000 abitanti."
+    source: feature_store.competitor_density_per_1k
+    unit: "per 1.000 ab."
+    direction: context
+  - id: walkability
+    label: "Walkability (proxy)"
+    definition: "Indice proxy di pedonalità basato sulla densità di destinazioni (POI OSM)."
+    source: feature_store.walkability_proxy
+    unit: "/100"
+    direction: up

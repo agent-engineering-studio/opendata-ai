@@ -40,9 +40,12 @@ services:
       retries: 6
       start_period: 5s
 
-  # ───── Postgres 16 — shared state for users / favorites / history / api-keys / classifications ─────
+  # ───── Postgres 16 + PostGIS — shared state + modello canonico territoriale ─────
+  # postgis/postgis:16-3.4 = stesso major (16) di postgres:16-alpine → riusa il
+  # volume esistente. PostGIS è disponibile nell'immagine; l'estensione viene
+  # creata dalla migrazione (CREATE EXTENSION postgis, solo su dialetto postgresql).
   postgres:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4
     container_name: opendata-ai-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-opendata}
@@ -186,6 +189,27 @@ services:
       # (fallback), entrambi raggiungibili; sovrascrivibili via env.
       OVERPASS_URL: ${OVERPASS_URL:-https://overpass.openstreetmap.fr/api/interpreter}
       OVERPASS_FALLBACK_URLS: ${OVERPASS_FALLBACK_URLS:-https://overpass.osm.ch/api/interpreter}
+    restart: unless-stopped
+
+  # ───── Maturity MCP server — assessment maturità open-data (ODM 2025) ─────
+  maturity-mcp:
+    build:
+      context: .
+      dockerfile: maturity-mcp-server/Dockerfile
+    image: maturity-mcp-server:local
+    container_name: maturity-mcp
+    ports:
+      - "${MATURITY_MCP_PORT:-18087}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      CKAN_DEFAULT_BASE_URL: ${CKAN_DEFAULT_BASE_URL:-https://www.dati.gov.it/opendata}
+      # Haiku SOLO per il giudizio semantico (comprensibilità descrizione); opzionale.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CLASSIFY_MODEL: ${CLAUDE_CLASSIFY_MODEL:-claude-haiku-4-5-20251001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
   # ───── Overpass self-hosted — istanza locale su estratto Italia (opt-in) ─────

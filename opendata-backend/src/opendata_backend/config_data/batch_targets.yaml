@@ -1,0 +1,6 @@
+# Target del batch ricorrente (Fase 5): enti/comuni da aggiornare off-peak.
+# entity = organizzazione CKAN; istat = comune collegato (anello valore⇄maturità);
+# base_url opzionale (portale CKAN non di default).
+targets:
+  - entity: comune-di-gioia-del-colle
+    istat: "072021"

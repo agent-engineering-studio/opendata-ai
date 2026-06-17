@@ -1,0 +1,10 @@
+id: investimenti-pubblici
+title: Investimenti pubblici (OpenCoesione)
+description: >
+  Numero di progetti e finanziamento totale tracciati da OpenCoesione per il comune.
+  Join spaziale per codice ISTAT sulla tabella investment.
+source: investment
+visualization:
+  type: number
+  unit: "€"
+license: CC-BY 4.0 (OpenCoesione)

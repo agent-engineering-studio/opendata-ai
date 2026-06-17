@@ -20,6 +20,12 @@ const PUBLIC_NAV = [
 const AUTH_NAV = [
   { href: "/esplora", label: "Esplora" },
   { href: "/territorio", label: "Territorio" },
+  { href: "/scorecard", label: "Scorecard" },
+  { href: "/valore", label: "Valore" },
+  { href: "/territorio-report", label: "Report comune" },
+  { href: "/usecases", label: "Casi d'uso" },
+  { href: "/sito-civico", label: "Sito civico" },
+  { href: "/maturita", label: "Maturità" },
 ] as const;
 
 function KeyIcon() {

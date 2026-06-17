@@ -1036,6 +1036,12 @@ class Settings(BaseSettings):
     # Requests per minute per Clerk user (fixed window). Set to 0 to disable.
     rate_limit_per_minute: int = Field(default=60)
 
+    # ── Maturità (Fase 1) ────────────────────────────────────────────
+    # Tetto sui dataset valutati per ente in POST /maturity/assess (sincrono).
+    maturity_max_datasets: int = Field(default=50)
+    # TTL della scorecard in Redis (default 24h).
+    maturity_cache_ttl_seconds: int = Field(default=86400)
+
 
 def province_scope(settings: Settings) -> frozenset[str]:
     """I codici provincia ammessi (3 cifre); frozenset vuoto = nessun limite."""

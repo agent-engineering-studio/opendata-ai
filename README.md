@@ -12,6 +12,16 @@ taxonomy with Claude Haiku.
 > Static frontend on GitHub Pages, FastAPI backend on a self-hosted Aruba
 > VPS, Clerk-authenticated everywhere except `/health`.
 
+## Capability layer (valorizzazione + maturità)
+
+Sopra l'accesso ai dati, la piattaforma offre un **capability layer** (Fasi 0–5):
+maturità open-data degli enti (ODM 2025), valore del dato (art. 14 Dir. UE
+2019/1024), modalità Territorio (profilo + investimenti OpenCoesione), use case
+applicativi (ApriQui AI, PugliaTrip Brain), **sito civico** statico esportabile con
+accountability di community, e un **anello valore⇄maturità** (i gap di dato
+penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
+modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
+
 ## Supported open data sources
 
 | Source | Endpoint | What we fetch | Tool |

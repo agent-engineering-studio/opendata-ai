@@ -73,6 +73,40 @@ async def reverse_geocode(lat: float, lon: float, zoom: int = 18) -> dict[str, A
         return r.json()
 
 
+async def geocode_boundary(
+    query: str, *, country_codes: str | None = "it"
+) -> dict[str, Any] | None:
+    """Geocoding + confine amministrativo (GeoJSON) via Nominatim.
+
+    Usa `polygon_geojson=1` per ottenere la geometria del confine. Ritorna
+    `{"name", "lat", "lon", "geojson"}` del primo risultato, o `None` se nessun
+    match. `geojson` è la geometria GeoJSON (Polygon/MultiPolygon) se disponibile,
+    altrimenti `None` (il chiamante può ripiegare sul centroide lat/lon).
+    """
+    params: dict[str, Any] = {
+        "q": query,
+        "format": "jsonv2",
+        "polygon_geojson": 1,
+        "limit": 1,
+        "accept-language": "it",
+    }
+    if country_codes:
+        params["countrycodes"] = country_codes
+    async with await _http() as client:
+        r = await client.get(f"{settings.NOMINATIM_URL}/search", params=params)
+        r.raise_for_status()
+        data = r.json()
+    if not data:
+        return None
+    top = data[0]
+    return {
+        "name": top.get("display_name"),
+        "lat": float(top["lat"]),
+        "lon": float(top["lon"]),
+        "geojson": top.get("geojson"),
+    }
+
+
 # ── Overpass ────────────────────────────────────────────────────────
 
 _CATEGORY_FILTER: dict[str, str] = {
