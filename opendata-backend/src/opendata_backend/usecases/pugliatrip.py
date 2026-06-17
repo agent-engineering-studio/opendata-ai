@@ -119,8 +119,14 @@ async def run_pugliatrip(
         fallback=fallback,
     )
 
+    center = (
+        {"lat": place_ref.lat, "lon": place_ref.lon}
+        if place_ref and place_ref.lat is not None and place_ref.lon is not None
+        else None
+    )
     return {
         "place": {"istat_code": istat_code, "name": name},
+        "center": center,
         "n_pois": len(pois),
         "n_stops": n_stops,
         "itinerary": itinerary,

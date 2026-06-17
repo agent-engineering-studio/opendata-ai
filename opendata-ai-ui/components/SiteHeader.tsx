@@ -23,6 +23,7 @@ const AUTH_NAV = [
   { href: "/scorecard", label: "Scorecard" },
   { href: "/valore", label: "Valore" },
   { href: "/territorio-report", label: "Report comune" },
+  { href: "/usecases", label: "Casi d'uso" },
 ] as const;
 
 function KeyIcon() {
