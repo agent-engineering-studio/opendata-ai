@@ -89,6 +89,25 @@ Esposto da: server `maturity-mcp` (tool) e router backend `/maturity`
 `config_data/maturity_weights.yaml`. Scorecard pilota verificata riproducibile per
 il Comune di Gioia del Colle (Beginner/0 su dati.gov.it: l'ente non vi espone dataset).
 
+## Valore & Territorio (Fase 2)
+Capability layer sopra il modello canonico, senza nuove migrazioni (riusa le tabelle di Fase 0).
+
+**Valore** (`opendata_core.value`, art. 14 Dir. UE 2019/1024):
+- `estimate_value(ds)` → 4 criteri (socio-economico, platea/PMI, proventi, combinabilità) + `combinability(ds)`.
+- Backend: `value_card` opzionale e additivo su `Resource` in `POST /datasets/search` (retro-compatibile);
+  `POST /value/narrative` (Sonnet, fallback offline); `GET /value/portfolio` (aggregati da `dataset_quality`
+  + reuse da `favorites`/`classifications`). Frontend `/valore`.
+
+**Territorio** (`opendata_core.territory` + `opendata_core.opencoesione`):
+- `resolve_place` (OSM) + `build_profile` (popolazione ISTAT iniettata + POI OSM) → popola i signal.
+- Investimenti: `OpenCoesioneClient` (REST live) → tabella `investment` (idempotente per place/sorgente).
+- `POST /territory/report` `{istat_code, temi[], anno_da, anno_a}`: profilo + investimenti + servizi/
+  accessibilità + segnali + idee (placeholder Fase 3) + gap di dato + narrazione Sonnet, persistito in
+  `territory_reports`; profilo cache-ato in `feature_store`. `GET /territory/{istat}/profile`. Frontend
+  `/territorio-report`. Distinto da `/programma` (fan-out conversazionale), che resta invariato.
+- Pilota verificato end-to-end: Gioia del Colle (072021) — popolazione 27.889, ~127 POI commerciali OSM,
+  50 progetti OpenCoesione (~€227M, top tema Trasporti/mobilità).
+
 ## Applicare le migrazioni
 ```bash
 cd opendata-backend
