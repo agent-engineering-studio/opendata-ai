@@ -47,7 +47,7 @@ def build_guida_opendata(
     `entity_name`: nome del comune/ente. `n_datasets`: dataset valutabili trovati.
     `total_on_portal`: totale sul portale (può essere >0 ma sotto soglia/qualità).
     """
-    name = (entity_name or "il Comune").strip()
+    name = (entity_name or "l'ente").strip()
     if n_datasets == 0:
         premessa = (
             f"Non sono stati trovati dataset aperti riconducibili a {name} sui cataloghi "

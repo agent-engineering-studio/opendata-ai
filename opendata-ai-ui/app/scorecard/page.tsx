@@ -115,8 +115,9 @@ function ScorecardInner() {
     <main id="main-content" className="container py-4">
       <h1 className="h3 mb-1">Scorecard di maturità open-data</h1>
       <p className="text-slate-500 mb-3" style={{ fontSize: 14 }}>
-        Valutazione ODM 2025 di un comune: qualità dei dati, policy, portale e impatto.
-        Per i comuni senza open data viene proposta una guida operativa per avviarli.
+        Valutazione ODM 2025 di un <strong>ente</strong> (comune, Regione, provincia,
+        agenzia…): qualità dei dati, policy, portale e impatto. Per gli enti senza
+        open data viene proposta una guida operativa per avviarli.
       </p>
 
       <form onSubmit={assess} className="d-flex flex-wrap gap-2 mb-4" style={{ maxWidth: 720 }}>
@@ -124,18 +125,18 @@ function ScorecardInner() {
           type="text"
           className="form-control"
           style={{ flex: 2, minWidth: 240 }}
-          placeholder="Comune (nome o organizzazione CKAN, es. Gioia del Colle)"
+          placeholder="Ente (nome o organizzazione CKAN, es. Regione Puglia, Comune di Bari)"
           value={entity}
           onChange={(ev) => setEntity(ev.target.value)}
         />
         <input
           type="text"
           className="form-control"
-          style={{ flex: 1, minWidth: 130, maxWidth: 200 }}
-          placeholder="Codice ISTAT (opz.)"
+          style={{ flex: 1, minWidth: 150, maxWidth: 220 }}
+          placeholder="ISTAT comune (opz.)"
           value={istat}
           onChange={(ev) => setIstat(ev.target.value)}
-          title="Codice ISTAT del comune: abilita il fallback sul portale open-data regionale"
+          title="Solo per i comuni: il codice ISTAT abilita il fallback sul portale open-data regionale. Lascia vuoto per Regioni/agenzie."
         />
         <button type="submit" className="btn btn-primary" disabled={stato.fase === "loading"}>
           {stato.fase === "loading" ? "Valutazione…" : "Valuta"}
