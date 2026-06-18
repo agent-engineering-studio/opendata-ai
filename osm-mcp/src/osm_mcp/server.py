@@ -373,6 +373,34 @@ async def osm_tourism_profile(
 
 
 @mcp.tool()
+async def osm_transport_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 3000,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+) -> str:
+    """Public-transport profile: count transit nodes (bus stops, bus stations,
+    railway stations, tram/subway) of an area to gauge how served by public
+    transport the comune is, and whether it has a railway node (mobility lens:
+    accessibility gap / car dependency). Counts via Overpass `out count`.
+
+    Pass (lat, lon, radius_m) for a point+radius, OR (south, west, north, east)
+    to profile a whole comune using its bbox (e.g. from geocoding).
+
+    Returns JSON: { scope, counts: { fermate_bus, autostazioni, stazioni_treno,
+    tram_metro }, totale_fermate, ha_stazione_treno, source_url, sources }. Cross
+    with population/area to judge under-served mobility — do not invent thresholds.
+    """
+    return await tools.transport_profile(
+        lat=lat, lon=lon, radius_m=radius_m,
+        south=south, west=west, north=north, east=east,
+    )
+
+
+@mcp.tool()
 async def osm_get_zone(osm_type: str, osm_id: str) -> str:
     """Fetch the full GeoJSON Feature of one zone by its OSM id.
 

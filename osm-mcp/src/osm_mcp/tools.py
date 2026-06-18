@@ -562,3 +562,44 @@ async def tourism_profile(
             "sources": _zone_sources(src),
         }
     )
+
+
+async def transport_profile(
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_m: int = 3000,
+    south: float | None = None,
+    west: float | None = None,
+    north: float | None = None,
+    east: float | None = None,
+) -> str:
+    """Profilo TRASPORTI/MOBILITÀ: conta i nodi del trasporto pubblico (fermate bus,
+    autostazioni, stazioni ferroviarie, tram/metro) in un raggio attorno a un punto
+    o in un bbox. Misura quanto il comune è servito dal TPL e se ha un nodo
+    ferroviario (lente Trasporti: criticità accessibilità / dipendenza dall'auto).
+
+    Passa (lat, lon, radius_m) OPPURE (south, west, north, east) — quest'ultimo per
+    profilare l'intero comune usando il suo bbox (es. da geocoding).
+    """
+    if None not in (south, west, north, east):
+        counts = await osm_client.overpass_transport_counts(bbox=(south, west, north, east))
+        clat, clon = (south + north) / 2, (west + east) / 2
+        scope: dict[str, Any] = {"bbox": [south, west, north, east]}
+    elif lat is not None and lon is not None:
+        counts = await osm_client.overpass_transport_counts(around=(lat, lon, radius_m))
+        clat, clon = lat, lon
+        scope = {"lat": lat, "lon": lon, "radius_m": radius_m}
+    else:
+        return _json({"error": "fornire (lat, lon[, radius_m]) oppure (south, west, north, east)"})
+    totale = counts.pop("totale", 0)
+    src = f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}"
+    return _json(
+        {
+            "scope": scope,
+            "counts": counts,
+            "totale_fermate": totale,
+            "ha_stazione_treno": counts.get("stazioni_treno", 0) > 0,
+            "source_url": src,
+            "sources": _zone_sources(src),
+        }
+    )

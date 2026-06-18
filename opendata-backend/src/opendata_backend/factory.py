@@ -664,6 +664,52 @@ class OrchestratorSession:
                            req.cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_trasporti(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora TRASPORTI con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("trasporti", req.cod_comune, req.comune_nome or ""),
+            lambda: OrchestratorSession._resolve_trasporti_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_trasporti_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora TRASPORTI/MOBILITÀ deterministica: densità OSM del trasporto pubblico
+        (fermate bus, autostazioni, stazioni ferroviarie, tram/metro). Misura il servizio
+        TPL e la presenza di un nodo ferroviario — criticità accessibilità/dipendenza auto.
+        Best-effort: se Nominatim/Overpass non rispondono la lente si salta. Solo
+        idee/completa. (GTFS/mobility_node resta complemento futuro: ETL non popolato.)
+        """
+        try:
+            from opendata_core.osm import client as osm_client
+
+            async def _work() -> dict[str, Any] | None:
+                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                if not hits:
+                    return None
+                bb = hits[0].get("boundingbox") or []
+                if len(bb) != 4:
+                    return None
+                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                counts = await osm_client.overpass_transport_counts(bbox=(s, w, n, e))
+                if not counts or counts.get("totale", 0) == 0:
+                    return None
+                clat, clon = (s + n) / 2, (w + e) / 2
+                return {
+                    "comune": req.cod_comune,
+                    "counts": counts,
+                    "ha_stazione_treno": counts.get("stazioni_treno", 0) > 0,
+                    "source_url": f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}",
+                }
+
+            return await asyncio.wait_for(_work(), timeout=40.0)
+        except Exception as exc:
+            _log_lens_skip("ancora trasporti OSM non risolta per %s",
+                           req.cod_comune, exc=exc)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -694,6 +740,7 @@ class OrchestratorSession:
         commercio = await self._resolve_commercio(req)
         turismo = await self._resolve_turismo(req)
         lavoro = await self._resolve_lavoro(req)
+        trasporti = await self._resolve_trasporti(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -706,8 +753,11 @@ class OrchestratorSession:
                 commercio_info=commercio,
                 turismo_info=turismo,
                 lavoro_info=lavoro,
+                trasporti_info=trasporti,
             )
-            task_text = build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro)
+            task_text = build_programma_task(
+                req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti
+            )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -858,6 +908,7 @@ class OrchestratorSession:
         commercio = await self._resolve_commercio(req)
         turismo = await self._resolve_turismo(req)
         lavoro = await self._resolve_lavoro(req)
+        trasporti = await self._resolve_trasporti(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -871,10 +922,11 @@ class OrchestratorSession:
                 commercio_info=commercio,
                 turismo_info=turismo,
                 lavoro_info=lavoro,
+                trasporti_info=trasporti,
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
-                build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro)
+                build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti)
             )
         outputs = events.get_outputs()
         if not outputs:

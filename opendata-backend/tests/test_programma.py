@@ -637,6 +637,63 @@ async def test_lavoro_info_injects_citable_census_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_trasporti_requires_local_anchor() -> None:
+    """trasporti (lente Trasporti): premessa = densità OSM public-transport (host in
+    _TRASPORTI_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    osm_url = "https://www.openstreetmap.org/#map=13/40.79800/16.92300"
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "40 fermate, 1 stazione"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("trasporti", [ev_osm]),  # ok (OSM)
+                _idea("trasporti", [ev_oc]),   # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("osm", "TPL.", [
+        {"name": "trasporti", "url": osm_url, "format": "JSON", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["trasporti"]
+
+
+@pytest.mark.asyncio
+async def test_trasporti_info_injects_citable_osm_anchor() -> None:
+    """L'ancora Trasporti deterministica (OSM) iniettata dal backend è citabile:
+    una proposta trasporti che la cita sopravvive senza risorsa OSM dagli specialisti."""
+    osm_url = "https://www.openstreetmap.org/#map=13/40.79800/16.92300"
+    trasporti_info = {
+        "comune": "110002",
+        "counts": {"fermate_bus": 40, "autostazioni": 2, "stazioni_treno": 1, "tram_metro": 0},
+        "ha_stazione_treno": True,
+        "source_url": osm_url,
+    }
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "40 fermate bus, 1 stazione"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("trasporti", [ev_osm])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, trasporti_info=trasporti_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["trasporti"]
+    assert any(osm_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore
