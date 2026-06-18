@@ -44,8 +44,12 @@ services:
   # postgis/postgis:16-3.4 = stesso major (16) di postgres:16-alpine → riusa il
   # volume esistente. PostGIS è disponibile nell'immagine; l'estensione viene
   # creata dalla migrazione (CREATE EXTENSION postgis, solo su dialetto postgresql).
+  # NB: `postgis/postgis` è SOLO amd64 → su Mac Apple Silicon gira emulato (warning
+  # "platform does not match"). In locale puoi impostare POSTGRES_IMAGE con la build
+  # multi-arch drop-in (arm64): POSTGRES_IMAGE=imresamu/postgis:16-3.4 (stessi sorgenti
+  # PostGIS, stesso major/PostGIS → riusa il volume). Default invariato per prod/CI.
   postgres:
-    image: postgis/postgis:16-3.4
+    image: ${POSTGRES_IMAGE:-postgis/postgis:16-3.4}
     container_name: opendata-ai-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-opendata}
