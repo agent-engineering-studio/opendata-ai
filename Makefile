@@ -10,11 +10,12 @@ COMPOSE := docker compose --env-file $(ENV_FILE)
 PROFILES ?=
 _PROFILE_FLAGS := $(foreach p,$(PROFILES),--profile $(p))
 
-# Overpass self-hosted incluso nel `make up` di default. Spegnilo con
-# `make up OVERPASS=0` (resta avviabile a parte con `make overpass-up`).
-# Pesante: ~25-50GB di disco e init ~1-2h alla PRIMA accensione (download .pbf
-# Italia + build del DB). Vedi infra/overpass/README.md.
-OVERPASS ?= 1
+# Overpass self-hosted: OPT-IN, NON avviato di default. Le lenti OSM usano il mirror
+# remoto (OVERPASS_URL, default FR/CH) che funziona ovunque. Accendi il self-hosted con
+# `make up OVERPASS=1` o, separatamente, `make overpass-up`.
+# Pesante: ~25-50GB di disco e init ~1-2h alla PRIMA accensione (download .pbf Italia +
+# build del DB) e richiede accesso di rete a Geofabrik. Vedi infra/overpass/README.md.
+OVERPASS ?= 0
 ifeq ($(OVERPASS),1)
 _OVERPASS_PROFILE := --profile overpass
 _OVERPASS_SVC := overpass
