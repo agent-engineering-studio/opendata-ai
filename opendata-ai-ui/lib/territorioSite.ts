@@ -14,6 +14,55 @@ type Extra = { scorecard?: Scorecard; report?: Report; portfolio?: Portfolio };
 const BI_CSS = "https://cdn.jsdelivr.net/npm/bootstrap-italia@2.18.1/dist/css/bootstrap-italia.min.css";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const HTMLTOIMAGE_JS = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js";
+
+// Runtime di condivisione delle card: immagine (Web Share API o download), link,
+// social (X/Facebook/LinkedIn/WhatsApp), embed <iframe> e modalità ?embed=ID che
+// isola la singola card per l'incorporamento.
+const SHARE_JS = `
+(function(){
+  function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},250);},1800);}
+  function baseUrl(){return location.href.split('#')[0].split('?')[0];}
+  function pageUrl(id){return baseUrl()+'#'+id;}
+  function embedCode(id){return '<iframe src="'+baseUrl()+'?embed='+id+'#'+id+'" width="100%" height="640" style="border:1px solid #e3e4e6;border-radius:12px" loading="lazy"></iframe>';}
+  async function copy(text,msg){try{await navigator.clipboard.writeText(text);toast(msg);}catch(e){window.prompt('Copia il testo:',text);}}
+  async function shareImage(el,title){
+    if(typeof htmlToImage==='undefined'){toast('Immagine non disponibile (offline)');return;}
+    try{
+      var dataUrl=await htmlToImage.toPng(el,{backgroundColor:'#ffffff',pixelRatio:2,filter:function(n){return !(n.classList&&n.classList.contains('share'));}});
+      var blob=await (await fetch(dataUrl)).blob();
+      var file=new File([blob],'opendata-ai.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:title});}
+      else{var a=document.createElement('a');a.href=dataUrl;a.download='opendata-ai.png';a.click();toast('Immagine scaricata');}
+    }catch(e){toast('Impossibile generare l\\'immagine');}
+  }
+  document.addEventListener('click',function(ev){
+    var btn=ev.target.closest&&ev.target.closest('[data-act]');if(!btn)return;
+    var bar=btn.closest('[data-share]');if(!bar)return;
+    var id=bar.getAttribute('data-share');var title=bar.getAttribute('data-title')||document.title;
+    var el=document.getElementById(id);var url=pageUrl(id);var act=btn.getAttribute('data-act');var text=title+' — '+url;
+    if(act==='img'){shareImage(el,title);}
+    else if(act==='link'){if(navigator.share){navigator.share({title:title,url:url}).catch(function(){});}else{copy(url,'Link copiato negli appunti');}}
+    else if(act==='embed'){copy(embedCode(id),'Codice embed copiato negli appunti');}
+    else if(act==='x'){window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(title)+'&url='+encodeURIComponent(url),'_blank','noopener');}
+    else if(act==='fb'){window.open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url),'_blank','noopener');}
+    else if(act==='li'){window.open('https://www.linkedin.com/sharing/share-offsite/?url='+encodeURIComponent(url),'_blank','noopener');}
+    else if(act==='wa'){window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank','noopener');}
+  });
+  try{
+    var emb=new URLSearchParams(location.search).get('embed');
+    if(emb){
+      document.body.classList.add('embed');
+      var target=document.getElementById(emb);
+      if(target){
+        var sec=target.closest('section');
+        document.querySelectorAll('section').forEach(function(s){if(s!==sec)s.classList.add('hidden');});
+        if(target.classList.contains('proposal')&&sec){sec.querySelectorAll('.proposal').forEach(function(a){if(a!==target)a.classList.add('hidden');});}
+      }
+    }
+  }catch(e){}
+})();
+`;
 
 const SWOT_LABEL: Record<string, string> = {
   forze: "Forze", debolezze: "Debolezze", opportunita: "Opportunità", minacce: "Minacce",
@@ -68,7 +117,22 @@ function mdToHtml(src: string): string {
   return out.join("\n");
 }
 
-function proposalHtml(p: Proposta): string {
+/** Barra "Condividi" per una card: immagine, link/social, copia link, embed iframe. */
+function shareBar(id: string, title: string): string {
+  const t = esc(title);
+  return `<div class="share" data-share="${id}" data-title="${t}">
+    <span class="share-lbl">Condividi:</span>
+    <button type="button" data-act="img" title="Salva/condividi come immagine">🖼️ Immagine</button>
+    <button type="button" data-act="x" title="Condividi su X">𝕏</button>
+    <button type="button" data-act="fb" title="Condividi su Facebook">f</button>
+    <button type="button" data-act="li" title="Condividi su LinkedIn">in</button>
+    <button type="button" data-act="wa" title="Condividi su WhatsApp">WhatsApp</button>
+    <button type="button" data-act="link" title="Copia il link / condividi">🔗 Link</button>
+    <button type="button" data-act="embed" title="Copia il codice per incorporare la card">&lt;/&gt; Embed</button>
+  </div>`;
+}
+
+function proposalHtml(p: Proposta, id: string): string {
   const ev = (p.evidenze ?? [])
     .map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.dettaglio || e.url)}</a> <span class="muted">(${esc(e.fonte)})</span></li>`)
     .join("");
@@ -76,10 +140,11 @@ function proposalHtml(p: Proposta): string {
     ? `<p class="fin"><strong>Finanziamento:</strong> ${esc(p.finanziamento.linea)} — <a href="${esc(p.finanziamento.fonte_url)}" target="_blank" rel="noopener">fonte</a></p>`
     : "";
   const liv = p.fattibilita?.livello ? `<span class="chip">${esc(p.fattibilita.livello)}</span>` : "";
-  return `<article class="proposal">
+  return `<article class="proposal" id="${id}">
     <h4>${esc(p.titolo)} ${liv}</h4>
     <p>${esc(p.descrizione)}</p>${fin}
     ${ev ? `<details><summary>Evidenze (${(p.evidenze ?? []).length})</summary><ul class="ev">${ev}</ul></details>` : ""}
+    ${shareBar(id, p.titolo)}
   </article>`;
 }
 
@@ -204,6 +269,21 @@ details summary{cursor:pointer;color:var(--p);font-size:13px}
 .lente-block{margin:0 0 18px}.lente-block h3{font-size:1.05rem;color:var(--p9);margin:0 0 8px}
 footer{background:var(--p9);color:#fff;padding:28px 0;font-size:13px}
 footer a{color:#cfe3ff}
+.sec-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.sec-head h2{margin:0}
+.share{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.share-lbl{font-size:12px;color:var(--mut);margin-right:2px}
+.share button{border:1px solid var(--bd);background:#fff;color:var(--ink);border-radius:8px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.5}
+.share button:hover{background:#eef3fb;border-color:var(--p);color:var(--p)}
+.proposal .share{margin-top:12px;padding-top:10px;border-top:1px dashed var(--bd)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--p9);color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+.hidden{display:none!important}
+body.embed .hero,body.embed nav.toc,body.embed footer,body.embed .note{display:none!important}
+body.embed{background:#fff}
+body.embed section{border:none;padding:18px 0}
+body.embed .share{display:none}
+@media print{.share{display:none}}
 @media(max-width:720px){.swot-grid{grid-template-columns:1fr}.hero h1{font-size:1.5rem}.fonti{columns:1}}
 `;
 
@@ -216,24 +296,28 @@ export function buildSiteHtml(scheda: ProgrammaResponse, extra: Extra, confine?:
 
   const nav: [string, string][] = [];
   const sezioni: string[] = [];
-  const add = (id: string, label: string, inner: string) => {
+  const add = (id: string, label: string, inner: string, shareable = true) => {
     if (!inner) return;
     nav.push([id, label]);
-    sezioni.push(`<section id="${id}"><div class="wrap"><h2>${label}</h2>${inner}</div></section>`);
+    const head = `<div class="sec-head"><h2>${label}</h2>${shareable ? shareBar(id, `${label} · ${scheda.comune}`) : ""}</div>`;
+    sezioni.push(`<section id="${id}"><div class="wrap">${head}${inner}</div></section>`);
   };
+  // Id stabili e unici per ogni proposta/idea/spunto (servono allo share per-card).
+  let pn = 0;
+  const propBlock = (list: Proposta[]) => list.map((p) => proposalHtml(p, `card-${pn++}`)).join("");
 
-  if (confine) add("mappa", "Il territorio", `<div id="map" role="img" aria-label="Mappa del territorio di ${esc(scheda.comune)}"></div>`);
+  if (confine) add("mappa", "Il territorio", `<div id="map" role="img" aria-label="Mappa del territorio di ${esc(scheda.comune)}"></div>`, false);
   if (scheda.sintesi?.trim()) add("sintesi", "Quadro di sintesi", `<div class="card">${mdToHtml(scheda.sintesi)}</div>`);
   if (Object.values(scheda.swot ?? {}).some((v) => (v?.length ?? 0) > 0)) add("swot", "Analisi SWOT", swotHtml(scheda));
-  if (proposte.length) add("proposte", "Proposte", proposte.map(proposalHtml).join(""));
-  if (idee.length) add("idee", "Idee per il territorio", `${scheda.idee_sintesi ? `<div class="card">${mdToHtml(scheda.idee_sintesi)}</div>` : ""}${idee.map(proposalHtml).join("")}`);
+  if (proposte.length) add("proposte", "Proposte", propBlock(proposte));
+  if (idee.length) add("idee", "Idee per il territorio", `${scheda.idee_sintesi ? `<div class="card">${mdToHtml(scheda.idee_sintesi)}</div>` : ""}${propBlock(idee)}`);
   if (marketing.length)
     add("marketing", "Marketing territoriale",
-      lenti.map((l) => `<div class="lente-block"><h3>${LENTE_LABEL[l] ?? l}</h3>${marketing.filter((p) => ((p.lente as string) || "altro") === l).map(proposalHtml).join("")}</div>`).join(""));
+      lenti.map((l) => `<div class="lente-block"><h3>${LENTE_LABEL[l] ?? l}</h3>${propBlock(marketing.filter((p) => ((p.lente as string) || "altro") === l))}</div>`).join(""));
   add("maturita", "Maturità open data", maturitaHtml(extra.scorecard));
   add("valore", "Valore del patrimonio", valoreHtml(extra.portfolio));
   add("profilo", "Profilo e investimenti", reportHtml(extra.report));
-  add("fonti", "Fonti", fontiHtml(scheda.citazioni));
+  add("fonti", "Fonti", fontiHtml(scheda.citazioni), false);
 
   const mapScript = confine
     ? `<script src="${LEAFLET_JS}"></script>
@@ -268,6 +352,8 @@ ${confine ? `<link rel="stylesheet" href="${LEAFLET_CSS}">` : ""}
   <p style="margin:8px 0 0;opacity:.8">Generato da OpenData AI${scheda.generato_il ? ` · ${esc(scheda.generato_il)}` : ""}.</p>
 </div></footer>
 ${mapScript}
+<script src="${HTMLTOIMAGE_JS}" crossorigin="anonymous"></script>
+<script>${SHARE_JS}</script>
 </body></html>`;
 }
 
@@ -283,7 +369,11 @@ export async function downloadSiteZip(
   zip.file(
     "LEGGIMI.txt",
     "Sito statico dell'analisi del territorio generato da OpenData AI.\n" +
-      "Apri index.html in un browser (serve una connessione per mappa e stili via CDN).\n" +
+      "Apri index.html in un browser (serve una connessione per mappa e stili via CDN).\n\n" +
+      "Condivisione: ogni card ha una barra 'Condividi' (immagine, X/Facebook/LinkedIn/\n" +
+      "WhatsApp, link, embed iframe). L'immagine funziona anche in locale; i link e\n" +
+      "l'embed puntano all'URL della pagina, quindi per condividere su social pubblica\n" +
+      "prima il sito su un host (es. GitHub Pages, Netlify) e apri quell'URL.\n\n" +
       "A soli fini costruttivi / bene comune — non materiale elettorale.\n",
   );
   const blob = await zip.generateAsync({ type: "blob" });
