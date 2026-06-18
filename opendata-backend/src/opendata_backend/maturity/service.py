@@ -46,13 +46,24 @@ async def _resolve_harvest(
     (HarvestResult, base_url risolto). Se nessuno trova dati, ritorna il primo
     (vuoto) → l'assessment procede a "Dato insufficiente" + guida.
     """
+    import re
+
+    def _slug(s: str) -> str:
+        # "Regione Puglia" → "regione-puglia"; "Comune di Bari" → "comune-di-bari".
+        return re.sub(r"[^a-z0-9]+", "-", s.strip().lower()).strip("-")
+
     # Candidati in ordine: (base_url, query). None = dati.gov.it (default CkanClient).
-    candidates: list[tuple[str | None, str]] = [(base_url, entity)]
-    if comune_nome and comune_nome.strip().lower() != entity.strip().lower():
-        candidates.append((base_url, comune_nome.strip()))
+    # Includiamo anche la forma SLUG del nome (org CKAN usa lo slug, non il nome con
+    # spazi) così l'utente può digitare il nome esteso (es. "Regione Puglia").
+    queries: list[str] = []
+    for q in (entity, comune_nome or "", _slug(entity), _slug(comune_nome or "")):
+        q = q.strip()
+        if q and q not in queries:
+            queries.append(q)
+    candidates: list[tuple[str | None, str]] = [(base_url, q) for q in queries]
     reg = _regional_ckan(istat_code)
     if reg:
-        candidates.append((reg, comune_nome.strip() if comune_nome else entity))
+        candidates += [(reg, comune_nome.strip() if comune_nome else entity), (reg, _slug(comune_nome or entity))]
 
     first: HarvestResult | None = None
     first_base: str | None = base_url
