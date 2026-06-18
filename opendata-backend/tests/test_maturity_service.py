@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from opendata_backend.db.models import Base
 from opendata_backend.db.territory_models import DatasetQuality, MaturityAssessment
-from opendata_backend.maturity.service import build_ranking, build_scorecard, run_assessment
+from opendata_backend.maturity.service import (
+    _regional_ckan,
+    build_ranking,
+    build_scorecard,
+    run_assessment,
+)
 
 _ORG = {"id": "org-gdc", "name": "comune-di-gioia-del-colle", "title": "Comune di Gioia del Colle"}
 
@@ -125,3 +130,24 @@ async def test_trend_grows_and_ranking(session: AsyncSession, httpx_mock: HTTPXM
 
 async def test_scorecard_404_when_missing(session: AsyncSession) -> None:
     assert await build_scorecard(session, 999) is None
+
+
+async def test_insufficient_data_yields_guida(
+    session: AsyncSession, httpx_mock: HTTPXMock
+) -> None:
+    """Comune con pochi dataset (< soglia) → insufficient_data + guida operativa."""
+    _add_harvest_responses(httpx_mock, [_pkg(0, good=True)])  # 1 solo dataset < 3
+    sc = await run_assessment(
+        session, entity="comune-di-gioia-del-colle", base_url=None,
+        settings=_settings(), force=True, comune_nome="Gioia del Colle",
+    )
+    assert sc["insufficient_data"] is True
+    assert sc["guida"] is not None
+    assert sc["guida"]["passi"] and "titolo" in sc["guida"]
+    assert "nota" in sc["guida"]
+
+
+def test_regional_ckan_mapping() -> None:
+    assert "puglia" in (_regional_ckan("072021") or "").lower()  # Bari → Puglia
+    assert _regional_ckan("001059") is None  # Torino → non mappato
+    assert _regional_ckan(None) is None

@@ -27,8 +27,12 @@ class AssessIn(BaseModel):
     base_url: str | None = None
     force: bool = False
     # Collega l'ente a un comune (codice ISTAT): i gap di dato del territorio
-    # riducono l'Impact (anello valore⇄maturità).
+    # riducono l'Impact (anello valore⇄maturità) E abilitano il fallback sul
+    # portale CKAN regionale quando dati.gov.it non ha i dataset del comune.
     istat_code: str | None = None
+    # Nome del comune: usato per la risoluzione del portale (ricerca per nome /
+    # portale regionale) oltre allo slug `entity`.
+    comune_nome: str | None = None
 
 
 @router.post("/maturity/assess")
@@ -44,7 +48,7 @@ async def assess(
         raise HTTPException(status_code=422, detail="campo 'entity' obbligatorio")
     return await run_assessment(
         session, entity=entity, base_url=body.base_url, settings=settings,
-        force=body.force, istat_code=body.istat_code,
+        force=body.force, istat_code=body.istat_code, comune_nome=body.comune_nome,
     )
 
 

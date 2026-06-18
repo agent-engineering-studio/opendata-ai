@@ -52,4 +52,10 @@ def civic_kpi() -> dict[str, Any]:
     return _load_yaml("civic_kpi.yaml")
 
 
-__all__ = ["maturity_weights", "value_taxonomy", "civic_kpi"]
+@lru_cache(maxsize=None)
+def portali_regionali() -> dict[str, Any]:
+    """Registro portali CKAN regionali per il fallback maturità (portali_regionali.yaml)."""
+    return _load_yaml("portali_regionali.yaml")
+
+
+__all__ = ["maturity_weights", "value_taxonomy", "civic_kpi", "portali_regionali"]
