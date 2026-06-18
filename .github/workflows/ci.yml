@@ -17,7 +17,7 @@ jobs:
       matrix:
         package: [ opendata_core, ckan-mcp-server, istat-mcp-server, opencoesione-mcp-server, ispra-mcp-server, osm-mcp, maturity-mcp-server, opendata-backend ]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
@@ -57,7 +57,7 @@ jobs:
           - { name: maturity-mcp-server, dockerfile: maturity-mcp-server/Dockerfile }
           - { name: opendata-backend, dockerfile: opendata-backend/Dockerfile }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - name: Build ${{ matrix.service.name }}
         uses: docker/build-push-action@v6
