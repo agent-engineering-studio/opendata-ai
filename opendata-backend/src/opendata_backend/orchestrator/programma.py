@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-18a"
+PROMPT_VERSION = "2026-06-18b"
 
 
 class ProgrammaResponse(BaseModel):
@@ -209,6 +209,7 @@ def build_programma_task(
     zone_commerciali: list[dict[str, Any]] | None = None,
     commercio_info: dict[str, Any] | None = None,
     turismo_info: dict[str, Any] | None = None,
+    lavoro_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -367,6 +368,23 @@ def build_programma_task(
                 "queste fonti (OSM o ISTAT)."
             )
             parts.append("\n".join(righe_tur))
+        if lavoro_info:
+            st = lavoro_info.get("settori") or {}
+            parts.append(
+                "LENTE LAVORO/COMPETENZE — DATI ISTAT 8milaCensus (CENSIMENTO 2011, "
+                "dato STRUTTURALE): tasso di occupazione="
+                f"{lavoro_info.get('tasso_occupazione')}%, disoccupazione="
+                f"{lavoro_info.get('tasso_disoccupazione')}%, disoccupazione GIOVANILE="
+                f"{lavoro_info.get('tasso_disoccupazione_giovanile')}%, NEET 15-29="
+                f"{lavoro_info.get('neet_15_29')}%, attività={lavoro_info.get('tasso_attivita')}%. "
+                f"Struttura occupazione per settore: agricolo={st.get('agricolo')}%, "
+                f"industriale={st.get('industriale')}%, terziario={st.get('terziario_extracommercio')}%, "
+                f"commercio={st.get('commercio')}%. "
+                f"FONTE DA CITARE VERBATIM: {lavoro_info.get('source_url')} . "
+                "ETICHETTA SEMPRE il dato come 'Censimento 2011' (fotografia strutturale, "
+                "non congiunturale). Un'idea 'lavoro' deve ancorarsi a questi numeri "
+                "(specie disoccupazione giovanile/NEET) e citare questa fonte."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -515,6 +533,7 @@ def build_programma_aggregator(
     instructions_hint: str | None = None,
     commercio_info: dict[str, Any] | None = None,
     turismo_info: dict[str, Any] | None = None,
+    lavoro_info: dict[str, Any] | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -648,6 +667,34 @@ def build_programma_aggregator(
                     "disponibile) e citare una di queste fonti."
                 )
                 sections.append(_bundle_section("turismo", narrative, tur_res))
+
+        # Ancora LAVORO/COMPETENZE deterministica (8milaCensus, censimento 2011):
+        # Resource citabile (host ottomilacensus.istat.it ⊃ istat.it → _LAVORO_HOSTS)
+        # + sezione evidenza, come commercio/turismo. Dato 2011 etichettato.
+        if lavoro_info and lavoro_info.get("source_url"):
+            src = lavoro_info["source_url"].strip()
+            st = lavoro_info.get("settori") or {}
+            lav_res = Resource(
+                name="ISTAT 8milaCensus — Indicatori del lavoro del comune (Censimento 2011)",
+                url=src,
+                format="CSV",
+                source="istat",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(lav_res)
+            narrative = (
+                "Indicatori occupazionali del comune (ISTAT 8milaCensus, Censimento 2011 — "
+                "dato strutturale). Tasso di occupazione: "
+                f"{lavoro_info.get('tasso_occupazione')}%, disoccupazione: "
+                f"{lavoro_info.get('tasso_disoccupazione')}%, disoccupazione giovanile: "
+                f"{lavoro_info.get('tasso_disoccupazione_giovanile')}%, NEET 15-29: "
+                f"{lavoro_info.get('neet_15_29')}%, attività: {lavoro_info.get('tasso_attivita')}%. "
+                f"Occupazione per settore — agricolo: {st.get('agricolo')}%, industriale: "
+                f"{st.get('industriale')}%, terziario: {st.get('terziario_extracommercio')}%, "
+                f"commercio: {st.get('commercio')}%. Un'idea 'lavoro' ancori su questi numeri "
+                "(specie disoccupazione giovanile/NEET) e citi questa fonte; etichetta 'Censimento 2011'."
+            )
+            sections.append(_bundle_section("lavoro", narrative, [lav_res]))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

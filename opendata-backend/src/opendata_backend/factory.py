@@ -637,6 +637,33 @@ class OrchestratorSession:
             }
         return out
 
+    @staticmethod
+    async def _resolve_lavoro(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora LAVORO con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("lavoro", req.cod_comune),
+            lambda: OrchestratorSession._resolve_lavoro_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_lavoro_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora LAVORO/COMPETENZE deterministica: indicatori occupazionali comunali
+        da ISTAT 8milaCensus (censimento 2011). Disoccupazione (anche giovanile), NEET,
+        struttura settoriale/competenze. Dato STRUTTURALE 2011 (l'occupazione residente
+        comunale non esiste via SDMX). Best-effort: 8milaCensus giù → lente saltata.
+        """
+        try:
+            from opendata_core.census import fetch_lavoro_comune
+
+            res = await asyncio.wait_for(fetch_lavoro_comune(req.cod_comune), timeout=40.0)
+            return res if res and res.get("trovato") else None
+        except Exception as exc:
+            _log_lens_skip("ancora lavoro 8milaCensus non risolta per %s",
+                           req.cod_comune, exc=exc)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -666,6 +693,7 @@ class OrchestratorSession:
         zone_comm = await self._resolve_zone_commerciali(req)
         commercio = await self._resolve_commercio(req)
         turismo = await self._resolve_turismo(req)
+        lavoro = await self._resolve_lavoro(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -677,8 +705,9 @@ class OrchestratorSession:
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
                 commercio_info=commercio,
                 turismo_info=turismo,
+                lavoro_info=lavoro,
             )
-            task_text = build_programma_task(req, zona_info, zone_comm, commercio, turismo)
+            task_text = build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro)
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -828,6 +857,7 @@ class OrchestratorSession:
         zone_comm = await self._resolve_zone_commerciali(req)
         commercio = await self._resolve_commercio(req)
         turismo = await self._resolve_turismo(req)
+        lavoro = await self._resolve_lavoro(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -840,10 +870,11 @@ class OrchestratorSession:
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
                 commercio_info=commercio,
                 turismo_info=turismo,
+                lavoro_info=lavoro,
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
-                build_programma_task(req, zona_info, zone_comm, commercio, turismo)
+                build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro)
             )
         outputs = events.get_outputs()
         if not outputs:
