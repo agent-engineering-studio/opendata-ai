@@ -47,24 +47,39 @@ function esc(s: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Normalizza un URL di evidenza per i cittadini: scarta i link inutili e converte
- * quelli dell'API in pagine umane. Ritorna l'URL da mostrare o null (nessun link). */
-function cleanUrl(raw: string | undefined | null): string | null {
+/* Fonti note → pagina-portale riconoscibile (mai un file/API in profondità). */
+const PORTALS: { suffix: string; url: string; name: string }[] = [
+  { suffix: "opencoesione.gov.it", url: "https://opencoesione.gov.it/", name: "OpenCoesione" },
+  { suffix: "isprambiente.it", url: "https://idrogeo.isprambiente.it/", name: "ISPRA IdroGEO" },
+  { suffix: "openstreetmap.org", url: "https://www.openstreetmap.org/", name: "OpenStreetMap" },
+  { suffix: "istat.it", url: "https://www.istat.it/", name: "ISTAT" },
+  { suffix: "dati.gov.it", url: "https://www.dati.gov.it/", name: "dati.gov.it" },
+  { suffix: "ec.europa.eu", url: "https://ec.europa.eu/eurostat", name: "Eurostat" },
+  { suffix: "oecd.org", url: "https://data.oecd.org/", name: "OCSE" },
+];
+const FILE_RE = /\.(csv|json|xml|pbf|zip|xlsx?|geojson|tsv)(\?|#|$)/i;
+
+/** Risolve una fonte CHIARA per i cittadini: niente link a file/API in profondità,
+ * sempre una pagina-fonte riconoscibile col suo NOME. Ritorna {href, name} o null. */
+function resolveSource(raw: string | undefined | null): { href: string; name: string } | null {
   if (!raw) return null;
   let u: URL;
-  try { u = new URL(raw.replace(/&amp;/g, "&")); } catch { return null; }
+  try { u = new URL(String(raw).replace(/&amp;/g, "&")); } catch { return null; }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
   const host = u.hostname.replace(/^www\./, "");
-  // OpenStreetMap: i link puntano all'intero comune, non al dato → niente link.
-  if (host.endsWith("openstreetmap.org")) return null;
-  // OpenCoesione: mai l'URL dell'API JSON. Al massimo la pagina del singolo progetto.
+  // OpenCoesione: la pagina del SINGOLO progetto è chiara e utile → la teniamo (mai il JSON).
   if (host.endsWith("opencoesione.gov.it")) {
-    const m = u.pathname.match(/\/it\/api\/progetti\/([^/]+)\/?$/i);
-    if (m) return `https://opencoesione.gov.it/it/progetti/${m[1]}/`;
-    if (u.pathname.includes("/api/")) return null; // liste/json aggregati: incomprensibili
-    return u.href;
+    const m = u.pathname.match(/\/progetti\/([^/.]+)\/?$/i);
+    if (m) return { href: `https://opencoesione.gov.it/it/progetti/${m[1].toLowerCase()}/`, name: "OpenCoesione — progetto" };
+    return { href: "https://opencoesione.gov.it/", name: "OpenCoesione" };
   }
-  return u.href;
+  const p = PORTALS.find((x) => host === x.suffix || host.endsWith("." + x.suffix));
+  if (p) return { href: p.url, name: p.name };
+  // Fonte sconosciuta: se è un file o un'API, niente profondità → l'origine del sito.
+  if (FILE_RE.test(u.pathname) || u.pathname.includes("/api/") || u.search) {
+    return { href: u.origin + "/", name: host };
+  }
+  return { href: u.href, name: host };
 }
 
 /** Markdown minimale → HTML (titoli, grassetto/corsivo, link, liste, paragrafi). */
@@ -74,8 +89,8 @@ function mdToHtml(src: string): string {
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_m, text: string, url: string) => {
-        const c = cleanUrl(url);
-        return c ? `<a href="${c}" target="_blank" rel="noopener">${text}</a>` : text;
+        const s = resolveSource(url);
+        return s ? `<a href="${s.href}" target="_blank" rel="noopener">${text}</a>` : text;
       });
   const lines = src.replace(/\r/g, "").split("\n");
   const out: string[] = [];
@@ -115,17 +130,17 @@ function feasChip(p: Proposta): string {
 }
 
 function evidenzeHtml(p: Proposta): string {
-  // Mostriamo SEMPRE il dato (dettaglio); il link solo se porta a una pagina utile.
+  // Mostriamo SEMPRE il dato (dettaglio) + la FONTE chiara (portale/pagina, mai un file).
   const rows = (p.evidenze ?? [])
-    .map((e) => ({ det: e.dettaglio?.trim() || "", fonte: e.fonte, href: cleanUrl(e.url) }))
-    .filter((r) => r.det || r.href);
+    .map((e) => ({ det: e.dettaglio?.trim() || "", src: resolveSource(e.url) }))
+    .filter((r) => r.det || r.src);
   if (!rows.length) return "";
   const items = rows
     .map((r) => {
       const det = esc(r.det || "Dato");
-      const link = r.href
-        ? ` <a href="${esc(r.href)}" target="_blank" rel="noopener">${esc(r.fonte || "vedi fonte")} ↗</a>`
-        : r.fonte ? ` <span class="muted">(${esc(r.fonte)})</span>` : "";
+      const link = r.src
+        ? ` <span class="ev-src">Fonte: <a href="${esc(r.src.href)}" target="_blank" rel="noopener">${esc(r.src.name)} ↗</a></span>`
+        : "";
       return `<li><span class="ev-d">${det}</span>${link}</li>`;
     })
     .join("");
@@ -133,9 +148,9 @@ function evidenzeHtml(p: Proposta): string {
 }
 
 function proposalHtml(p: Proposta, id: string, variant: "proposta" | "idea" | "marketing" = "proposta"): string {
-  const finUrl = p.finanziamento ? cleanUrl(p.finanziamento.fonte_url) : null;
+  const finSrc = p.finanziamento ? resolveSource(p.finanziamento.fonte_url) : null;
   const fin = p.finanziamento
-    ? `<p class="fin"><strong>💶 Finanziamento:</strong> ${esc(p.finanziamento.linea)}${finUrl ? ` — <a href="${esc(finUrl)}" target="_blank" rel="noopener">fonte</a>` : ""}</p>`
+    ? `<p class="fin"><strong>💶 Finanziamento:</strong> ${esc(p.finanziamento.linea)}${finSrc ? ` — <a href="${esc(finSrc.href)}" target="_blank" rel="noopener">${esc(finSrc.name)} ↗</a>` : ""}</p>`
     : "";
   const tag = variant === "idea" ? `<span class="card-tag idea-tag">💡 Idea</span>`
     : variant === "marketing" ? `<span class="card-tag mkt-tag">📣 Spunto</span>` : "";
@@ -230,15 +245,16 @@ function reportHtml(r?: Report): string {
 }
 
 function fontiHtml(citazioni: Resource[]): string {
+  // Una voce per FONTE chiara (portale), deduplicata: niente elenco di file/URL profondi.
+  const seen = new Set<string>();
   const items = (citazioni ?? [])
-    .map((c) => {
-      const href = cleanUrl(c.url);
-      const name = esc(c.name || href || "Fonte");
-      const src = c.source ? ` <span class="muted">(${esc(c.source)})</span>` : "";
-      return href
-        ? `<li><a href="${esc(href)}" target="_blank" rel="noopener">${name}</a>${src}</li>`
-        : `<li>${name}${src}</li>`;
+    .map((c) => resolveSource(c.url))
+    .filter((s): s is { href: string; name: string } => {
+      if (!s || seen.has(s.href)) return false;
+      seen.add(s.href);
+      return true;
     })
+    .map((s) => `<li><a href="${esc(s.href)}" target="_blank" rel="noopener">${esc(s.name)} ↗</a></li>`)
     .join("");
   return items ? `<ul class="fonti">${items}</ul>` : "<p class='muted'>—</p>";
 }
@@ -291,6 +307,7 @@ section h2::before{content:"";width:6px;height:24px;border-radius:4px;background
 details.ev{margin-top:8px}details.ev summary{cursor:pointer;color:var(--p7);font-size:13px;font-weight:600}
 details.ev ul{font-size:13px;margin:8px 0 0;padding-left:18px}
 .ev-d{color:var(--ink)}
+.ev-src{color:var(--mut)}.ev-src a{font-weight:600}
 .note-feas{font-size:13px;color:var(--mut);font-style:italic;margin:6px 0 0}
 .kpis{display:flex;flex-wrap:wrap;gap:14px;margin:12px 0}
 .kpi{flex:1;min-width:130px;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(16,42,76,.05)}
