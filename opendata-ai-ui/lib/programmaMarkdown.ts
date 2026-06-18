@@ -54,11 +54,11 @@ const DISCLAIMER_ADDENDUM =
   "dell'amministrazione per tempi burocratici; l'ingestione dei documenti nella " +
   "knowledge base aggiorna la conoscenza e sollecita l'allineamento delle fonti.";
 
-const FATTIBILITA_LABEL: Record<LivelloFattibilita, string> = {
+// "da_verificare" non è informativa → non si stampa (vale il disclaimer generale).
+const FATTIBILITA_LABEL: Partial<Record<LivelloFattibilita, string>> = {
   alta: "Fattibilità alta",
   media: "Fattibilità media",
   bassa: "Fattibilità bassa",
-  da_verificare: "Da verificare",
 };
 
 function ratioPct(ratio: number | null | undefined): string | null {
@@ -85,9 +85,9 @@ function propostaBlock(p: Proposta): string {
   const tag = [lente, gen].filter(Boolean).join(" · ");
   lines.push(`### ${p.titolo}${tag ? ` _(${tag})_` : ""}`);
 
-  const liv = FATTIBILITA_LABEL[p.fattibilita.livello] ?? p.fattibilita.livello;
+  const liv = FATTIBILITA_LABEL[p.fattibilita.livello];
   const ratio = ratioPct(p.fattibilita.spend_ratio_storico);
-  lines.push(`*${liv}${ratio ? ` · capacità di spesa storica ${ratio}` : ""}*`);
+  if (liv || ratio) lines.push(`*${[liv, ratio ? `capacità di spesa storica ${ratio}` : null].filter(Boolean).join(" · ")}*`);
 
   if (p.descrizione?.trim()) lines.push("", p.descrizione.trim());
   if (p.fattibilita.motivazione?.trim()) {

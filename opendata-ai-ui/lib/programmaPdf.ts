@@ -75,11 +75,11 @@ const DISCLAIMER_ADDENDUM =
   "dell'amministrazione per tempi burocratici; l'ingestione dei documenti nella " +
   "knowledge base aggiorna la conoscenza e sollecita l'allineamento delle fonti.";
 
-const FATTIBILITA: Record<LivelloFattibilita, { label: string; color: string }> = {
+// "da_verificare" non è informativa → nessun chip (vale il disclaimer generale).
+const FATTIBILITA: Partial<Record<LivelloFattibilita, { label: string; color: string }>> = {
   alta: { label: "Fattibilità alta", color: "#008055" },
   media: { label: "Fattibilità media", color: "#a66300" },
   bassa: { label: "Fattibilità bassa", color: "#d9364f" },
-  da_verificare: { label: "Da verificare", color: BRAND.muted },
 };
 
 function ratioPct(ratio: number | null | undefined): string | null {
@@ -123,28 +123,17 @@ function propostaCard(p: Proposta): Content {
     ? GENERATORE_LABEL[p.generatore] ?? GENERATORE_MARKETING_LABEL[p.generatore] ?? p.generatore
     : null;
   const lente = p.lente ? LENTE_LABEL[p.lente] ?? p.lente : null;
-  const fatt = FATTIBILITA[p.fattibilita.livello] ?? FATTIBILITA.da_verificare;
+  const fatt = FATTIBILITA[p.fattibilita.livello];
   const ratio = ratioPct(p.fattibilita.spend_ratio_storico);
 
-  const inner: Content[] = [
-    { text: p.titolo, bold: true, fontSize: 11, color: BRAND.primary900 },
-    {
-      columns: [
-        { text: fatt.label, color: "#ffffff", background: fatt.color, fontSize: 8, bold: true, width: "auto", margin: [0, 2, 0, 2] },
-        ...(lente
-          ? [{ text: lente, color: "#ffffff", background: BRAND.green, fontSize: 8, bold: true, width: "auto", margin: [8, 2, 0, 2] } as Content]
-          : []),
-        ...(gen
-          ? [{ text: gen, color: BRAND.primary, fontSize: 8, bold: true, margin: [8, 3, 0, 0], width: "auto" } as Content]
-          : []),
-        ...(ratio
-          ? [{ text: `capacità di spesa storica ${ratio}`, color: BRAND.muted, fontSize: 8, margin: [8, 3, 0, 0] } as Content]
-          : []),
-      ],
-      columnGap: 0,
-      margin: [0, 2, 0, 4],
-    },
-  ];
+  const cols: Content[] = [];
+  if (fatt) cols.push({ text: fatt.label, color: "#ffffff", background: fatt.color, fontSize: 8, bold: true, width: "auto", margin: [0, 2, 0, 2] } as Content);
+  if (lente) cols.push({ text: lente, color: "#ffffff", background: BRAND.green, fontSize: 8, bold: true, width: "auto", margin: [cols.length ? 8 : 0, 2, 0, 2] } as Content);
+  if (gen) cols.push({ text: gen, color: BRAND.primary, fontSize: 8, bold: true, margin: [cols.length ? 8 : 0, 3, 0, 0], width: "auto" } as Content);
+  if (ratio) cols.push({ text: `capacità di spesa storica ${ratio}`, color: BRAND.muted, fontSize: 8, margin: [cols.length ? 8 : 0, 3, 0, 0] } as Content);
+
+  const inner: Content[] = [{ text: p.titolo, bold: true, fontSize: 11, color: BRAND.primary900 }];
+  if (cols.length) inner.push({ columns: cols, columnGap: 0, margin: [0, 2, 0, 4] });
   if (p.descrizione?.trim()) inner.push({ text: p.descrizione.trim(), fontSize: 9.5, margin: [0, 0, 0, 3], alignment: "justify" });
   if (p.fattibilita.motivazione?.trim()) {
     inner.push({
