@@ -470,7 +470,7 @@ function TerritorioInner() {
           <SourcesList citazioni={scheda.citazioni} />
 
           {/* F2 — analisi unica: maturità + valore + report dello stesso comune */}
-          <TerritorioExtra codComune={codComune} comuneNome={selection?.comune_nome ?? null} />
+          <TerritorioExtra codComune={codComune} comuneNome={selection?.comune_nome ?? null} scheda={scheda} />
         </div>
       ) : null}
     </main>
