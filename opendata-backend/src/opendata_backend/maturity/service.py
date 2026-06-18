@@ -57,10 +57,14 @@ async def _resolve_harvest(
     # spazi) così l'utente può digitare il nome esteso (es. "Regione Puglia").
     base_name = (comune_nome or entity or "").strip()
     forms = [entity, comune_nome or "", _slug(entity), _slug(comune_nome or "")]
-    # Se è un comune (istat_code presente) l'org CKAN è spesso "Comune di X": prova
-    # anche queste forme così il nome nudo ("Bari") risolve l'organizzazione corretta.
-    if istat_code and base_name:
-        forms += [f"comune di {base_name}", f"comune-di-{_slug(base_name)}"]
+    # Le org CKAN portano spesso un prefisso istituzionale ("Comune di X",
+    # "Regione X") mentre l'utente digita il nome nudo ("Bari", "Emilia Romagna").
+    # Aggiungiamo le forme prefissate così entrambe risolvono l'organizzazione.
+    if base_name:
+        if istat_code:  # è un comune
+            forms += [f"comune di {base_name}", f"comune-di-{_slug(base_name)}"]
+        else:  # ente non comunale: spesso una Regione
+            forms += [f"regione {base_name}", f"regione-{_slug(base_name)}"]
     queries: list[str] = []
     for q in forms:
         q = q.strip()

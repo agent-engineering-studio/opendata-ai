@@ -86,8 +86,11 @@ def build_recommendations(pairs: list[_Pair]) -> tuple[Recommendation, ...]:
         return (
             Recommendation(
                 code="no_open_data", severity="alta", dimension="portal",
-                message="L'ente non espone dataset su questo portale: pubblica i primi "
-                "dataset in formato aperto con licenza CC BY.",
+                message="L'ente non espone ancora dataset aperti su questo portale. È il "
+                "punto di partenza, non un giudizio: pubblica i primi dataset che già "
+                "produci (bilanci, tributi, mobilità, servizi) in formato aperto e "
+                "machine-readable (CSV/JSON), con una licenza CC BY 4.0, così cittadini "
+                "e imprese possono iniziare a riutilizzarli.",
                 affected_count=0,
             ),
         )
@@ -96,40 +99,59 @@ def build_recommendations(pairs: list[_Pair]) -> tuple[Recommendation, ...]:
 
     no_license = [ds for ds, q in pairs if not q.license_open]
     if len(no_license) / n > 0.2:
+        k = len(no_license)
         recs.append(Recommendation(
-            code="open_license", severity=_severity(len(no_license) / n), dimension="policy",
-            message=f"Aggiungi una licenza aperta (es. CC BY 4.0) ai {len(no_license)} dataset senza licenza aperta.",
-            affected_count=len(no_license),
+            code="open_license", severity=_severity(k / n), dimension="policy",
+            message=f"{k} dei {n} dataset non dichiarano una licenza aperta riconosciuta. "
+            "Senza una licenza chiara (CC BY 4.0 o IODL 2.0) il riuso non è legalmente "
+            "possibile anche quando il file è scaricabile: assegna a ciascuno una licenza "
+            "aperta esplicita per sbloccarne davvero il riutilizzo da parte di terzi.",
+            affected_count=k,
         ))
 
     closed_fmt = [ds for ds, _ in pairs if not _has_open_format(ds)]
     if len(closed_fmt) / n > 0.3:
+        k = len(closed_fmt)
         recs.append(Recommendation(
-            code="open_format", severity=_severity(len(closed_fmt) / n), dimension="quality",
-            message=f"Pubblica in formati aperti (CSV/JSON/XML) i {len(closed_fmt)} dataset senza un formato aperto.",
-            affected_count=len(closed_fmt),
+            code="open_format", severity=_severity(k / n), dimension="quality",
+            message=f"{k} dataset sono disponibili solo in formati chiusi o non strutturati "
+            "(es. PDF o pagine web). Per essere elaborati da software e riusati vanno offerti "
+            "anche in formati aperti e machine-readable — CSV, JSON o XML — accanto "
+            "all'eventuale versione originale.",
+            affected_count=k,
         ))
 
     stale = [q for _, q in pairs if q.freshness_days is None or q.freshness_days > 365]
     if len(stale) / n > 0.4:
+        k = len(stale)
         recs.append(Recommendation(
-            code="freshness", severity=_severity(len(stale) / n), dimension="quality",
-            message=f"Aggiorna o dichiara la frequenza dei {len(stale)} dataset non aggiornati da oltre un anno.",
-            affected_count=len(stale),
+            code="freshness", severity=_severity(k / n), dimension="quality",
+            message=f"{k} dataset non risultano aggiornati da oltre un anno o non dichiarano "
+            "una frequenza di aggiornamento. Un dato fermo perde valore e affidabilità: "
+            "aggiornali e indica nei metadati la cadenza prevista (es. mensile, annuale), "
+            "così chi li usa sa quanto sono attuali.",
+            affected_count=k,
         ))
 
     low_dcat = [q for _, q in pairs if q.dcat_ap_it < 0.7]
     if len(low_dcat) / n > 0.3:
+        k = len(low_dcat)
         recs.append(Recommendation(
-            code="dcat_ap_it", severity=_severity(len(low_dcat) / n), dimension="policy",
-            message=f"Completa i metadati DCAT-AP_IT (theme, publisher, frequenza) nei {len(low_dcat)} dataset incompleti.",
-            affected_count=len(low_dcat),
+            code="dcat_ap_it", severity=_severity(k / n), dimension="policy",
+            message=f"{k} dataset hanno metadati DCAT-AP_IT incompleti: mancano spesso il tema, "
+            "l'ente titolare o la frequenza di aggiornamento. Metadati completi rendono i dati "
+            "trovabili sul catalogo nazionale e interoperabili tra enti: completa i campi "
+            "obbligatori del profilo italiano per ciascun dataset.",
+            affected_count=k,
         ))
 
     if not any(q.hvd_category for _, q in pairs):
         recs.append(Recommendation(
             code="hvd", severity="bassa", dimension="impact",
-            message="Valuta la pubblicazione di dataset ad alto valore (HVD: mobilità, geospaziale, statistiche, ...).",
+            message="Nessun dataset rientra nelle categorie a elevato valore (HVD): mobilità, "
+            "geospaziale, ambiente, statistiche, società e imprese. Sono i dati che generano "
+            "più riuso e impatto economico secondo il regolamento UE: valutarne la "
+            "pubblicazione è la leva con il maggior ritorno per il territorio.",
             affected_count=0,
         ))
 

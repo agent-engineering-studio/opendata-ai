@@ -82,6 +82,17 @@ const DIM_LABEL: Record<string, string> = {
   quality: "Qualità",
   impact: "Impatto",
 };
+const DIM_DESC: Record<string, string> = {
+  policy:
+    "governance del dato — licenze aperte e metadati DCAT-AP_IT, la base che rende i dataset legalmente riutilizzabili e trovabili sul catalogo nazionale",
+  portal:
+    "presenza sul portale — quanti dataset l'ente espone e quanto sono ben indicizzati e accessibili",
+  quality:
+    "qualità dei dataset — formati aperti e machine-readable, aggiornamento regolare e completezza: quanto i dati sono davvero usabili",
+  impact:
+    "impatto e riuso — dataset ad alto valore (HVD) e domanda di riuso soddisfatta: quanto i dati si trasformano in servizi e valore per il territorio",
+};
+const RANK_LEAD = ["La leva principale", "Seconda priorità", "Terzo intervento", "Infine"];
 const WEIGHTS_FALLBACK: Dimensions = { policy: 0.25, portal: 0.25, quality: 0.3, impact: 0.2 };
 // Soglie ODM 2025 crescenti sul punteggio complessivo.
 const ODM_LEVELS: [number, string][] = [
@@ -356,21 +367,34 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
                     Tutte le dimensioni sono già al massimo: nessun intervento prioritario.
                   </p>
                 ) : (
-                  <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
-                    {leve.map((l) => (
+                  <ul className="list-unstyled d-flex flex-column gap-3 mb-0">
+                    {leve.map((l, i) => (
                       <li key={l.key}>
-                        <div className="d-flex align-items-baseline gap-2">
-                          <span className="badge bg-primary">+{Math.round(l.potential)} pti</span>
-                          <strong style={{ fontSize: 14 }}>Rafforza {l.label}</strong>
-                          <span className="text-slate-400" style={{ fontSize: 12 }}>({Math.round(l.score)}/100)</span>
+                        <div className="d-flex align-items-baseline gap-2 flex-wrap mb-1">
+                          <span className="badge bg-primary">fino a +{Math.round(l.potential)} pti</span>
+                          <strong style={{ fontSize: 14 }}>
+                            {RANK_LEAD[i] ?? "Inoltre"}: {l.label}
+                          </strong>
+                          <span className="text-slate-400" style={{ fontSize: 12 }}>
+                            oggi {Math.round(l.score)}/100
+                          </span>
                         </div>
+                        <p className="text-slate-600 mb-1" style={{ fontSize: 13 }}>
+                          Riguarda la {DIM_DESC[l.key]}. Portarla verso 100 vale fino a{" "}
+                          {Math.round(l.potential)} punti sul punteggio complessivo.
+                        </p>
                         {l.recs.length ? (
                           <ul className="text-slate-600 mb-0" style={{ fontSize: 13, paddingLeft: 20 }}>
                             {l.recs.map((r) => (
                               <li key={r.code}>{r.message}</li>
                             ))}
                           </ul>
-                        ) : null}
+                        ) : (
+                          <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
+                            Nessun intervento puntuale rilevato qui: si tratta di consolidare e
+                            mantenere i risultati già raggiunti su questa dimensione.
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>
