@@ -579,6 +579,64 @@ async def test_turismo_info_injects_citable_istat_ricettivita_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_lavoro_requires_local_anchor() -> None:
+    """lavoro (lente Lavoro): premessa = indicatori ISTAT 8milaCensus (host in
+    _LAVORO_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    census_url = "https://ottomilacensus.istat.it/fileadmin/download/16/confini/confini_16.csv"
+    ev_census = {"fonte": "istat", "url": census_url, "dettaglio": "disocc. giovanile 36,5% (Cens. 2011)"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("lavoro", [ev_census]),  # ok (8milaCensus)
+                _idea("lavoro", [ev_oc]),      # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("istat", "Lavoro.", [
+        {"name": "8milaCensus", "url": census_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["lavoro"]
+
+
+@pytest.mark.asyncio
+async def test_lavoro_info_injects_citable_census_anchor() -> None:
+    """L'ancora Lavoro deterministica (8milaCensus) iniettata dal backend è citabile:
+    una proposta lavoro che la cita sopravvive anche senza risorsa ISTAT dagli specialisti."""
+    census_url = "https://ottomilacensus.istat.it/fileadmin/download/16/confini/confini_16.csv"
+    lavoro_info = {
+        "comune": "110002", "anno": "2011",
+        "tasso_occupazione": 39.6, "tasso_disoccupazione": 13.5,
+        "tasso_disoccupazione_giovanile": 36.5, "neet_15_29": 23.4, "tasso_attivita": 45.8,
+        "settori": {"agricolo": 12.4, "industriale": 22.0, "terziario_extracommercio": 47.7, "commercio": 17.9},
+        "source_url": census_url,
+    }
+    ev_census = {"fonte": "istat", "url": census_url, "dettaglio": "NEET 23,4% (Censimento 2011)"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("lavoro", [ev_census])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, lavoro_info=lavoro_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["lavoro"]
+    assert any(census_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

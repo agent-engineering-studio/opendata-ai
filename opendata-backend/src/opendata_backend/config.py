@@ -662,7 +662,15 @@ IDEE_INSTRUCTIONS = (
     "letto e popolazione nel `dettaglio` (es. molti monumenti ma pochi posti letto "
     "= potenziale ricettivo inespresso). NIENTE precedente web (è la lente DATI, "
     "distinta dallo spunto marketing turismo_cultura). Se NON ci sono né asset né "
-    "ricettività nel bundle, NON forzare l'idea: saltala.\n\n"
+    "ricettività nel bundle, NON forzare l'idea: saltala.\n"
+    "  - lavoro — 'dove agire su occupazione e competenze': individua il gap "
+    "occupazionale del comune — DISOCCUPAZIONE specie GIOVANILE, NEET 15-29, bassa "
+    "attività, struttura per settore/competenze sbilanciata. ANCORA = gli indicatori "
+    "ISTAT 8milaCensus del blocco 'LENTE LAVORO' (tasso di occupazione/disoccupazione/"
+    "disoccupazione giovanile/NEET): citane SEMPRE il source_url ed ETICHETTA il dato "
+    "come 'Censimento 2011' (è strutturale, non congiunturale). Proponi politiche "
+    "attive/formazione/inclusione coerenti coi numeri. NIENTE precedente web. Se NON "
+    "ci sono indicatori lavoro nel bundle, NON forzare l'idea: saltala.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -670,7 +678,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
