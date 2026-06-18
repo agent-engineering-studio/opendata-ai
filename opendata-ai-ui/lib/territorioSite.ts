@@ -3,19 +3,17 @@
  * responsive e curato (CSS dedicato + Titillium Web + Bootstrap Italia/Leaflet via CDN).
  * Hero, nav sticky, disclaimer prominente in alto, idee evidenziate, mappa Leaflet del
  * territorio, card "stato maturità" molto chiara quando i dati mancano (con buone
- * pratiche per avviare la valorizzazione), profilo/investimenti leggibili, e una barra
- * "Condividi" per ogni card (immagine/social/embed). Scaricato come ZIP.
+ * pratiche per avviare la valorizzazione), profilo/investimenti leggibili, e un singolo
+ * "Condividi" per card (share nativo di sistema, o copia testo come fallback). ZIP.
  */
 import type { ProgrammaResponse, Proposta, Resource } from "@/lib/types";
 import type { Portfolio, Report, Scorecard } from "@/components/territorio/TerritorioExtra";
 
 type Extra = { scorecard?: Scorecard; report?: Report; portfolio?: Portfolio };
 
-const BI_CSS = "https://cdn.jsdelivr.net/npm/bootstrap-italia@2.18.1/dist/css/bootstrap-italia.min.css";
 const FONT_CSS = "https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-const HTMLTOIMAGE_JS = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js";
 
 const SWOT_LABEL: Record<string, string> = {
   forze: "Forze", debolezze: "Debolezze", opportunita: "Opportunità", minacce: "Minacce",
@@ -76,18 +74,11 @@ function mdToHtml(src: string): string {
   return out.join("\n");
 }
 
-/** Barra "Condividi" per una card: immagine, social, link, embed iframe. */
+/** Barra "Condividi" per una card: una sola azione — condivisione nativa di sistema
+ * (qualsiasi social/chat) con fallback a copia del testo della card negli appunti. */
 function shareBar(id: string, title: string): string {
-  const t = esc(title);
-  return `<div class="share" data-share="${id}" data-title="${t}">
-    <span class="share-lbl">Condividi:</span>
-    <button type="button" data-act="img" title="Salva/condividi come immagine">🖼️ Immagine</button>
-    <button type="button" data-act="x" title="Condividi su X">𝕏</button>
-    <button type="button" data-act="fb" title="Condividi su Facebook">f</button>
-    <button type="button" data-act="li" title="Condividi su LinkedIn">in</button>
-    <button type="button" data-act="wa" title="Condividi su WhatsApp">WhatsApp</button>
-    <button type="button" data-act="link" title="Copia il link / condividi">🔗 Link</button>
-    <button type="button" data-act="embed" title="Copia il codice per incorporare la card">&lt;/&gt; Embed</button>
+  return `<div class="share" data-share="${id}" data-title="${esc(title)}">
+    <button type="button" data-act="share" title="Condividi questa card o copiane il testo">🔗 Condividi</button>
   </div>`;
 }
 
@@ -215,6 +206,12 @@ const STYLE = `
 *{box-sizing:border-box}
 body{margin:0;font-family:'Titillium Web',system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
 a{color:var(--p);text-underline-offset:2px}
+h1,h2,h3,h4{font-weight:700;line-height:1.25}
+h3{font-size:1.15rem;color:var(--p9);margin:0 0 6px}
+h4{font-size:1.02rem;color:var(--p9);margin:0 0 6px}
+p{margin:0 0 10px}
+section ul,section ol{padding-left:20px;margin:0 0 10px}
+section li{margin:3px 0}
 .wrap{max-width:1000px;margin:0 auto;padding:0 22px}
 .hero{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--p9),var(--p));color:#fff;padding:56px 0 48px}
 .hero::after{content:"";position:absolute;right:-80px;top:-80px;width:320px;height:320px;border-radius:50%;background:rgba(255,255,255,.07)}
@@ -287,15 +284,11 @@ details.ev ul{font-size:13px;margin:8px 0 0;padding-left:18px}
 .fonti{font-size:13px;columns:2;column-gap:28px}
 #map{height:400px;border-radius:16px;border:1px solid var(--bd);overflow:hidden;box-shadow:0 2px 10px rgba(16,42,76,.06)}
 .lente-block{margin:0 0 20px}.lente-block h3{font-size:1.1rem;color:var(--p9);margin:0 0 10px}
-.share{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px dashed var(--bd)}
-.share-lbl{font-size:12px;color:var(--mut)}
-.share button{border:1px solid var(--bd);background:#fff;color:var(--ink);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.5}
+.share{margin-top:14px;padding-top:12px;border-top:1px dashed var(--bd)}
+.share button{border:1px solid var(--bd);background:#fff;color:var(--p7);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
 .share button:hover{background:#eef3fb;border-color:var(--p);color:var(--p)}
-.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--p9);color:#fff;padding:11px 20px;border-radius:12px;font-size:14px;z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--p9);color:#fff;padding:11px 20px;border-radius:12px;font-size:14px;z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
-.hidden{display:none!important}
-body.embed .hero,body.embed nav.toc,body.embed footer,body.embed .disclaimer{display:none!important}
-body.embed{background:#fff}body.embed section{border:none;padding:20px 0}body.embed .share{display:none}
 footer{background:var(--p9);color:#fff;padding:30px 0;font-size:13px}
 footer a{color:#cfe3ff}
 @media print{.share{display:none}}
@@ -304,46 +297,20 @@ footer a{color:#cfe3ff}
 
 const SHARE_JS = `
 (function(){
-  function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},250);},1800);}
-  function baseUrl(){return location.href.split('#')[0].split('?')[0];}
-  function pageUrl(id){return baseUrl()+'#'+id;}
-  function embedCode(id){return '<iframe src="'+baseUrl()+'?embed='+id+'#'+id+'" width="100%" height="640" style="border:1px solid #e3e4e6;border-radius:12px" loading="lazy"></iframe>';}
-  async function copy(text,msg){try{await navigator.clipboard.writeText(text);toast(msg);}catch(e){window.prompt('Copia il testo:',text);}}
-  async function shareImage(el,title){
-    if(typeof htmlToImage==='undefined'){toast('Immagine non disponibile (offline)');return;}
-    try{
-      var dataUrl=await htmlToImage.toPng(el,{backgroundColor:'#ffffff',pixelRatio:2,filter:function(n){return !(n.classList&&n.classList.contains('share'));}});
-      var blob=await (await fetch(dataUrl)).blob();
-      var file=new File([blob],'opendata-ai.png',{type:'image/png'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:title});}
-      else{var a=document.createElement('a');a.href=dataUrl;a.download='opendata-ai.png';a.click();toast('Immagine scaricata');}
-    }catch(e){toast('Impossibile generare l\\'immagine');}
-  }
+  function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},250);},2200);}
+  function cardText(el){var c=el.cloneNode(true);c.querySelectorAll('.share').forEach(function(s){s.remove();});return (c.innerText||c.textContent||'').replace(/\\n{3,}/g,'\\n\\n').trim();}
   document.addEventListener('click',function(ev){
-    var btn=ev.target.closest&&ev.target.closest('[data-act]');if(!btn)return;
+    var btn=ev.target.closest&&ev.target.closest('[data-act="share"]');if(!btn)return;
     var bar=btn.closest('[data-share]');if(!bar)return;
     var id=bar.getAttribute('data-share');var title=bar.getAttribute('data-title')||document.title;
-    var el=document.getElementById(id);var url=pageUrl(id);var act=btn.getAttribute('data-act');var text=title+' — '+url;
-    if(act==='img'){shareImage(el,title);}
-    else if(act==='link'){if(navigator.share){navigator.share({title:title,url:url}).catch(function(){});}else{copy(url,'Link copiato negli appunti');}}
-    else if(act==='embed'){copy(embedCode(id),'Codice embed copiato negli appunti');}
-    else if(act==='x'){window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(title)+'&url='+encodeURIComponent(url),'_blank','noopener');}
-    else if(act==='fb'){window.open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url),'_blank','noopener');}
-    else if(act==='li'){window.open('https://www.linkedin.com/sharing/share-offsite/?url='+encodeURIComponent(url),'_blank','noopener');}
-    else if(act==='wa'){window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank','noopener');}
+    var el=document.getElementById(id);if(!el)return;
+    var txt=cardText(el);
+    var url=location.protocol.indexOf('http')===0?location.href.split('#')[0]+'#'+id:'';
+    if(navigator.share){navigator.share({title:title,text:txt,url:url||undefined}).catch(function(){});return;}
+    var payload=txt+(url?'\\n\\n'+url:'');
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(payload).then(function(){toast('Testo della card copiato: incollalo dove vuoi per condividerlo');},function(){window.prompt('Copia il testo:',payload);});}
+    else{window.prompt('Copia il testo:',payload);}
   });
-  try{
-    var emb=new URLSearchParams(location.search).get('embed');
-    if(emb){
-      document.body.classList.add('embed');
-      var target=document.getElementById(emb);
-      if(target){
-        var sec=target.closest('section');
-        document.querySelectorAll('section').forEach(function(s){if(s!==sec)s.classList.add('hidden');});
-        if(target.classList.contains('card-item')&&sec){sec.querySelectorAll('.card-item').forEach(function(a){if(a!==target)a.classList.add('hidden');});}
-      }
-    }
-  }catch(e){}
 })();
 `;
 
@@ -396,7 +363,6 @@ export function buildSiteHtml(scheda: ProgrammaResponse, extra: Extra, confine?:
 <title>${title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONT_CSS}">
-<link rel="stylesheet" href="${BI_CSS}">
 ${confine ? `<link rel="stylesheet" href="${LEAFLET_CSS}">` : ""}
 <style>${STYLE}</style>
 </head><body>
@@ -415,7 +381,6 @@ ${confine ? `<link rel="stylesheet" href="${LEAFLET_CSS}">` : ""}
   <p style="margin:8px 0 0;opacity:.7">Generato da OpenData AI${scheda.generato_il ? ` · ${esc(scheda.generato_il)}` : ""}.</p>
 </div></footer>
 ${mapScript}
-<script src="${HTMLTOIMAGE_JS}" crossorigin="anonymous"></script>
 <script>${SHARE_JS}</script>
 </body></html>`;
 }
@@ -432,11 +397,10 @@ export async function downloadSiteZip(
   zip.file(
     "LEGGIMI.txt",
     "Sito statico dell'analisi del territorio generato da OpenData AI.\n" +
-      "Apri index.html in un browser (serve una connessione per mappa, font e stili via CDN).\n\n" +
-      "Condivisione: ogni card ha una barra 'Condividi' (immagine, X/Facebook/LinkedIn/\n" +
-      "WhatsApp, link, embed iframe). L'immagine funziona anche in locale; i link e\n" +
-      "l'embed puntano all'URL della pagina, quindi per condividere su social pubblica\n" +
-      "prima il sito su un host (es. GitHub Pages, Netlify) e apri quell'URL.\n\n" +
+      "Apri index.html in un browser (serve una connessione per mappa e font via CDN).\n\n" +
+      "Condivisione: ogni card ha un pulsante 'Condividi' che apre la condivisione del\n" +
+      "tuo dispositivo (social, chat, email); dove non è disponibile, copia il testo\n" +
+      "della card negli appunti così puoi incollarlo dove vuoi.\n\n" +
       "A soli fini costruttivi / bene comune — non materiale elettorale.\n",
   );
   const blob = await zip.generateAsync({ type: "blob" });
