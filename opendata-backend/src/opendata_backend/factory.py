@@ -564,56 +564,78 @@ class OrchestratorSession:
         if req.modalita not in ("idee", "completa") or not req.comune_nome:
             return None
         return await _lens_cached(
-            ("turismo", req.cod_comune, req.comune_nome or ""),
+            ("turismo2", req.cod_comune, req.comune_nome or ""),
             lambda: OrchestratorSession._resolve_turismo_uncached(req),
         )
 
     @staticmethod
     async def _resolve_turismo_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
-        """Ancora TURISMO/CULTURA deterministica: asset culturali + ricettività OSM.
+        """Ancora TURISMO/CULTURA deterministica: asset culturali OSM + ricettività ISTAT.
 
-        Geocoda il comune → bbox, conta i POI turistico-culturali (musei,
-        monumenti/siti, attrazioni, ricettività, cultura) ed estrae i poli
-        NOMINATI, così l'idee_agent ha SEMPRE l'evidenza + un source_url da citare
-        e può nominare un asset da valorizzare. Best-effort: se Nominatim/Overpass
-        non rispondono la lente si salta (non si inventa). Solo idee/completa.
-
-        Nota: ancora OSM (MVP-2 fase A). La ricettività ISTAT (capacità esercizi,
-        più affidabile) sarà l'ancora primaria in un follow-up.
+        Due ancore complementari, recuperate IN PARALLELO e indipendenti:
+        - OSM (geocode→bbox): conteggi POI culturali + poli NOMINATI (per nominare
+          un asset da valorizzare); host openstreetmap.org.
+        - ISTAT (dataflow 122_54): posti letto + esercizi ricettivi del comune —
+          ancora AFFIDABILE/cache-ata che misura la capacità di accoglienza; host
+          istat.it. Entrambi citabili (guardrail `_TURISMO_HOSTS`).
+        Best-effort: ciascuna fonte degrada da sola; se TUTTE e due falliscono la
+        lente si salta (non si inventa). Solo idee/completa.
         """
         if req.modalita not in ("idee", "completa") or not req.comune_nome:
             return None
-        try:
-            from opendata_core.osm import client as osm_client
 
-            async def _work() -> dict[str, Any] | None:
-                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
-                if not hits:
-                    return None
-                bb = hits[0].get("boundingbox") or []
-                if len(bb) != 4:
-                    return None
-                # Nominatim boundingbox = [south, north, west, east]
-                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
-                bbox = (s, w, n, e)
-                counts = await osm_client.overpass_tourism_counts(bbox=bbox)
-                landmarks = await osm_client.overpass_tourism_landmarks(bbox=bbox, limit=12)
-                if not counts or counts.get("totale", 0) == 0:
-                    return None
-                clat, clon = (s + n) / 2, (w + e) / 2
-                src = f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}"
-                return {
-                    "comune": req.cod_comune,
-                    "counts": counts,
-                    "landmarks": landmarks[:6],
-                    "source_url": src,
-                }
+        from opendata_core.osm import client as osm_client
+        from opendata_core.sdmx import fetch_ricettivita_comune
 
-            return await asyncio.wait_for(_work(), timeout=40.0)
-        except Exception as exc:
-            _log_lens_skip("ancora turismo OSM non risolta per %s — lente turismo assente",
-                           req.cod_comune, exc=exc)
+        async def _osm() -> dict[str, Any] | None:
+            hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+            if not hits:
+                return None
+            bb = hits[0].get("boundingbox") or []
+            if len(bb) != 4:
+                return None
+            # Nominatim boundingbox = [south, north, west, east]
+            s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+            bbox = (s, w, n, e)
+            counts = await osm_client.overpass_tourism_counts(bbox=bbox)
+            landmarks = await osm_client.overpass_tourism_landmarks(bbox=bbox, limit=12)
+            if not counts or counts.get("totale", 0) == 0:
+                return None
+            clat, clon = (s + n) / 2, (w + e) / 2
+            return {
+                "counts": counts,
+                "landmarks": landmarks[:6],
+                "source_url": f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}",
+            }
+
+        async def _guard(coro, label: str):  # noqa: ANN001, ANN202
+            try:
+                return await asyncio.wait_for(coro, timeout=40.0)
+            except Exception as exc:
+                _log_lens_skip(f"ancora turismo {label} non risolta per %s",
+                               req.cod_comune, exc=exc)
+                return None
+
+        osm_res, ric = await asyncio.gather(
+            _guard(_osm(), "OSM"),
+            _guard(fetch_ricettivita_comune(req.cod_comune), "ISTAT ricettività"),
+        )
+        ricettivita = ric if (ric and ric.get("trovato")) else None
+        if not osm_res and not ricettivita:
             return None
+
+        out: dict[str, Any] = {"comune": req.cod_comune}
+        if osm_res:
+            out.update(osm_res)
+        if ricettivita:
+            out["ricettivita"] = {
+                "anno": ricettivita.get("anno"),
+                "posti_letto": ricettivita.get("posti_letto"),
+                "esercizi": ricettivita.get("esercizi"),
+                "camere": ricettivita.get("camere"),
+                "source_url": ricettivita.get("source_url"),
+            }
+        return out
 
     async def run_programma_streaming(
         self,

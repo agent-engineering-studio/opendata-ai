@@ -9,7 +9,7 @@ from __future__ import annotations
 from pytest_httpx import HTTPXMock
 
 from istat_mcp.tools import _parse_asia_csv, fetch_imprese_comune
-from opendata_core.sdmx import asia
+from opendata_core.sdmx import asia, fetch_ricettivita_comune, turismo
 
 _HDR = (
     "DATAFLOW,FREQ,REF_AREA,DATA_TYPE,ECON_ACTIVITY_NACE_2007,"
@@ -94,3 +94,62 @@ async def test_fetch_imprese_comune_absent(httpx_mock: HTTPXMock) -> None:
     assert res["trovato"] is False
     assert "source_url" in res
     assert "999999" in res["note"]
+
+
+# ───────────────────── ISTAT capacità ricettiva (turismo) ─────────────────────
+
+_TUR_HDR = (
+    "DATAFLOW,FREQ,REF_AREA,DATA_TYPE,ADJUSTMENT,TYPE_ACCOMMODATION,"
+    "ECON_ACTIVITY_NACE_2007,COUNTRY_RES_GUESTS,LOCALITY_TYPE,URBANIZ_DEGREE,"
+    "COASTAL_AREA,SIZE_BY_NUMBER_ROOMS,TIME_PERIOD,OBS_VALUE"
+)
+
+
+def _tur_row(dt: str, year: str, val: str) -> str:
+    # solo col 3 (DATA_TYPE), 12 (TIME), 13 (OBS_VALUE) contano per il parser
+    return (
+        f"DF,A: annual,072021: Gioia del Colle,{dt},N: raw,ALL: total,"
+        f"551_553: tot,NAP,ALL,ALL,ALL,TOT: total,{year},{val}"
+    )
+
+
+_TUR_FIXTURE = "\n".join(
+    [
+        _TUR_HDR,
+        _tur_row("BEDS: bed-places", "2024", "570"),
+        _tur_row("NUM_EST: number of establishments", "2024", "40"),
+        _tur_row("BED_RMS: bedrooms", "2024", "138"),
+        _tur_row("BTH_RMS: bathrooms", "2024", "139"),   # non mappato → ignorato
+        _tur_row("BEDS: bed-places", "2023", "572"),       # anno vecchio → ignorato
+    ]
+) + "\n"
+
+
+def test_parse_ricettivita_latest_year() -> None:
+    p = turismo._parse_ricettivita_csv(_TUR_FIXTURE)
+    assert p["anno"] == "2024"
+    assert p["valori"] == {"posti_letto": 570, "esercizi": 40, "camere": 138}
+    assert turismo._parse_ricettivita_csv("Error executing generated SQL")["valori"] == {}
+
+
+async def test_fetch_ricettivita_comune_happy(httpx_mock: HTTPXMock) -> None:
+    turismo._tur_cache.clear()
+    httpx_mock.add_response(text=_TUR_FIXTURE)
+    res = await fetch_ricettivita_comune("072021", base_url=_BASE)
+
+    assert res["trovato"] is True
+    assert res["anno"] == "2024"
+    assert res["posti_letto"] == 570
+    assert res["esercizi"] == 40
+    assert res["camere"] == 138
+    assert "122_54" in res["source_url"]
+    assert res["sources"][0]["licenza"].startswith("ISTAT")
+
+
+async def test_fetch_ricettivita_comune_absent(httpx_mock: HTTPXMock) -> None:
+    turismo._tur_cache.clear()
+    httpx_mock.add_response(text="Error executing generated SQL")
+    res = await fetch_ricettivita_comune("999999", base_url=_BASE)
+
+    assert res["trovato"] is False
+    assert "source_url" in res
