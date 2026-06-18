@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-15d"
+PROMPT_VERSION = "2026-06-18a"
 
 
 class ProgrammaResponse(BaseModel):
@@ -339,22 +339,34 @@ def build_programma_task(
                 "nominare una di queste zone.\n" + "\n".join(righe)
             )
         if turismo_info:
+            righe_tur = ["LENTE TURISMO/CULTURA — DATI GIÀ RACCOLTI:"]
             tc = turismo_info.get("counts") or {}
-            lms = turismo_info.get("landmarks") or []
             src = turismo_info.get("source_url") or ""
-            nomi = ", ".join(
-                f"{m.get('name')} ({m.get('kind')})" for m in lms if m.get("name")
-            ) or "(nessun polo nominato in OSM)"
-            parts.append(
-                "LENTE TURISMO/CULTURA — ASSET GIÀ RACCOLTI (OSM): "
-                f"musei={tc.get('musei')}, monumenti/siti storici={tc.get('monumenti_siti')}, "
-                f"attrazioni={tc.get('attrazioni')}, ricettività={tc.get('ricettivita')}, "
-                f"cultura(teatri/cinema)={tc.get('cultura')}. Poli nominati: {nomi}. "
-                f"FONTE DA CITARE VERBATIM: {src} . USA questi dati per valutare se il "
-                "patrimonio è valorizzato/capitalizzato (asset vs ricettività vs "
-                "popolazione); un'idea turismo_cultura DEVE NOMINARE un polo tra quelli "
-                "elencati e citare questa fonte OSM."
+            if tc and src:
+                lms = turismo_info.get("landmarks") or []
+                nomi = ", ".join(
+                    f"{m.get('name')} ({m.get('kind')})" for m in lms if m.get("name")
+                ) or "(nessun polo nominato in OSM)"
+                righe_tur.append(
+                    f"• ASSET (OSM): musei={tc.get('musei')}, monumenti/siti "
+                    f"storici={tc.get('monumenti_siti')}, attrazioni={tc.get('attrazioni')}, "
+                    f"ricettività(POI)={tc.get('ricettivita')}, cultura(teatri/cinema)="
+                    f"{tc.get('cultura')}. Poli nominati: {nomi}. FONTE: {src}"
+                )
+            ric = turismo_info.get("ricettivita") or {}
+            if ric.get("source_url"):
+                righe_tur.append(
+                    f"• RICETTIVITÀ (ISTAT, anno {ric.get('anno')}): "
+                    f"posti letto={ric.get('posti_letto')}, esercizi={ric.get('esercizi')}, "
+                    f"camere={ric.get('camere')}. FONTE: {ric.get('source_url')}"
+                )
+            righe_tur.append(
+                "USA questi dati per valutare se il patrimonio è valorizzato/"
+                "capitalizzato (asset vs posti letto vs popolazione); un'idea "
+                "turismo_cultura DEVE NOMINARE un polo (se elencato) e citare una di "
+                "queste fonti (OSM o ISTAT)."
             )
+            parts.append("\n".join(righe_tur))
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -585,34 +597,57 @@ def build_programma_aggregator(
             )
             sections.append(_bundle_section("commercio", narrative, [com_res]))
 
-        # Ancora TURISMO/CULTURA deterministica (OSM): stessa logica del commercio —
-        # asset culturali + ricettività + poli nominati iniettati come sezione +
-        # risorsa citabile, così un'idea turismo_cultura ancora su evidenza reale e
-        # cita la fonte OSM (host openstreetmap.org → _TURISMO_HOSTS).
-        if turismo_info and turismo_info.get("source_url"):
+        # Ancora TURISMO/CULTURA deterministica: due fonti citabili complementari —
+        # asset culturali OSM (poli nominati, host openstreetmap.org) e capacità
+        # ricettiva ISTAT (posti letto/esercizi, host istat.it). Entrambe iniettate
+        # come Resource citabile + sezione evidenza, così un'idea turismo_cultura
+        # ancora su evidenza reale e supera il guardrail (`_TURISMO_HOSTS`).
+        if turismo_info:
+            tur_res: list[Resource] = []
+            righe: list[str] = []
             tc = turismo_info.get("counts") or {}
-            lms = turismo_info.get("landmarks") or []
-            src = turismo_info["source_url"].strip()
-            nomi = ", ".join(
-                f"{m.get('name')} ({m.get('kind')})" for m in lms if m.get("name")
-            ) or "(nessun polo nominato)"
-            tur_res = Resource(
-                name="OSM — Asset turistico-culturali del comune (musei, monumenti, attrazioni)",
-                url=src,
-                format="JSON",
-                source="osm",
-            )
-            if src not in {r.url.strip() for r in all_resources}:
-                all_resources.append(tur_res)
-            narrative = (
-                "Patrimonio turistico-culturale mappato su OSM. "
-                f"Musei: {tc.get('musei')}, monumenti/siti storici: {tc.get('monumenti_siti')}, "
-                f"attrazioni: {tc.get('attrazioni')}, ricettività: {tc.get('ricettivita')}, "
-                f"cultura (teatri/cinema): {tc.get('cultura')}. Poli nominati: {nomi}. "
-                "Valuta se il patrimonio è valorizzato (asset vs ricettività vs "
-                "popolazione); un'idea turismo_cultura DEVE nominare un polo e citare questa fonte."
-            )
-            sections.append(_bundle_section("turismo", narrative, [tur_res]))
+            osm_src = (turismo_info.get("source_url") or "").strip()
+            if tc and osm_src:
+                lms = turismo_info.get("landmarks") or []
+                nomi = ", ".join(
+                    f"{m.get('name')} ({m.get('kind')})" for m in lms if m.get("name")
+                ) or "(nessun polo nominato)"
+                tur_res.append(Resource(
+                    name="OSM — Asset turistico-culturali del comune (musei, monumenti, attrazioni)",
+                    url=osm_src, format="JSON", source="osm",
+                ))
+                righe.append(
+                    f"Asset (OSM) — musei: {tc.get('musei')}, monumenti/siti storici: "
+                    f"{tc.get('monumenti_siti')}, attrazioni: {tc.get('attrazioni')}, "
+                    f"ricettività(POI): {tc.get('ricettivita')}, cultura: {tc.get('cultura')}. "
+                    f"Poli nominati: {nomi}."
+                )
+            ric = turismo_info.get("ricettivita") or {}
+            ric_src = (ric.get("source_url") or "").strip()
+            if ric_src:
+                tur_res.append(Resource(
+                    name=f"ISTAT — Capacità esercizi ricettivi del comune (anno {ric.get('anno')})",
+                    url=ric_src, format="CSV", source="istat",
+                ))
+                righe.append(
+                    f"Ricettività (ISTAT, anno {ric.get('anno')}) — posti letto: "
+                    f"{ric.get('posti_letto')}, esercizi: {ric.get('esercizi')}, "
+                    f"camere: {ric.get('camere')}."
+                )
+            if tur_res:
+                seen = {r.url.strip() for r in all_resources}
+                for r in tur_res:
+                    if r.url.strip() not in seen:
+                        all_resources.append(r)
+                        seen.add(r.url.strip())
+                narrative = (
+                    "Patrimonio turistico-culturale e capacità di accoglienza del comune. "
+                    + " ".join(righe)
+                    + " Valuta se il patrimonio è valorizzato (asset vs posti letto vs "
+                    "popolazione); un'idea turismo_cultura DEVE nominare un polo (se "
+                    "disponibile) e citare una di queste fonti."
+                )
+                sections.append(_bundle_section("turismo", narrative, tur_res))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

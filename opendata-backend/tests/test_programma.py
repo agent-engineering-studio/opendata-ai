@@ -543,6 +543,42 @@ async def test_turismo_info_injects_citable_osm_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_turismo_info_injects_citable_istat_ricettivita_anchor() -> None:
+    """L'ancora ricettività ISTAT (posti letto/esercizi) iniettata dal backend è
+    citabile: una proposta turismo_cultura che cita il source_url ISTAT sopravvive
+    anche SENZA asset OSM (es. Overpass giù) — è l'ancora affidabile della Fase B."""
+    istat_url = (
+        "https://esploradati.istat.it/SDMXWS/rest/data/122_54/A.072021...ALL......TOT"
+        "?startPeriod=2021"
+    )
+    turismo_info = {
+        "comune": "110002",
+        # nessun blocco OSM (counts/source_url assenti) → solo l'ancora ISTAT
+        "ricettivita": {
+            "anno": "2024", "posti_letto": 570, "esercizi": 40, "camere": 138,
+            "source_url": istat_url,
+        },
+    }
+    ev_istat = {"fonte": "istat", "url": istat_url, "dettaglio": "570 posti letto, 40 esercizi"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("turismo_cultura", [ev_istat])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, turismo_info=turismo_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["turismo_cultura"]
+    assert any(istat_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore
