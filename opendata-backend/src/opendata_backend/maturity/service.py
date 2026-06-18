@@ -12,13 +12,13 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Any
 
-from opendata_core.maturity import MaturityResult, assess_entity
+from opendata_core.maturity import MaturityResult, assess_entity, build_guida_opendata
 from opendata_core.maturity.harvest import HarvestResult, harvest_entity
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..cache.store import cache_get, cache_set
 from ..config import Settings
-from ..config_files import maturity_weights
+from ..config_files import maturity_weights, portali_regionali
 from ..db.repositories import maturity as repo
 from .semantic import semantic_clarity_map
 
@@ -27,6 +27,55 @@ log = logging.getLogger("opendata-backend.maturity")
 
 def _weights() -> dict[str, float]:
     return maturity_weights()["weights"]
+
+
+def _regional_ckan(istat_code: str | None) -> str | None:
+    """Portale CKAN regionale per la provincia del comune (prime 3 cifre ISTAT)."""
+    if not istat_code:
+        return None
+    prov = str(istat_code).strip().zfill(6)[:3]
+    return (portali_regionali().get("province_ckan") or {}).get(prov)
+
+
+async def _resolve_harvest(
+    *, entity: str, comune_nome: str | None, istat_code: str | None,
+    base_url: str | None, max_datasets: int,
+) -> tuple[HarvestResult, str | None]:
+    """Risolve il portale del comune provando più candidati, fermandosi al primo
+    con dataset. Best-effort/fail-safe: ogni tentativo è isolato. Ritorna
+    (HarvestResult, base_url risolto). Se nessuno trova dati, ritorna il primo
+    (vuoto) → l'assessment procede a "Dato insufficiente" + guida.
+    """
+    # Candidati in ordine: (base_url, query). None = dati.gov.it (default CkanClient).
+    candidates: list[tuple[str | None, str]] = [(base_url, entity)]
+    if comune_nome and comune_nome.strip().lower() != entity.strip().lower():
+        candidates.append((base_url, comune_nome.strip()))
+    reg = _regional_ckan(istat_code)
+    if reg:
+        candidates.append((reg, comune_nome.strip() if comune_nome else entity))
+
+    first: HarvestResult | None = None
+    first_base: str | None = base_url
+    seen: set[tuple[str | None, str]] = set()
+    for cand_base, query in candidates:
+        if (cand_base, query.lower()) in seen:
+            continue
+        seen.add((cand_base, query.lower()))
+        try:
+            res = await harvest_entity(query, base_url=cand_base, max_datasets=max_datasets)
+        except Exception:
+            log.warning("maturity: harvest fallito per %s su %s", query, cand_base or "dati.gov.it",
+                        exc_info=True)
+            continue
+        if first is None:
+            first, first_base = res, cand_base
+        if res.datasets:
+            return res, cand_base
+    # nessun candidato con dataset
+    if first is None:
+        first = HarvestResult(entity=entity, ckan_org_id=None, ckan_org_name=None,
+                              org_title=None, total=0, datasets=())
+    return first, first_base
 
 
 def _cache_key(entity: str, base_url: str | None) -> str:
@@ -60,12 +109,13 @@ async def _semantic(harvest: HarvestResult, settings: Settings) -> dict[str, flo
 
 async def run_assessment(
     session: AsyncSession, *, entity: str, base_url: str | None, settings: Settings,
-    force: bool = False, istat_code: str | None = None,
+    force: bool = False, istat_code: str | None = None, comune_nome: str | None = None,
 ) -> dict[str, Any]:
     """Esegue (o riusa da cache) l'assessment di un ente e ritorna la scorecard.
 
     `istat_code` (opzionale) collega l'ente a un comune: la domanda di riuso non
-    soddisfatta (gap di dato) riduce l'Impact — anello valore⇄maturità.
+    soddisfatta (gap di dato) riduce l'Impact — anello valore⇄maturità. La
+    risoluzione del portale prova dati.gov.it e (se vuoto) il portale regionale.
     """
     key = _cache_key(entity, base_url)
     if not force:
@@ -73,8 +123,9 @@ async def run_assessment(
         if cached is not None:
             return cached
 
-    harvest = await harvest_entity(
-        entity, base_url=base_url, max_datasets=settings.maturity_max_datasets
+    harvest, base_url = await _resolve_harvest(
+        entity=entity, comune_nome=comune_nome, istat_code=istat_code,
+        base_url=base_url, max_datasets=settings.maturity_max_datasets,
     )
     if harvest.truncated:
         log.info(
@@ -130,6 +181,16 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
     if latest is None:
         return None
     details = latest.details_jsonb or {}
+    insufficient = bool(details.get("insufficient_data", False))
+    # Comune senza/con pochi dati → guida operativa open-data (niente punteggi falsi).
+    guida = (
+        build_guida_opendata(
+            ent.name,
+            n_datasets=int(details.get("n_datasets") or 0),
+            total_on_portal=int(details.get("total_on_portal") or 0),
+        )
+        if insufficient else None
+    )
     trend = [
         {"assessed_at": a.assessed_at.isoformat(), "overall": float(a.score_overall or 0),
          "level": a.level}
@@ -152,7 +213,8 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "recommendations": details.get("recommendations", []),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
-        "insufficient_data": details.get("insufficient_data", False),
+        "insufficient_data": insufficient,
+        "guida": guida,
         "unmet_reuse_demand": details.get("unmet_reuse_demand", {"count": 0, "items": [], "penalty": 0.0}),
         "trend": trend,
         "cluster_median": await _cluster_median(session, ent.type),

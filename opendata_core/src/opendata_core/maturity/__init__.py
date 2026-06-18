@@ -5,6 +5,7 @@ chiamante (MCP/backend). Vedi docs e la spec di Fase 1.
 """
 
 from .hvd import HVD_KEYWORDS, match_hvd_category
+from .guidance import build_guida_opendata
 from .models import (
     DEFAULT_ODM_LEVELS,
     DEFAULT_WEIGHTS,
@@ -35,6 +36,7 @@ __all__ = [
     "HVD_KEYWORDS",
     "assess_quality",
     "assess_entity",
+    "build_guida_opendata",
     "score_dimensions",
     "build_recommendations",
 ]

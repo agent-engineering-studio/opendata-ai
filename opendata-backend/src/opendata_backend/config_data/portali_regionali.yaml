@@ -1,0 +1,16 @@
+# Portali CKAN regionali per il fallback dell'assessment di maturità.
+#
+# Molti comuni NON pubblicano su dati.gov.it ma sul portale open-data della propria
+# Regione. Quando l'harvest su dati.gov.it non trova dataset, l'assessment ritenta
+# sul portale regionale corrispondente alla PROVINCIA del comune (prime 3 cifre del
+# codice ISTAT). Estendere `province_ckan` per coprire altre regioni.
+#
+# chiave = codice provincia ISTAT a 3 cifre (str) → base_url CKAN del portale regionale
+province_ckan:
+  # ── Puglia (ambito di produzione pilota) → dati.puglia.it ──
+  "071": "https://dati.puglia.it/ckan"   # Foggia
+  "072": "https://dati.puglia.it/ckan"   # Bari
+  "073": "https://dati.puglia.it/ckan"   # Taranto
+  "074": "https://dati.puglia.it/ckan"   # Brindisi
+  "075": "https://dati.puglia.it/ckan"   # Lecce
+  "110": "https://dati.puglia.it/ckan"   # Barletta-Andria-Trani
