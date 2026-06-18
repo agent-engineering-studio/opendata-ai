@@ -60,8 +60,13 @@ up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ol
 		echo "⚠️  Host Ollama not reachable at http://localhost:11434 — start it with: ollama serve &"; \
 		exit 1; \
 	fi
-	@echo "✅ Host Ollama reachable. Bringing up stack without the Ollama container…"
-	$(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
+	@echo "✅ Host Ollama reachable. Bringing up stack with LLM_PROVIDER=ollama (no Docker Ollama)…"
+	@if grep -qE '^ANTHROPIC_API_KEY=.+' $(ENV_FILE); then \
+		echo "ℹ️  ANTHROPIC_API_KEY è impostata in $(ENV_FILE): l'agente di sintesi userà Ollama,"; \
+		echo "    ma classify, semantic-maturità e narrativa-report restano su Claude (by design)."; \
+		echo "    Per zero chiamate Anthropic, commenta ANTHROPIC_API_KEY in $(ENV_FILE)."; \
+	fi
+	LLM_PROVIDER=ollama $(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
 
 up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANTHROPIC_API_KEY in $(ENV_FILE).
 	@if ! grep -qE '^ANTHROPIC_API_KEY=.+' $(ENV_FILE); then \
