@@ -12,6 +12,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import type { Guida } from "@/lib/scorecardPdf";
+import { downloadSiteZip } from "@/lib/territorioSite";
+import type { ProgrammaResponse } from "@/lib/types";
 
 type Scorecard = {
   entity: { id: number; name: string };
@@ -65,9 +67,11 @@ function pct(n?: number | null): string {
 export function TerritorioExtra({
   codComune,
   comuneNome,
+  scheda,
 }: {
   codComune: string;
   comuneNome?: string | null;
+  scheda: ProgrammaResponse;
 }) {
   const { getToken } = useAuth();
   const [sc, setSc] = useState<Loadable<Scorecard>>({ stato: "loading" });
@@ -135,7 +139,23 @@ export function TerritorioExtra({
   return (
     <div className="d-flex flex-column gap-4 mt-4">
       <hr className="my-0" />
-      <h2 className="h4 mb-0">Maturità, valore e profilo del comune</h2>
+      <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <h2 className="h4 mb-0">Maturità, valore e profilo del comune</h2>
+        <button
+          type="button"
+          className="btn btn-success btn-sm no-print"
+          onClick={() =>
+            downloadSiteZip(scheda, {
+              scorecard: sc.dato,
+              report: rep.dato,
+              portfolio: val.dato,
+            })
+          }
+          title="Scarica un sito statico condivisibile con tutta l'analisi"
+        >
+          Esporta sito completo (ZIP)
+        </button>
+      </div>
       <p className="text-muted mb-0" style={{ fontSize: 14 }}>
         Le altre letture sullo stesso comune: maturità degli open data, valore del
         patrimonio e profilo territoriale. Sezioni indipendenti dall&apos;analisi
