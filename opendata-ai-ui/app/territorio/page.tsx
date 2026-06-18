@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { TerritorioExtra } from "@/components/territorio/TerritorioExtra";
 import type { ModalitaProgramma, ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
 import { DashboardGate } from "@/components/DashboardGate";
 import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
@@ -467,6 +468,9 @@ function TerritorioInner() {
           ) : null}
 
           <SourcesList citazioni={scheda.citazioni} />
+
+          {/* F2 — analisi unica: maturità + valore + report dello stesso comune */}
+          <TerritorioExtra codComune={codComune} comuneNome={selection?.comune_nome ?? null} />
         </div>
       ) : null}
     </main>
