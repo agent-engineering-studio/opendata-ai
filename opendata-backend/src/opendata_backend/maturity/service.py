@@ -55,8 +55,14 @@ async def _resolve_harvest(
     # Candidati in ordine: (base_url, query). None = dati.gov.it (default CkanClient).
     # Includiamo anche la forma SLUG del nome (org CKAN usa lo slug, non il nome con
     # spazi) così l'utente può digitare il nome esteso (es. "Regione Puglia").
+    base_name = (comune_nome or entity or "").strip()
+    forms = [entity, comune_nome or "", _slug(entity), _slug(comune_nome or "")]
+    # Se è un comune (istat_code presente) l'org CKAN è spesso "Comune di X": prova
+    # anche queste forme così il nome nudo ("Bari") risolve l'organizzazione corretta.
+    if istat_code and base_name:
+        forms += [f"comune di {base_name}", f"comune-di-{_slug(base_name)}"]
     queries: list[str] = []
-    for q in (entity, comune_nome or "", _slug(entity), _slug(comune_nome or "")):
+    for q in forms:
         q = q.strip()
         if q and q not in queries:
             queries.append(q)
@@ -222,6 +228,7 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
             "impact": float(latest.score_impact or 0),
         },
         "recommendations": details.get("recommendations", []),
+        "weights": _weights(),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
         "insufficient_data": insufficient,

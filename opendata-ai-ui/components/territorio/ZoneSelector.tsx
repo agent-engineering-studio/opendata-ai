@@ -21,6 +21,8 @@ const BASE_COLOR = "#0066cc";
 export type ZoneSelection = {
   cod_comune: string;
   comune_nome: string;
+  /** OSM id del comune ("relation/123") — serve a recuperare il confine per le mappe. */
+  osm_id?: string;
 };
 
 /**
@@ -116,7 +118,7 @@ export function ZoneSelector({ onChange }: { onChange: (sel: ZoneSelection) => v
     setComune(m);
     setQuery(m.nome);
     setMatches([]);
-    onChange({ cod_comune: m.ref_istat, comune_nome: m.nome });
+    onChange({ cod_comune: m.ref_istat, comune_nome: m.nome, osm_id: m.osm_id });
   }
 
   return (

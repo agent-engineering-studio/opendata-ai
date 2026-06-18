@@ -17,6 +17,7 @@
     "@tmcw/togeojson": "^5.8.1",
     "bootstrap-italia": "^2.18.1",
     "design-react-kit": "^5.10.0",
+    "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
