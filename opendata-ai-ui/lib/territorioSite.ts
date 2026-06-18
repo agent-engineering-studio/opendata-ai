@@ -1,10 +1,10 @@
 /*
  * Export "sito completo" dell'analisi di Territorio: un sito statico self-contained,
- * responsive e curato (CSS dedicato + Titillium Web + Bootstrap Italia/Leaflet via CDN).
- * Hero, nav sticky, disclaimer prominente in alto, idee evidenziate, mappa Leaflet del
- * territorio, card "stato maturità" molto chiara quando i dati mancano (con buone
- * pratiche per avviare la valorizzazione), profilo/investimenti leggibili, e un singolo
- * "Condividi" per card (share nativo di sistema, o copia testo come fallback). ZIP.
+ * responsive e curato (CSS dedicato + Titillium Web + Leaflet via CDN). Hero, nav sticky,
+ * disclaimer prominente in alto, idee evidenziate, mappa Leaflet del territorio, card
+ * "stato maturità" chiara quando i dati mancano (con buone pratiche), profilo/investimenti
+ * leggibili. Link di evidenza sanificati per i cittadini (niente URL d'API/JSON, niente
+ * link OSM a tutto il comune). Per ogni card un solo "Salva immagine" (screenshot). ZIP.
  */
 import type { ProgrammaResponse, Proposta, Resource } from "@/lib/types";
 import type { Portfolio, Report, Scorecard } from "@/components/territorio/TerritorioExtra";
@@ -12,6 +12,7 @@ import type { Portfolio, Report, Scorecard } from "@/components/territorio/Terri
 type Extra = { scorecard?: Scorecard; report?: Report; portfolio?: Portfolio };
 
 const FONT_CSS = "https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap";
+const HTMLTOIMAGE_JS = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
@@ -46,13 +47,36 @@ function esc(s: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Normalizza un URL di evidenza per i cittadini: scarta i link inutili e converte
+ * quelli dell'API in pagine umane. Ritorna l'URL da mostrare o null (nessun link). */
+function cleanUrl(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  let u: URL;
+  try { u = new URL(raw.replace(/&amp;/g, "&")); } catch { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  const host = u.hostname.replace(/^www\./, "");
+  // OpenStreetMap: i link puntano all'intero comune, non al dato → niente link.
+  if (host.endsWith("openstreetmap.org")) return null;
+  // OpenCoesione: mai l'URL dell'API JSON. Al massimo la pagina del singolo progetto.
+  if (host.endsWith("opencoesione.gov.it")) {
+    const m = u.pathname.match(/\/it\/api\/progetti\/([^/]+)\/?$/i);
+    if (m) return `https://opencoesione.gov.it/it/progetti/${m[1]}/`;
+    if (u.pathname.includes("/api/")) return null; // liste/json aggregati: incomprensibili
+    return u.href;
+  }
+  return u.href;
+}
+
 /** Markdown minimale → HTML (titoli, grassetto/corsivo, link, liste, paragrafi). */
 function mdToHtml(src: string): string {
   const inline = (t: string) =>
     esc(t)
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
-      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_m, text: string, url: string) => {
+        const c = cleanUrl(url);
+        return c ? `<a href="${c}" target="_blank" rel="noopener">${text}</a>` : text;
+      });
   const lines = src.replace(/\r/g, "").split("\n");
   const out: string[] = [];
   let list: string[] | null = null;
@@ -74,11 +98,11 @@ function mdToHtml(src: string): string {
   return out.join("\n");
 }
 
-/** Barra "Condividi" per una card: una sola azione — condivisione nativa di sistema
- * (qualsiasi social/chat) con fallback a copia del testo della card negli appunti. */
+/** Barra di condivisione della card: una sola azione — salva/condividi uno SCREENSHOT
+ * della card (condividere solo testo o link non ha senso per i cittadini). */
 function shareBar(id: string, title: string): string {
   return `<div class="share" data-share="${id}" data-title="${esc(title)}">
-    <button type="button" data-act="share" title="Condividi questa card o copiane il testo">🔗 Condividi</button>
+    <button type="button" data-act="img" title="Salva uno screenshot della card da condividere">📷 Salva immagine</button>
   </div>`;
 }
 
@@ -91,16 +115,27 @@ function feasChip(p: Proposta): string {
 }
 
 function evidenzeHtml(p: Proposta): string {
-  const items = (p.evidenze ?? [])
-    .map((e) => `<li><span class="ev-d">${esc(e.dettaglio || "Fonte")}</span> <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.fonte)} ↗</a></li>`)
+  // Mostriamo SEMPRE il dato (dettaglio); il link solo se porta a una pagina utile.
+  const rows = (p.evidenze ?? [])
+    .map((e) => ({ det: e.dettaglio?.trim() || "", fonte: e.fonte, href: cleanUrl(e.url) }))
+    .filter((r) => r.det || r.href);
+  if (!rows.length) return "";
+  const items = rows
+    .map((r) => {
+      const det = esc(r.det || "Dato");
+      const link = r.href
+        ? ` <a href="${esc(r.href)}" target="_blank" rel="noopener">${esc(r.fonte || "vedi fonte")} ↗</a>`
+        : r.fonte ? ` <span class="muted">(${esc(r.fonte)})</span>` : "";
+      return `<li><span class="ev-d">${det}</span>${link}</li>`;
+    })
     .join("");
-  if (!items) return "";
-  return `<details class="ev"><summary>Dati e fonti (${(p.evidenze ?? []).length})</summary><ul>${items}</ul></details>`;
+  return `<details class="ev"><summary>Dati e fonti (${rows.length})</summary><ul>${items}</ul></details>`;
 }
 
 function proposalHtml(p: Proposta, id: string, variant: "proposta" | "idea" | "marketing" = "proposta"): string {
+  const finUrl = p.finanziamento ? cleanUrl(p.finanziamento.fonte_url) : null;
   const fin = p.finanziamento
-    ? `<p class="fin"><strong>💶 Finanziamento:</strong> ${esc(p.finanziamento.linea)} — <a href="${esc(p.finanziamento.fonte_url)}" target="_blank" rel="noopener">fonte</a></p>`
+    ? `<p class="fin"><strong>💶 Finanziamento:</strong> ${esc(p.finanziamento.linea)}${finUrl ? ` — <a href="${esc(finUrl)}" target="_blank" rel="noopener">fonte</a>` : ""}</p>`
     : "";
   const tag = variant === "idea" ? `<span class="card-tag idea-tag">💡 Idea</span>`
     : variant === "marketing" ? `<span class="card-tag mkt-tag">📣 Spunto</span>` : "";
@@ -196,7 +231,14 @@ function reportHtml(r?: Report): string {
 
 function fontiHtml(citazioni: Resource[]): string {
   const items = (citazioni ?? [])
-    .map((c) => `<li><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name || c.url)}</a> <span class="muted">(${esc(c.source ?? "")})</span></li>`)
+    .map((c) => {
+      const href = cleanUrl(c.url);
+      const name = esc(c.name || href || "Fonte");
+      const src = c.source ? ` <span class="muted">(${esc(c.source)})</span>` : "";
+      return href
+        ? `<li><a href="${esc(href)}" target="_blank" rel="noopener">${name}</a>${src}</li>`
+        : `<li>${name}${src}</li>`;
+    })
     .join("");
   return items ? `<ul class="fonti">${items}</ul>` : "<p class='muted'>—</p>";
 }
@@ -298,18 +340,23 @@ footer a{color:#cfe3ff}
 const SHARE_JS = `
 (function(){
   function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);requestAnimationFrame(function(){t.classList.add('show');});setTimeout(function(){t.classList.remove('show');setTimeout(function(){t.remove();},250);},2200);}
-  function cardText(el){var c=el.cloneNode(true);c.querySelectorAll('.share').forEach(function(s){s.remove();});return (c.innerText||c.textContent||'').replace(/\\n{3,}/g,'\\n\\n').trim();}
+  function slug(s){return (s||'opendata-ai').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase()||'card';}
+  async function snap(el,title){
+    if(typeof htmlToImage==='undefined'){toast('Generazione immagine non disponibile');return;}
+    try{
+      var dataUrl=await htmlToImage.toPng(el,{backgroundColor:'#ffffff',pixelRatio:2,skipFonts:true,filter:function(n){return !(n.classList&&n.classList.contains('share'));}});
+      var name=slug(title)+'.png';
+      var blob=await (await fetch(dataUrl)).blob();
+      var file=new File([blob],name,{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:title});}
+      else{var a=document.createElement('a');a.href=dataUrl;a.download=name;a.click();toast('Immagine salvata: ora puoi condividerla');}
+    }catch(e){toast('Impossibile generare l\\'immagine');}
+  }
   document.addEventListener('click',function(ev){
-    var btn=ev.target.closest&&ev.target.closest('[data-act="share"]');if(!btn)return;
+    var btn=ev.target.closest&&ev.target.closest('[data-act="img"]');if(!btn)return;
     var bar=btn.closest('[data-share]');if(!bar)return;
-    var id=bar.getAttribute('data-share');var title=bar.getAttribute('data-title')||document.title;
-    var el=document.getElementById(id);if(!el)return;
-    var txt=cardText(el);
-    var url=location.protocol.indexOf('http')===0?location.href.split('#')[0]+'#'+id:'';
-    if(navigator.share){navigator.share({title:title,text:txt,url:url||undefined}).catch(function(){});return;}
-    var payload=txt+(url?'\\n\\n'+url:'');
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(payload).then(function(){toast('Testo della card copiato: incollalo dove vuoi per condividerlo');},function(){window.prompt('Copia il testo:',payload);});}
-    else{window.prompt('Copia il testo:',payload);}
+    var el=document.getElementById(bar.getAttribute('data-share'));if(!el)return;
+    snap(el,bar.getAttribute('data-title')||document.title);
   });
 })();
 `;
@@ -381,6 +428,7 @@ ${confine ? `<link rel="stylesheet" href="${LEAFLET_CSS}">` : ""}
   <p style="margin:8px 0 0;opacity:.7">Generato da OpenData AI${scheda.generato_il ? ` · ${esc(scheda.generato_il)}` : ""}.</p>
 </div></footer>
 ${mapScript}
+<script src="${HTMLTOIMAGE_JS}" crossorigin="anonymous"></script>
 <script>${SHARE_JS}</script>
 </body></html>`;
 }
@@ -398,9 +446,8 @@ export async function downloadSiteZip(
     "LEGGIMI.txt",
     "Sito statico dell'analisi del territorio generato da OpenData AI.\n" +
       "Apri index.html in un browser (serve una connessione per mappa e font via CDN).\n\n" +
-      "Condivisione: ogni card ha un pulsante 'Condividi' che apre la condivisione del\n" +
-      "tuo dispositivo (social, chat, email); dove non è disponibile, copia il testo\n" +
-      "della card negli appunti così puoi incollarlo dove vuoi.\n\n" +
+      "Condivisione: ogni card ha 'Salva immagine' → genera uno screenshot della card\n" +
+      "(condivisione nativa su mobile, download su desktop) da postare sui social.\n\n" +
       "A soli fini costruttivi / bene comune — non materiale elettorale.\n",
   );
   const blob = await zip.generateAsync({ type: "blob" });
