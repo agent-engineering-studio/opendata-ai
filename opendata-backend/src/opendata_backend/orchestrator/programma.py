@@ -156,7 +156,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-18b"
+PROMPT_VERSION = "2026-06-18c"
 
 
 class ProgrammaResponse(BaseModel):
@@ -210,6 +210,7 @@ def build_programma_task(
     commercio_info: dict[str, Any] | None = None,
     turismo_info: dict[str, Any] | None = None,
     lavoro_info: dict[str, Any] | None = None,
+    trasporti_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -385,6 +386,18 @@ def build_programma_task(
                 "non congiunturale). Un'idea 'lavoro' deve ancorarsi a questi numeri "
                 "(specie disoccupazione giovanile/NEET) e citare questa fonte."
             )
+        if trasporti_info:
+            tcc = trasporti_info.get("counts") or {}
+            parts.append(
+                "LENTE TRASPORTI/MOBILITÀ — DATI OSM GIÀ RACCOLTI: fermate bus="
+                f"{tcc.get('fermate_bus')}, autostazioni={tcc.get('autostazioni')}, "
+                f"stazioni treno={tcc.get('stazioni_treno')}, tram/metro={tcc.get('tram_metro')}; "
+                f"stazione ferroviaria presente: {'sì' if trasporti_info.get('ha_stazione_treno') else 'NO'}. "
+                f"FONTE DA CITARE VERBATIM: {trasporti_info.get('source_url')} . USA questi "
+                "dati per valutare criticità di accessibilità/TPL (poche fermate per "
+                "abitante, assenza di nodo ferroviario, dipendenza dall'auto); un'idea "
+                "'trasporti' deve ancorarsi a questi numeri e citare questa fonte."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -534,6 +547,7 @@ def build_programma_aggregator(
     commercio_info: dict[str, Any] | None = None,
     turismo_info: dict[str, Any] | None = None,
     lavoro_info: dict[str, Any] | None = None,
+    trasporti_info: dict[str, Any] | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -695,6 +709,30 @@ def build_programma_aggregator(
                 "(specie disoccupazione giovanile/NEET) e citi questa fonte; etichetta 'Censimento 2011'."
             )
             sections.append(_bundle_section("lavoro", narrative, [lav_res]))
+
+        # Ancora TRASPORTI/MOBILITÀ deterministica (OSM public-transport): Resource
+        # citabile (host openstreetmap.org → _TRASPORTI_HOSTS) + sezione evidenza.
+        if trasporti_info and trasporti_info.get("source_url"):
+            src = trasporti_info["source_url"].strip()
+            tcc = trasporti_info.get("counts") or {}
+            tra_res = Resource(
+                name="OSM — Nodi del trasporto pubblico del comune (fermate, stazioni)",
+                url=src,
+                format="JSON",
+                source="osm",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(tra_res)
+            narrative = (
+                "Trasporto pubblico del comune (OSM). Fermate bus: "
+                f"{tcc.get('fermate_bus')}, autostazioni: {tcc.get('autostazioni')}, "
+                f"stazioni treno: {tcc.get('stazioni_treno')}, tram/metro: {tcc.get('tram_metro')}. "
+                f"Stazione ferroviaria presente: {'sì' if trasporti_info.get('ha_stazione_treno') else 'NO'}. "
+                "Valuta criticità di accessibilità/TPL (poche fermate vs popolazione, "
+                "assenza di nodo ferroviario, dipendenza dall'auto); un'idea 'trasporti' "
+                "ancori su questi numeri e citi questa fonte."
+            )
+            sections.append(_bundle_section("trasporti", narrative, [tra_res]))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

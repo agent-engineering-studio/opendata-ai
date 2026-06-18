@@ -68,7 +68,7 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # dichiarata rispetto alla spec: il controllo "comune ≠ quello in esame" via
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
-              "commercio_duc", "turismo_cultura", "lavoro")
+              "commercio_duc", "turismo_cultura", "lavoro", "trasporti")
 
 # Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
 # differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
@@ -87,6 +87,8 @@ _TURISMO_HOSTS = ("openstreetmap.org", "overpass-api.de", "istat.it")
 # Host valido come premessa di LAVORO: indicatori occupazionali ISTAT 8milaCensus
 # (host ottomilacensus.istat.it ⊃ istat.it).
 _LAVORO_HOSTS = ("ottomilacensus.istat.it", "istat.it")
+# Host valido come premessa di TRASPORTI: densità OSM del trasporto pubblico.
+_TRASPORTI_HOSTS = ("openstreetmap.org", "overpass-api.de")
 
 
 def _evidence_hosts(evidenze: list) -> list[str]:
@@ -137,6 +139,10 @@ def _generatore_ok(prop) -> bool:
         # Lente Lavoro/Competenze: premessa LOCALE = indicatori occupazionali
         # ISTAT 8milaCensus (censimento 2011). Nessun requisito web.
         return any(any(d in h for d in _LAVORO_HOSTS) for h in hosts)
+    if prop.generatore == "trasporti":
+        # Lente Trasporti/Mobilità: premessa LOCALE = densità OSM del trasporto
+        # pubblico. Nessun requisito web.
+        return any(any(d in h for d in _TRASPORTI_HOSTS) for h in hosts)
     return False  # generatore mancante o sconosciuto
 
 

@@ -148,6 +148,31 @@ async def test_tourism_profile_counts_and_landmarks():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_transport_profile_counts_and_station() -> None:
+    # Overpass `out count`: 4 categorie (fermate_bus, autostazioni, stazioni_treno,
+    # tram_metro) + il totale.
+    respx.post(settings.OVERPASS_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "elements": [
+                    {"type": "count", "id": 0, "tags": {"total": str(t)}}
+                    for t in (40, 2, 1, 0, 43)
+                ]
+            },
+        )
+    )
+    raw = await tools.transport_profile(south=40.7, west=16.9, north=40.85, east=17.0)
+    data = json.loads(raw)
+    assert data["counts"]["fermate_bus"] == 40
+    assert data["counts"]["stazioni_treno"] == 1
+    assert data["totale_fermate"] == 43
+    assert data["ha_stazione_treno"] is True
+    assert "openstreetmap.org" in data["source_url"]
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_get_route_returns_distance_and_steps():
     respx.get(url__regex=rf"{settings.OSRM_URL}/route/v1/.*").mock(
         return_value=httpx.Response(

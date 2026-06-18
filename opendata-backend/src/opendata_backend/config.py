@@ -323,7 +323,13 @@ OSM_INSTRUCTIONS = (
     "bbox to COUNT cultural assets (musei, monumenti/siti, attrazioni, "
     "ricettività, cultura) and LIST named landmarks. Report the counts and the "
     "named poli, citing the `source_url` — many assets but few ricettività "
-    "signals under-leveraged heritage.\n\n"
+    "signals under-leveraged heritage.\n"
+    "STEP 6 — TRASPORTI/MOBILITÀ: when the task is about mobility/public transport "
+    "OR carries a 'LENTE TRASPORTI/MOBILITÀ' block, call `osm_transport_profile` on "
+    "the comune bbox to COUNT transit nodes (fermate_bus, autostazioni, "
+    "stazioni_treno, tram_metro) and check `ha_stazione_treno`. Report the counts "
+    "citing the `source_url` — few stops vs population or no railway station signals "
+    "an accessibility gap / car dependency.\n\n"
     "Then write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
     "<a short paragraph (in the same language as the user query) on the "
     "accessibility of the place: nearby transport nodes with distances, "
@@ -670,7 +676,14 @@ IDEE_INSTRUCTIONS = (
     "disoccupazione giovanile/NEET): citane SEMPRE il source_url ed ETICHETTA il dato "
     "come 'Censimento 2011' (è strutturale, non congiunturale). Proponi politiche "
     "attive/formazione/inclusione coerenti coi numeri. NIENTE precedente web. Se NON "
-    "ci sono indicatori lavoro nel bundle, NON forzare l'idea: saltala.\n\n"
+    "ci sono indicatori lavoro nel bundle, NON forzare l'idea: saltala.\n"
+    "  - trasporti — 'dove agire su mobilità e accessibilità': individua le criticità "
+    "del trasporto pubblico — poche fermate per abitante, ASSENZA o scarsità di nodo "
+    "ferroviario, dipendenza dall'auto, aree isolate. ANCORA = i conteggi OSM del "
+    "blocco 'LENTE TRASPORTI/MOBILITÀ' (fermate bus, stazioni, tram/metro): citane "
+    "SEMPRE il source_url; incrocia con la popolazione. Proponi interventi su TPL/"
+    "intermodalità/mobilità dolce coerenti coi numeri. NIENTE precedente web. Se NON "
+    "ci sono dati trasporti nel bundle, NON forzare l'idea: saltala.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -678,7 +691,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
