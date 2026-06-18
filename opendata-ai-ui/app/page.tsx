@@ -4,9 +4,9 @@ import Link from "next/link";
 import { AuthAwareCTAs } from "@/components/AuthAwareCTAs";
 
 export const metadata: Metadata = {
-  title: "OpenData AI — orchestratore di agenti per gli open data italiani ed europei",
+  title: "OpenData AI — dalla maturità degli open data al valore per il territorio",
   description:
-    "Una chat che interroga in parallelo CKAN, ISTAT, Eurostat e OCSE, restituisce sintesi narrativa e disegna le risorse geografiche su mappa. REST, MCP e A2A pronti per l'integrazione.",
+    "Misura la maturità del patrimonio di open data di un comune, scopri dove migliorare e trasformalo in progetti concreti per il territorio. Uno strumento per diffondere la cultura del dato nelle PA, al servizio del bene comune.",
 };
 
 export default function Page() {
@@ -18,19 +18,19 @@ export default function Page() {
           <div className="row align-items-center g-5 py-4">
             <div className="col-lg-7">
               <p className="mb-2 text-uppercase small fw-semibold" style={{ letterSpacing: "0.1em", opacity: 0.8 }}>
-                Progetto sperimentale · Italian PA Design System
+                Open data · maturità · valore per il territorio
               </p>
               <h1 className="display-4 fw-bold mb-3">
-                Un agente che parla la lingua degli open data italiani ed europei
+                Trasforma il patrimonio di open data in valore per il territorio
               </h1>
               <p className="lead mb-4" style={{ opacity: 0.95 }}>
-                OpenData AI è un orchestratore che interroga in parallelo i
-                portali CKAN (dati.gov.it e portali municipali/regionali) e le
-                statistiche ufficiali via SDMX 2.1 (ISTAT, Eurostat, OCSE),
-                produce una sintesi narrativa in italiano e disegna le risorse
-                geografiche su OpenStreetMap. Un unico endpoint per fare
-                domande in linguaggio naturale — niente più caccia al dataset
-                tra decine di cataloghi.
+                OpenData AI misura la <strong>maturità</strong> degli open data
+                di un comune, mostra <strong>dove migliorare</strong> e li
+                trasforma in <strong>progetti concreti</strong> — commercio,
+                turismo, lavoro, mobilità — leggendo solo le fonti ufficiali
+                (ISTAT, OpenCoesione, OpenStreetMap). Uno strumento per
+                diffondere la <strong>cultura del dato</strong> nelle PA e creare
+                servizi per la comunità e il bene comune.
               </p>
               <div className="d-flex flex-wrap gap-3">
                 <AuthAwareCTAs variant="hero" />
@@ -63,6 +63,96 @@ export default function Page() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MISSIONE */}
+      <section className="bg-white border-bottom">
+        <div className="container py-5">
+          <div className="row">
+            <div className="col-lg-8 mx-auto text-center mb-5">
+              <h2 className="mb-3">Dalla maturità al bene comune</h2>
+              <p className="lead text-muted">
+                Gli open data sono un patrimonio pubblico spesso sottoutilizzato.
+                OpenData AI accompagna le PA lungo un percorso in quattro passi:
+                misurare la maturità dei dati, trasformarli in valore, costruire
+                cultura del dato e generare servizi per la comunità.
+              </p>
+            </div>
+          </div>
+          <div className="row g-4">
+            <div className="col-md-6 col-lg-3">
+              <div className="card h-100 shadow-sm">
+                <div className="card-body">
+                  <span className="badge bg-primary mb-2">1 · Maturità</span>
+                  <h5 className="card-title">Misura il patrimonio</h5>
+                  <p className="card-text small text-muted mb-3">
+                    Valuta quanto gli open data di un comune sono completi,
+                    aggiornati e riutilizzabili — e indica dove intervenire.
+                  </p>
+                  <Link href="/maturita" className="small fw-semibold">
+                    Vai alla maturità →
+                  </Link>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-3">
+              <div className="card h-100 shadow-sm">
+                <div className="card-body">
+                  <span className="badge bg-primary mb-2">2 · Valore</span>
+                  <h5 className="card-title">Progetti concreti</h5>
+                  <p className="card-text small text-muted mb-3">
+                    Lenti analitiche su commercio, turismo, lavoro e mobilità
+                    individuano gap e potenzialità e propongono idee di sviluppo.
+                  </p>
+                  <Link href="/territorio" className="small fw-semibold">
+                    Analizza un territorio →
+                  </Link>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-3">
+              <div className="card h-100 shadow-sm">
+                <div className="card-body">
+                  <span className="badge bg-primary mb-2">3 · Cultura</span>
+                  <h5 className="card-title">Cultura del dato</h5>
+                  <p className="card-text small text-muted mb-0">
+                    Ogni analisi cita la fonte ufficiale e mostra perché un dato
+                    di qualità produce servizi migliori: educa le PA a valorizzare
+                    il proprio patrimonio.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-6 col-lg-3">
+              <div className="card h-100 shadow-sm">
+                <div className="card-body">
+                  <span className="badge bg-secondary mb-2">4 · Bene comune</span>
+                  <h5 className="card-title">Servizi per la comunità</h5>
+                  <p className="card-text small text-muted mb-0">
+                    L&apos;obiettivo finale: dati pubblici che diventano servizi
+                    per cittadini e territorio. Progetto open source, al servizio
+                    del bene comune.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CALLOUT — non è un giudizio */}
+          <div
+            className="mt-5 p-4 rounded border-start border-4 border-primary bg-bg-muted"
+            role="note"
+          >
+            <h5 className="fw-bold mb-2">Non è una pagella sulle PA</h5>
+            <p className="mb-0 text-muted">
+              OpenData AI non giudica come lavora un&apos;amministrazione: è una
+              <strong> bussola che mostra DOVE migliorare</strong> per valorizzare
+              il patrimonio pubblico di dati e creare valore nel territorio. Sotto
+              la soglia minima di dati l&apos;analisi dichiara &ldquo;dato
+              insufficiente&rdquo; invece di assegnare punteggi fuorvianti.
+            </p>
           </div>
         </div>
       </section>
@@ -333,12 +423,16 @@ print(reply.artifacts[0].parts[0].text)`}
         <div className="container py-5 text-center">
           <h2 className="mb-3">Pronto a fare la prima domanda?</h2>
           <p className="lead mb-4" style={{ opacity: 0.9 }}>
-            La dashboard è gratuita per l&apos;uso esplorativo. Bastano un
-            account e un secondo per il primo prompt. In futuro un piano
-            abbonamento sbloccherà rate limit superiori.
+            Crea un account e prova l&apos;analisi di un territorio. L&apos;uso
+            esplorativo è gratuito con limiti pensati per sostenere
+            l&apos;infrastruttura; abbonamenti, sponsor e convenzioni alzano i
+            limiti e mantengono il progetto open source.
           </p>
           <div className="d-flex flex-wrap justify-content-center gap-3">
             <AuthAwareCTAs variant="footer" />
+            <Link href="/sostenibilita" className="btn btn-outline-light btn-lg">
+              Sostieni il progetto
+            </Link>
           </div>
           <p className="mt-4 small" style={{ opacity: 0.7 }}>
             Le risposte dell&apos;agente dipendono da modelli LLM esterni e

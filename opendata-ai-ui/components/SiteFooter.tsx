@@ -110,6 +110,14 @@ export function SiteFooter() {
               </li>
               <li className="list-inline-item m-0">
                 <Link
+                  href="/sostenibilita"
+                  className="text-white text-decoration-none"
+                >
+                  Sostenibilità
+                </Link>
+              </li>
+              <li className="list-inline-item m-0">
+                <Link
                   href="/note-legali"
                   className="text-white text-decoration-none"
                 >

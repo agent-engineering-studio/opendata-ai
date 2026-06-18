@@ -14,6 +14,7 @@ const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const PUBLIC_NAV = [
   { href: "/", label: "Home" },
+  { href: "/sostenibilita", label: "Sostenibilità" },
   { href: "/docs", label: "Documentazione" },
 ] as const;
 
