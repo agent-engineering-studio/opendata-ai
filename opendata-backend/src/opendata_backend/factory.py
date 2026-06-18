@@ -71,6 +71,16 @@ _EXPECTED_LENS_ERRORS: tuple[type[BaseException], ...] = (
 )
 
 
+def _osm_object_url(hit: dict[str, Any], clat: float, clon: float) -> str:
+    """URL OSM dell'oggetto geocodificato (es. la relation del comune, che mostra dati
+    e tag reali) invece di una vista mappa generica `#map=` senza contenuto. Fallback
+    alla mappa centrata solo se Nominatim non ha restituito osm_type/osm_id."""
+    otype, oid = hit.get("osm_type"), hit.get("osm_id")
+    if otype and oid:
+        return f"https://www.openstreetmap.org/{otype}/{oid}"
+    return f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}"
+
+
 def _log_lens_skip(msg: str, *args: object, exc: BaseException) -> None:
     """Log a skipped best-effort lens, suppressing the traceback for expected outages."""
     if isinstance(exc, _EXPECTED_LENS_ERRORS):
@@ -605,7 +615,7 @@ class OrchestratorSession:
             return {
                 "counts": counts,
                 "landmarks": landmarks[:6],
-                "source_url": f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}",
+                "source_url": _osm_object_url(hits[0], clat, clon),
             }
 
         async def _guard(coro, label: str):  # noqa: ANN001, ANN202
@@ -701,7 +711,7 @@ class OrchestratorSession:
                     "comune": req.cod_comune,
                     "counts": counts,
                     "ha_stazione_treno": counts.get("stazioni_treno", 0) > 0,
-                    "source_url": f"https://www.openstreetmap.org/#map=13/{clat:.5f}/{clon:.5f}",
+                    "source_url": _osm_object_url(hits[0], clat, clon),
                 }
 
             return await asyncio.wait_for(_work(), timeout=40.0)
