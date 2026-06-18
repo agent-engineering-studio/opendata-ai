@@ -1,21 +1,22 @@
 "use client";
 
 /*
- * Sezioni aggiuntive dell'analisi unica di Territorio (F2): oltre al /programma,
- * mostra anche Scorecard di maturità, Report Comune e portafoglio di Valore per lo
- * stesso comune. Orchestrazione frontend best-effort degli endpoint esistenti:
- * ogni sezione è indipendente e degrada con grazia (una fonte giù non blocca le altre).
+ * Sezioni aggiuntive dell'analisi unica di Territorio: oltre al /programma, mostra
+ * anche Maturità open data, Valore del patrimonio e Profilo/Investimenti dello stesso
+ * comune. Orchestrazione frontend best-effort degli endpoint esistenti: ogni sezione è
+ * indipendente e degrada con grazia. I dati sono mostrati per intero e formattati
+ * (niente link di richiamo). I risultati vengono risollevati al genitore (onData) per
+ * l'export "sito completo".
  */
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import type { Guida } from "@/lib/scorecardPdf";
-import { downloadSiteZip } from "@/lib/territorioSite";
 import type { ProgrammaResponse } from "@/lib/types";
 
-type Scorecard = {
+export type Scorecard = {
   entity: { id: number; name: string };
   level: string;
   overall: number;
@@ -25,7 +26,7 @@ type Scorecard = {
   guida?: Guida | null;
 };
 
-type Report = {
+export type Report = {
   place?: { name?: string };
   narrativa?: string;
   sezioni?: {
@@ -38,13 +39,19 @@ type Report = {
   };
 };
 
-type Portfolio = {
+export type Portfolio = {
   count: number;
   pct_hvd: number | null;
   pct_open_license: number | null;
   avg_freshness_days: number | null;
   avg_stars: number | null;
   avg_reuse: number | null;
+};
+
+export type TerritorioExtraData = {
+  scorecard?: Scorecard;
+  report?: Report;
+  portfolio?: Portfolio;
 };
 
 type Loadable<T> = { stato: "loading" | "ok" | "ko"; dato?: T; err?: string };
@@ -67,16 +74,24 @@ function pct(n?: number | null): string {
 export function TerritorioExtra({
   codComune,
   comuneNome,
-  scheda,
+  onData,
 }: {
   codComune: string;
   comuneNome?: string | null;
   scheda: ProgrammaResponse;
+  onData?: (d: TerritorioExtraData) => void;
 }) {
   const { getToken } = useAuth();
   const [sc, setSc] = useState<Loadable<Scorecard>>({ stato: "loading" });
   const [rep, setRep] = useState<Loadable<Report>>({ stato: "loading" });
   const [val, setVal] = useState<Loadable<Portfolio>>({ stato: "loading" });
+
+  // Risolleva al genitore l'ultimo snapshot dei dati (per l'export "sito completo").
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
+  useEffect(() => {
+    onDataRef.current?.({ scorecard: sc.dato, report: rep.dato, portfolio: val.dato });
+  }, [sc.dato, rep.dato, val.dato]);
 
   useEffect(() => {
     let alive = true;
@@ -89,7 +104,6 @@ export function TerritorioExtra({
     (async () => {
       const token = await getToken();
 
-      // Report Comune (parallelo, indipendente)
       apiFetch("/territory/report", {
         method: "POST",
         token,
@@ -99,7 +113,6 @@ export function TerritorioExtra({
         .then((d: Report) => alive && setRep({ stato: "ok", dato: d }))
         .catch((e) => alive && setRep({ stato: "ko", err: String(e?.message ?? e) }));
 
-      // Scorecard maturità → poi Valore (portfolio legato all'entity_id)
       try {
         const r = await apiFetch("/maturity/assess", {
           method: "POST",
@@ -115,13 +128,13 @@ export function TerritorioExtra({
         if (alive) setSc({ stato: "ok", dato: scorecard });
 
         const eid = scorecard?.entity?.id;
-        if (eid) {
+        if (eid && !scorecard.insufficient_data) {
           const rv = await apiFetch(`/value/portfolio?entity_id=${eid}`, { token });
           if (!rv.ok) throw new Error(`HTTP ${rv.status}`);
           const p = (await rv.json()) as Portfolio;
           if (alive) setVal({ stato: "ok", dato: p });
         } else if (alive) {
-          setVal({ stato: "ko", err: "nessun ente" });
+          setVal({ stato: "ok", dato: { count: 0, pct_hvd: null, pct_open_license: null, avg_freshness_days: null, avg_stars: null, avg_reuse: null } });
         }
       } catch (e) {
         if (alive) {
@@ -139,37 +152,17 @@ export function TerritorioExtra({
   return (
     <div className="d-flex flex-column gap-4 mt-4">
       <hr className="my-0" />
-      <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
-        <h2 className="h4 mb-0">Maturità, valore e profilo del comune</h2>
-        <button
-          type="button"
-          className="btn btn-success btn-sm no-print"
-          onClick={() =>
-            downloadSiteZip(scheda, {
-              scorecard: sc.dato,
-              report: rep.dato,
-              portfolio: val.dato,
-            })
-          }
-          title="Scarica un sito statico condivisibile con tutta l'analisi"
-        >
-          Esporta sito completo (ZIP)
-        </button>
+      <div>
+        <h2 className="h4 mb-1">Maturità, valore e profilo del comune</h2>
+        <p className="text-muted mb-0" style={{ fontSize: 14 }}>
+          Le altre letture sullo stesso comune. Sezioni indipendenti dall&apos;analisi principale.
+        </p>
       </div>
-      <p className="text-muted mb-0" style={{ fontSize: 14 }}>
-        Le altre letture sullo stesso comune: maturità degli open data, valore del
-        patrimonio e profilo territoriale. Sezioni indipendenti dall&apos;analisi
-        principale.
-      </p>
 
-      {/* ── Scorecard maturità ── */}
+      {/* ── Maturità open data ── */}
       <section className="card shadow-sm">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h3 className="h6 mb-0">Maturità open data</h3>
-            <Link href={`/scorecard?entity=${encodeURIComponent(comuneNome || codComune)}&istat=${codComune}`}
-              className="small">Scorecard completa →</Link>
-          </div>
+          <h3 className="h6 mb-2">Maturità open data</h3>
           {sc.stato === "loading" ? (
             <p className="text-muted small mb-0">Valutazione in corso…</p>
           ) : sc.stato === "ko" ? (
@@ -177,14 +170,22 @@ export function TerritorioExtra({
           ) : sc.dato?.insufficient_data && sc.dato.guida ? (
             <div>
               <span className="badge bg-warning text-dark mb-2">Dato insufficiente</span>
-              <p className="mb-1" style={{ fontSize: 14 }}>{sc.dato.guida.premessa}</p>
-              <Link href={`/scorecard?entity=${encodeURIComponent(comuneNome || codComune)}&istat=${codComune}`}
-                className="small fw-semibold">Apri la guida operativa open-data →</Link>
+              <p className="mb-2" style={{ fontSize: 14 }}>{sc.dato.guida.premessa}</p>
+              <ol className="d-flex flex-column gap-2 mb-0" style={{ fontSize: 14, paddingLeft: 18 }}>
+                {sc.dato.guida.passi.map((p, i) => (
+                  <li key={i}>
+                    <strong>{p.titolo}</strong>
+                    <div className="text-muted" style={{ fontSize: 13 }}>{p.descrizione}</div>
+                  </li>
+                ))}
+              </ol>
             </div>
           ) : (
             <div className="d-flex flex-wrap align-items-center gap-3">
-              <span className="badge rounded-pill px-3 py-2"
-                style={{ backgroundColor: LEVEL_COLOR[sc.dato!.level] ?? "#334155", color: "white" }}>
+              <span
+                className="badge rounded-pill px-3 py-2"
+                style={{ backgroundColor: LEVEL_COLOR[sc.dato!.level] ?? "#334155", color: "white" }}
+              >
                 {sc.dato!.level} · {Math.round(sc.dato!.overall)}/100
               </span>
               <span className="small text-muted">
@@ -200,20 +201,18 @@ export function TerritorioExtra({
       {/* ── Valore del patrimonio ── */}
       <section className="card shadow-sm">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h3 className="h6 mb-0">Valore del patrimonio dati</h3>
-            <Link href="/valore" className="small">Dettaglio valore →</Link>
-          </div>
+          <h3 className="h6 mb-2">Valore del patrimonio dati</h3>
           {val.stato === "loading" ? (
             <p className="text-muted small mb-0">Calcolo in corso…</p>
-          ) : val.stato === "ko" || !val.dato?.count ? (
+          ) : !val.dato?.count ? (
             <p className="text-muted small mb-0">
-              Nessun dataset valutato per questo comune (esegui prima l&apos;assessment di maturità).
+              Nessun dataset aperto valutato per questo comune: il valore si misura quando l&apos;ente
+              pubblica i propri open data.
             </p>
           ) : (
             <div className="row g-3 text-center">
               <Kpi label="Dataset" value={String(val.dato.count)} />
-              <Kpi label="HVD" value={pct(val.dato.pct_hvd)} />
+              <Kpi label="Alto valore (HVD)" value={pct(val.dato.pct_hvd)} />
               <Kpi label="Licenza aperta" value={pct(val.dato.pct_open_license)} />
               <Kpi label="Stelle medie" value={val.dato.avg_stars != null ? val.dato.avg_stars.toFixed(1) : "—"} />
               <Kpi label="Riuso" value={val.dato.avg_reuse != null ? val.dato.avg_reuse.toFixed(1) : "—"} />
@@ -222,32 +221,46 @@ export function TerritorioExtra({
         </div>
       </section>
 
-      {/* ── Report comune (profilo + investimenti + gap) ── */}
+      {/* ── Profilo e investimenti del comune ── */}
       <section className="card shadow-sm">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h3 className="h6 mb-0">Profilo e investimenti del comune</h3>
-            <Link href={`/territorio-report?istat=${codComune}`} className="small">Report completo →</Link>
-          </div>
+          <h3 className="h6 mb-2">Profilo e investimenti del comune</h3>
           {rep.stato === "loading" ? (
             <p className="text-muted small mb-0">Costruzione del report…</p>
           ) : rep.stato === "ko" ? (
             <p className="text-muted small mb-0">Non disponibile ({rep.err}).</p>
           ) : (
-            <div className="d-flex flex-column gap-2">
+            <div className="d-flex flex-column gap-3">
               {rep.dato?.narrativa ? (
-                <p className="mb-1" style={{ fontSize: 14 }}>{rep.dato.narrativa}</p>
-              ) : null}
-              <div className="small">
-                <strong>Investimenti pubblici (OpenCoesione):</strong>{" "}
-                {rep.dato?.sezioni?.investimenti?.n_progetti ?? 0} progetti ·{" "}
-                {eur(rep.dato?.sezioni?.investimenti?.finanziamento_totale)} finanziati
-              </div>
-              {rep.dato?.sezioni?.gap_dato?.length ? (
-                <div className="small text-muted">
-                  <strong>Gap di dato:</strong> {rep.dato.sezioni.gap_dato.join(" · ")}
+                <div className="md-body" style={{ fontSize: 14 }}>
+                  <ReactMarkdown>{rep.dato.narrativa}</ReactMarkdown>
                 </div>
               ) : null}
+              <div className="row g-3">
+                <div className="col-sm-6">
+                  <div className="border rounded p-3 h-100">
+                    <div className="small text-muted">Investimenti pubblici (OpenCoesione)</div>
+                    <div className="h5 mb-0">
+                      {rep.dato?.sezioni?.investimenti?.n_progetti ?? 0} progetti
+                    </div>
+                    <div className="text-primary">
+                      {eur(rep.dato?.sezioni?.investimenti?.finanziamento_totale)} finanziati
+                    </div>
+                  </div>
+                </div>
+                {rep.dato?.sezioni?.gap_dato?.length ? (
+                  <div className="col-sm-6">
+                    <div className="border rounded p-3 h-100">
+                      <div className="small text-muted mb-1">Gap di dato</div>
+                      <ul className="small mb-0" style={{ paddingLeft: 18 }}>
+                        {rep.dato.sezioni.gap_dato.map((g, i) => (
+                          <li key={i}>{g}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           )}
         </div>

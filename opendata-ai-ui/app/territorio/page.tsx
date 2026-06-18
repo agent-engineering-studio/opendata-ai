@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
-import { TerritorioExtra } from "@/components/territorio/TerritorioExtra";
+import { TerritorioExtra, type TerritorioExtraData } from "@/components/territorio/TerritorioExtra";
+import { downloadSiteZip } from "@/lib/territorioSite";
 import type { ModalitaProgramma, ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
 import { DashboardGate } from "@/components/DashboardGate";
 import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
@@ -92,6 +93,8 @@ function TerritorioInner() {
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
   const [attesaSec, setAttesaSec] = useState(0);
   const [steps, setSteps] = useState<Step[]>([]);
+  const [extra, setExtra] = useState<TerritorioExtraData>({});
+  const [esportandoSito, setEsportandoSito] = useState(false);
 
   // Timer di attesa: /programma non ha (ancora) eventi di progresso e con un
   // LLM locale il fan-out può durare minuti — il contatore mostra che è vivo.
@@ -219,6 +222,31 @@ function TerritorioInner() {
   }
 
   const scheda = stato.fase === "risultato" ? stato.scheda : null;
+
+  // Export "sito completo": recupera (best-effort) il confine del comune per la
+  // mappa e impacchetta tutto in uno ZIP statico, responsive e self-contained.
+  async function esportaSito() {
+    if (!scheda) return;
+    setEsportandoSito(true);
+    try {
+      let confine: GeoJSON.Feature | null = null;
+      const osmId = selection?.osm_id;
+      if (osmId && codComune) {
+        try {
+          const token = await getToken();
+          const params = new URLSearchParams({ osm_id: osmId, cod_comune: codComune });
+          const res = await apiFetch(`/territorio/confine?${params}`, { token });
+          if (res.ok) confine = ((await res.json()) as { feature: GeoJSON.Feature }).feature ?? null;
+        } catch {
+          /* la mappa è un di più: il sito si genera comunque */
+        }
+      }
+      await downloadSiteZip(scheda, extra, confine);
+    } finally {
+      setEsportandoSito(false);
+    }
+  }
+
   // Nel report unico le idee si riconoscono dal generatore; gli spunti di
   // marketing dalla lente (o dai generatori di marketing).
   const MARKETING_GEN = new Set([
@@ -375,6 +403,15 @@ function TerritorioInner() {
               >
                 Esporta Markdown
               </button>
+              <button
+                type="button"
+                className="btn btn-success btn-sm"
+                onClick={esportaSito}
+                disabled={esportandoSito}
+                title="Scarica un sito statico, responsive e condivisibile con tutta l'analisi"
+              >
+                {esportandoSito ? "Generazione…" : "Esporta come sito"}
+              </button>
             </div>
           </div>
 
@@ -470,7 +507,12 @@ function TerritorioInner() {
           <SourcesList citazioni={scheda.citazioni} />
 
           {/* F2 — analisi unica: maturità + valore + report dello stesso comune */}
-          <TerritorioExtra codComune={codComune} comuneNome={selection?.comune_nome ?? null} scheda={scheda} />
+          <TerritorioExtra
+            codComune={codComune}
+            comuneNome={selection?.comune_nome ?? null}
+            scheda={scheda}
+            onData={setExtra}
+          />
         </div>
       ) : null}
     </main>

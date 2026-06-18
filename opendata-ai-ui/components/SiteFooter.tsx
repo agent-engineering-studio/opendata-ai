@@ -104,6 +104,11 @@ export function SiteFooter() {
                 © {year} OpenData AI
               </li>
               <li className="list-inline-item m-0">
+                <Link href="/usecases" className="text-white text-decoration-none">
+                  Casi d&apos;uso
+                </Link>
+              </li>
+              <li className="list-inline-item m-0">
                 <Link href="/docs" className="text-white text-decoration-none">
                   Documentazione
                 </Link>

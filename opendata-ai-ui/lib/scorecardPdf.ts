@@ -79,20 +79,35 @@ function guidaContent(g: Guida): Content[] {
   return out;
 }
 
-function scorecardContent(s: ScorecardData): Content[] {
+const LEVEL_FILL: Record<string, string> = {
+  Beginner: "#dc2626",
+  Follower: "#d97706",
+  "Fast-tracker": "#2563eb",
+  "Trend-setter": "#00cf86",
+};
+
+function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
   const dim = s.dimensions;
   return [
+    { text: s.entity.name, fontSize: 16, bold: true, color: BRAND.primary900, margin: [0, 4, 0, 4] },
+    // Badge livello colorato (es. "Fast-tracker · 67/100") — riprodotto come cella riempita.
     {
-      columns: [
-        { text: s.entity.name, fontSize: 16, bold: true, color: BRAND.primary900 },
-        {
-          text: `${s.level} · ${Math.round(s.overall)}/100`,
-          alignment: "right",
-          bold: true,
-          color: BRAND.green,
-        },
-      ],
-      margin: [0, 4, 0, 8],
+      table: {
+        widths: ["auto"],
+        body: [
+          [
+            {
+              text: `${s.level} · ${Math.round(s.overall)}/100`,
+              color: "white",
+              bold: true,
+              fillColor: LEVEL_FILL[s.level] ?? BRAND.primary900,
+              margin: [8, 4, 8, 4],
+            },
+          ],
+        ],
+      },
+      layout: "noBorders",
+      margin: [0, 0, 0, 8],
     },
     {
       text: `${s.entity.type ?? "ente"}${s.entity.region ? ` · ${s.entity.region}` : ""} · ${s.n_datasets ?? 0} dataset valutati`,
@@ -100,6 +115,10 @@ function scorecardContent(s: ScorecardData): Content[] {
       fontSize: 10,
       margin: [0, 0, 0, 10],
     },
+    // Grafico radar delle 4 dimensioni (immagine catturata dalla pagina).
+    ...(radarPng
+      ? [{ image: radarPng, width: 280, alignment: "center", margin: [0, 0, 0, 10] } as Content]
+      : []),
     { text: "Dimensioni (0–100)", bold: true, color: BRAND.primary900, margin: [0, 4, 0, 4] },
     {
       table: {
@@ -127,9 +146,9 @@ function scorecardContent(s: ScorecardData): Content[] {
   ];
 }
 
-function buildDoc(s: ScorecardData): TDocumentDefinitions {
+function buildDoc(s: ScorecardData, radarPng?: string): TDocumentDefinitions {
   const body: Content[] =
-    s.insufficient_data && s.guida ? guidaContent(s.guida) : scorecardContent(s);
+    s.insufficient_data && s.guida ? guidaContent(s.guida) : scorecardContent(s, radarPng);
   return {
     pageSize: "A4",
     pageMargins: [48, 48, 48, 56],
@@ -149,12 +168,12 @@ function buildDoc(s: ScorecardData): TDocumentDefinitions {
   };
 }
 
-export async function downloadScorecardPdf(s: ScorecardData): Promise<void> {
+export async function downloadScorecardPdf(s: ScorecardData, radarPng?: string): Promise<void> {
   const pdfMake = await loadPdfMake();
   const slug = (s.entity.name || "ente")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (pdfMake as any).createPdf(buildDoc(s)).download(`scorecard-${slug || "ente"}.pdf`);
+  (pdfMake as any).createPdf(buildDoc(s, radarPng)).download(`maturita-${slug || "ente"}.pdf`);
 }

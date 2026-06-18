@@ -1,158 +1,420 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { downloadScorecardPdf, type Guida } from "@/lib/scorecardPdf";
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import { DashboardGate } from "@/components/DashboardGate";
 
 /*
- * Stato della maturità open data: ranking degli enti + scorecard, con export
- * CSV (backend) e PDF (pdfmake lato client). Anello valore⇄maturità: mostra la
- * domanda di riuso non soddisfatta.
+ * Maturità open data di un ente (modello ODM 2025). POST /maturity/assess →
+ * 4 dimensioni + livello + raccomandazioni + pesi; in più carichiamo il valore del
+ * patrimonio (GET /value/portfolio?entity_id=) per lo stesso ente. Niente trend:
+ * al suo posto un piano "come salire di livello" ordinato per impatto sul punteggio.
  */
 
+type Recommendation = {
+  code: string;
+  severity: string;
+  dimension: string;
+  message: string;
+  affected_count: number;
+};
+
 type Dimensions = { policy: number; portal: number; quality: number; impact: number };
-type RankItem = { entity: { id: number; name: string }; overall: number; level: string };
+
 type Scorecard = {
-  entity: { id: number; name: string };
+  entity: { id: number; name: string; type: string | null; region: string | null };
+  assessed_at: string;
   level: string;
   overall: number;
   dimensions: Dimensions;
-  recommendations: { code: string; message: string }[];
-  unmet_reuse_demand?: { count: number; items: string[] };
+  weights?: Partial<Dimensions>;
+  recommendations: Recommendation[];
+  n_datasets: number | null;
+  truncated: boolean | null;
+  insufficient_data?: boolean;
+  guida?: Guida | null;
 };
 
-function Bar({ label, v }: { label: string; v: number }) {
-  return (
-    <div className="d-flex align-items-center gap-2 mb-1" style={{ fontSize: 13 }}>
-      <span style={{ width: 90 }}>{label}</span>
-      <div style={{ flex: 1, background: "#e2e8f0", borderRadius: 4, height: 14 }}>
-        <div style={{ width: `${Math.max(0, Math.min(100, v))}%`, background: "#2563eb", height: 14, borderRadius: 4 }} />
-      </div>
-      <span style={{ width: 44, textAlign: "right" }}>{v.toFixed(0)}</span>
-    </div>
-  );
+type Portfolio = {
+  count: number;
+  pct_hvd: number | null;
+  pct_open_license: number | null;
+  avg_freshness_days: number | null;
+  avg_stars: number | null;
+  avg_reuse: number | null;
+};
+
+type Stato =
+  | { fase: "idle" }
+  | { fase: "loading" }
+  | { fase: "errore"; messaggio: string }
+  | { fase: "risultato"; scorecard: Scorecard };
+
+const LEVEL_COLOR: Record<string, string> = {
+  Beginner: "#dc2626",
+  Follower: "#d97706",
+  "Fast-tracker": "#2563eb",
+  "Trend-setter": "#059669",
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  alta: "#dc2626",
+  media: "#d97706",
+  bassa: "#64748b",
+};
+
+const DIM_KEYS = ["policy", "portal", "quality", "impact"] as const;
+const DIM_LABEL: Record<string, string> = {
+  policy: "Policy",
+  portal: "Portale",
+  quality: "Qualità",
+  impact: "Impatto",
+};
+const WEIGHTS_FALLBACK: Dimensions = { policy: 0.25, portal: 0.25, quality: 0.3, impact: 0.2 };
+// Soglie ODM 2025 crescenti sul punteggio complessivo.
+const ODM_LEVELS: [number, string][] = [
+  [0, "Beginner"],
+  [40, "Follower"],
+  [60, "Fast-tracker"],
+  [80, "Trend-setter"],
+];
+
+/** Leve di miglioramento ordinate per potenziale = (100 − dim) × peso (= guadagno max sul complessivo). */
+function buildImprovements(sc: Scorecard) {
+  const w = { ...WEIGHTS_FALLBACK, ...(sc.weights ?? {}) };
+  const leve = DIM_KEYS.map((k) => {
+    const score = sc.dimensions[k];
+    const weight = (w[k] ?? WEIGHTS_FALLBACK[k]) as number;
+    return {
+      key: k,
+      label: DIM_LABEL[k],
+      score,
+      potential: (100 - score) * weight,
+      recs: sc.recommendations.filter((r) => r.dimension === k),
+    };
+  })
+    .filter((d) => d.potential >= 1)
+    .sort((a, b) => b.potential - a.potential);
+  const next = ODM_LEVELS.find(([t]) => t > sc.overall);
+  return { leve, nextLevel: next ? { name: next[1], gap: next[0] - sc.overall } : null };
+}
+
+async function captureNode(node: HTMLElement): Promise<string | null> {
+  try {
+    const { toPng } = await import("html-to-image");
+    return await toPng(node, { backgroundColor: "#ffffff", pixelRatio: 2, cacheBust: true });
+  } catch {
+    return null;
+  }
 }
 
 function MaturitaInner() {
   const { getToken } = useAuth();
-  const [ranking, setRanking] = useState<RankItem[]>([]);
-  const [sc, setSc] = useState<Scorecard | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const params = useSearchParams();
+  const [entity, setEntity] = useState(params.get("entity") ?? "");
+  const [istat, setIstat] = useState(params.get("istat") ?? "");
+  const [stato, setStato] = useState<Stato>({ fase: "idle" });
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await getToken();
-        const r = await apiFetch("/maturity/ranking", { token });
-        if (r.ok) setRanking(((await r.json()).ranking ?? []) as RankItem[]);
-      } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function openScorecard(id: number) {
-    setErr(null);
+  async function assess(e?: React.FormEvent) {
+    e?.preventDefault();
+    const name = entity.trim();
+    if (!name) return;
+    setStato({ fase: "loading" });
+    setPortfolio(null);
     try {
       const token = await getToken();
-      const r = await apiFetch(`/maturity/entities/${id}`, { token });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setSc((await r.json()) as Scorecard);
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
-  }
-
-  async function exportCsv(id: number) {
-    const token = await getToken();
-    const r = await apiFetch(`/maturity/entities/${id}/scorecard.csv`, { token });
-    if (!r.ok) { setErr(`CSV HTTP ${r.status}`); return; }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `scorecard-${id}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function exportPdf(card: Scorecard) {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const pdfMakeModule = await import("pdfmake/build/pdfmake");
-    const pdfFontsModule = await import("pdfmake/build/vfs_fonts");
-    const pdfMake: any = (pdfMakeModule as any).default ?? pdfMakeModule;
-    const fonts: any = pdfFontsModule as any;
-    pdfMake.vfs = fonts.pdfMake?.vfs ?? fonts.default?.pdfMake?.vfs ?? fonts.vfs ?? fonts.default?.vfs ?? pdfMake.vfs;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const d = card.dimensions;
-    pdfMake.createPdf({
-      content: [
-        { text: `Scorecard maturità — ${card.entity.name}`, style: "h" },
-        { text: `Livello: ${card.level} (${card.overall}/100)`, margin: [0, 4, 0, 8] },
-        { ul: [
-          `Policy: ${d.policy}`, `Portale: ${d.portal}`, `Qualità: ${d.quality}`, `Impatto: ${d.impact}`,
-        ] },
-        { text: "Raccomandazioni", style: "h2", margin: [0, 8, 0, 4] },
-        { ul: card.recommendations.map((r) => r.message) },
-        ...(card.unmet_reuse_demand?.count
-          ? [{ text: "Domanda di riuso non soddisfatta", style: "h2", margin: [0, 8, 0, 4] },
-             { ul: card.unmet_reuse_demand.items }]
-          : []),
-      ],
-      styles: { h: { fontSize: 16, bold: true }, h2: { fontSize: 12, bold: true } },
-    }).download(`scorecard-${card.entity.id}.pdf`);
+      const resp = await apiFetch("/maturity/assess", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          entity: name,
+          comune_nome: name,
+          istat_code: istat.trim() || undefined,
+        }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const scorecard = (await resp.json()) as Scorecard;
+      setStato({ fase: "risultato", scorecard });
+      // Valore del patrimonio dello stesso ente (best-effort, non blocca la scorecard).
+      const eid = scorecard.entity?.id;
+      if (eid && !scorecard.insufficient_data) {
+        try {
+          const rv = await apiFetch(`/value/portfolio?entity_id=${eid}`, { token });
+          if (rv.ok) setPortfolio((await rv.json()) as Portfolio);
+        } catch {
+          /* il valore è opzionale */
+        }
+      }
+    } catch (err) {
+      setStato({ fase: "errore", messaggio: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   return (
     <main id="main-content" className="container py-4">
-      <h1 className="h3 mb-1">Stato della maturità open data</h1>
+      <h1 className="h3 mb-1">Maturità open data</h1>
       <p className="text-slate-500 mb-3" style={{ fontSize: 14 }}>
-        Classifica degli enti per maturità (ODM 2025) e scorecard esportabile.
+        Valuta quanto sono completi, aperti e riutilizzabili gli open data di un{" "}
+        <strong>ente</strong> (comune, Regione, provincia, agenzia…) secondo il modello
+        ODM 2025, e indica concretamente dove intervenire per migliorare. Per gli enti
+        senza open data viene proposta una guida operativa per avviarli.
       </p>
-      {err ? <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700 mb-3" style={{ fontSize: 14 }}>{err}</div> : null}
 
-      <div className="row g-4">
-        <div className="col-md-5">
-          <h2 className="h6 text-slate-500">Classifica</h2>
-          <table className="table table-sm" style={{ fontSize: 14 }}>
-            <thead><tr><th>Ente</th><th>Livello</th><th>Overall</th></tr></thead>
-            <tbody>
-              {ranking.map((r) => (
-                <tr key={r.entity.id} style={{ cursor: "pointer" }} onClick={() => openScorecard(r.entity.id)}>
-                  <td>{r.entity.name}</td><td>{r.level}</td><td>{r.overall.toFixed(0)}</td>
-                </tr>
-              ))}
-              {ranking.length === 0 ? <tr><td colSpan={3} className="text-slate-400">Nessun ente valutato.</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
+      <form onSubmit={assess} className="d-flex flex-wrap gap-2 mb-4" style={{ maxWidth: 720 }}>
+        <input
+          type="text"
+          className="form-control"
+          style={{ flex: 2, minWidth: 240 }}
+          placeholder="Ente (nome o organizzazione CKAN, es. Regione Puglia, Comune di Bari)"
+          value={entity}
+          onChange={(ev) => setEntity(ev.target.value)}
+        />
+        <input
+          type="text"
+          className="form-control"
+          style={{ flex: 1, minWidth: 150, maxWidth: 220 }}
+          placeholder="ISTAT comune (opz.)"
+          value={istat}
+          onChange={(ev) => setIstat(ev.target.value)}
+          title="Solo per i comuni: il codice ISTAT abilita il fallback sul portale open-data regionale. Lascia vuoto per Regioni/agenzie."
+        />
+        <button type="submit" className="btn btn-primary" disabled={stato.fase === "loading"}>
+          {stato.fase === "loading" ? "Valutazione…" : "Valuta"}
+        </button>
+      </form>
 
-        <div className="col-md-7">
-          {sc ? (
-            <>
-              <div className="d-flex justify-content-between align-items-center">
-                <h2 className="h5 mb-0">{sc.entity.name}</h2>
-                <span className="badge bg-primary">{sc.level} · {sc.overall.toFixed(0)}/100</span>
-              </div>
-              <div className="my-3">
-                <Bar label="Policy" v={sc.dimensions.policy} />
-                <Bar label="Portale" v={sc.dimensions.portal} />
-                <Bar label="Qualità" v={sc.dimensions.quality} />
-                <Bar label="Impatto" v={sc.dimensions.impact} />
-              </div>
-              {sc.unmet_reuse_demand?.count ? (
-                <div className="mb-2" style={{ fontSize: 13 }}>
-                  <strong>Domanda di riuso non soddisfatta ({sc.unmet_reuse_demand.count}):</strong>
-                  <ul className="mb-0">{sc.unmet_reuse_demand.items.map((g, i) => <li key={i}>{g}</li>)}</ul>
-                </div>
-              ) : null}
-              <div className="d-flex gap-2">
-                <button className="btn btn-sm btn-outline-primary" onClick={() => exportCsv(sc.entity.id)}>Esporta CSV</button>
-                <button className="btn btn-sm btn-outline-secondary" onClick={() => exportPdf(sc)}>Esporta PDF</button>
-              </div>
-            </>
-          ) : (
-            <p className="text-slate-500" style={{ fontSize: 14 }}>Seleziona un ente dalla classifica.</p>
-          )}
+      {stato.fase === "errore" ? (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700" style={{ fontSize: 14 }}>
+          Errore nell&apos;assessment: {stato.messaggio}
         </div>
-      </div>
+      ) : null}
+
+      {stato.fase === "risultato" ? (
+        <ScorecardView scorecard={stato.scorecard} portfolio={portfolio} />
+      ) : null}
     </main>
+  );
+}
+
+function GuidaView({ guida }: { guida: Guida }) {
+  return (
+    <div className="rounded border border-primary bg-bg-muted p-4">
+      <h3 className="h5 mb-2">{guida.titolo}</h3>
+      <p className="text-slate-600" style={{ fontSize: 14 }}>{guida.premessa}</p>
+      <ol className="d-flex flex-column gap-3 mt-3" style={{ paddingLeft: 18 }}>
+        {guida.passi.map((p, i) => (
+          <li key={i}>
+            <strong>{p.titolo}</strong>
+            <div className="text-slate-600" style={{ fontSize: 14 }}>{p.descrizione}</div>
+            {(p.riferimenti ?? []).map((r) => (
+              <div key={r.url} style={{ fontSize: 13 }}>
+                <a href={r.url} target="_blank" rel="noopener noreferrer">{r.label} →</a>
+              </div>
+            ))}
+          </li>
+        ))}
+      </ol>
+      {guida.nota ? (
+        <p className="text-slate-500 fst-italic mt-3 mb-0" style={{ fontSize: 12 }}>{guida.nota}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ValoreCard({ pf }: { pf: Portfolio }) {
+  const kpi = (label: string, value: string) => (
+    <div className="col">
+      <div className="h5 mb-0 text-primary">{value}</div>
+      <div className="small text-muted">{label}</div>
+    </div>
+  );
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Valore del patrimonio</h3>
+      <p className="text-slate-500 mb-2" style={{ fontSize: 13 }}>
+        Quanto valgono, in pratica, i {pf.count} dataset appena valutati: copertura ad alto
+        valore (HVD), apertura della licenza, freschezza e potenziale di riuso.
+      </p>
+      <div className="row g-3 text-center">
+        {kpi("Dataset", String(pf.count))}
+        {kpi("Alto valore (HVD)", pf.pct_hvd != null ? `${Math.round(pf.pct_hvd)}%` : "—")}
+        {kpi("Licenza aperta", pf.pct_open_license != null ? `${Math.round(pf.pct_open_license)}%` : "—")}
+        {kpi("Stelle medie", pf.avg_stars != null ? pf.avg_stars.toFixed(1) : "—")}
+        {kpi("Riuso medio", pf.avg_reuse != null ? pf.avg_reuse.toFixed(1) : "—")}
+      </div>
+    </div>
+  );
+}
+
+function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const radarRef = useRef<HTMLDivElement>(null);
+  const slug = (scorecard.entity.name || "ente").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const insufficient = scorecard.insufficient_data && scorecard.guida;
+  const { dimensions, level, overall } = scorecard;
+  const radarData = DIM_KEYS.map((k) => ({ dim: DIM_LABEL[k], value: dimensions[k] }));
+  const levelColor = LEVEL_COLOR[level] ?? "#334155";
+  const { leve, nextLevel } = buildImprovements(scorecard);
+
+  async function exportPng() {
+    if (!cardRef.current) return;
+    const data = await captureNode(cardRef.current);
+    if (!data) return;
+    const a = document.createElement("a");
+    a.href = data;
+    a.download = `maturita-${slug || "ente"}.png`;
+    a.click();
+  }
+
+  async function exportPdf() {
+    const radarPng = radarRef.current ? (await captureNode(radarRef.current)) ?? undefined : undefined;
+    await downloadScorecardPdf(scorecard, radarPng);
+  }
+
+  return (
+    <div className="d-flex flex-column gap-3">
+      {/* Toolbar export */}
+      <div className="d-flex gap-2">
+        <button type="button" className="btn btn-primary btn-sm" onClick={exportPdf}>
+          Esporta PDF
+        </button>
+        <button type="button" className="btn btn-outline-primary btn-sm" onClick={exportPng}>
+          Esporta PNG
+        </button>
+      </div>
+
+      <div ref={cardRef} className="d-flex flex-column gap-4 bg-white p-3 rounded">
+        {/* Header */}
+        <div className="d-flex flex-wrap align-items-center gap-3">
+          <div>
+            <h2 className="h4 mb-0">{scorecard.entity.name}</h2>
+            <span className="text-slate-500" style={{ fontSize: 13 }}>
+              {scorecard.entity.type ?? "ente"}
+              {scorecard.entity.region ? ` · ${scorecard.entity.region}` : ""} ·{" "}
+              {scorecard.n_datasets ?? 0} dataset valutati
+              {scorecard.truncated ? " (campione)" : ""}
+            </span>
+          </div>
+          <span
+            className="badge rounded-pill px-3 py-2"
+            style={{ backgroundColor: levelColor, color: "white", fontSize: 14 }}
+          >
+            {level} · {overall.toFixed(0)}/100
+          </span>
+        </div>
+
+        {insufficient ? (
+          <GuidaView guida={scorecard.guida!} />
+        ) : (
+          <>
+            <div className="row g-4">
+              {/* Radar 4 dimensioni */}
+              <div className="col-lg-6">
+                <h3 className="h6 text-slate-500">Dimensioni</h3>
+                <div ref={radarRef} style={{ height: 320, backgroundColor: "#ffffff" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData} outerRadius="70%">
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="dim" tick={{ fontSize: 12 }} />
+                      <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                      <Radar dataKey="value" stroke="#2563eb" fill="#2563eb" fillOpacity={0.4} />
+                      <Tooltip />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Come salire di livello (al posto del trend) */}
+              <div className="col-lg-6">
+                <h3 className="h6 text-slate-500">Come migliorare</h3>
+                {nextLevel ? (
+                  <p className="mb-2" style={{ fontSize: 14 }}>
+                    Mancano <strong>{Math.round(nextLevel.gap)} punti</strong> per raggiungere il
+                    livello <strong>{nextLevel.name}</strong>. Gli interventi a maggiore impatto
+                    sul punteggio complessivo:
+                  </p>
+                ) : (
+                  <p className="mb-2" style={{ fontSize: 14 }}>
+                    Livello massimo raggiunto. Margini di consolidamento per dimensione:
+                  </p>
+                )}
+                {leve.length === 0 ? (
+                  <p className="text-slate-500" style={{ fontSize: 14 }}>
+                    Tutte le dimensioni sono già al massimo: nessun intervento prioritario.
+                  </p>
+                ) : (
+                  <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+                    {leve.map((l) => (
+                      <li key={l.key}>
+                        <div className="d-flex align-items-baseline gap-2">
+                          <span className="badge bg-primary">+{Math.round(l.potential)} pti</span>
+                          <strong style={{ fontSize: 14 }}>Rafforza {l.label}</strong>
+                          <span className="text-slate-400" style={{ fontSize: 12 }}>({Math.round(l.score)}/100)</span>
+                        </div>
+                        {l.recs.length ? (
+                          <ul className="text-slate-600 mb-0" style={{ fontSize: 13, paddingLeft: 20 }}>
+                            {l.recs.map((r) => (
+                              <li key={r.code}>{r.message}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 11 }}>
+                  Il potenziale è il guadagno massimo sul punteggio complessivo portando la
+                  dimensione a 100 (pesata secondo il modello ODM).
+                </p>
+              </div>
+            </div>
+
+            {/* Valore del patrimonio (unito alla maturità) */}
+            {portfolio && portfolio.count > 0 ? <ValoreCard pf={portfolio} /> : null}
+
+            {/* Raccomandazioni complete */}
+            <div>
+              <h3 className="h6 text-slate-500">Raccomandazioni</h3>
+              {scorecard.recommendations.length === 0 ? (
+                <p className="text-slate-500" style={{ fontSize: 14 }}>
+                  Nessuna raccomandazione: l&apos;ente soddisfa le soglie principali.
+                </p>
+              ) : (
+                <ul className="list-unstyled d-flex flex-column gap-2">
+                  {scorecard.recommendations.map((r) => (
+                    <li key={r.code} className="d-flex align-items-start gap-2">
+                      <span
+                        className="badge rounded-pill"
+                        style={{ backgroundColor: SEVERITY_COLOR[r.severity] ?? "#64748b", color: "white" }}
+                      >
+                        {r.severity}
+                      </span>
+                      <span style={{ fontSize: 14 }}>
+                        {r.message}
+                        <span className="text-slate-400"> · {r.dimension}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
