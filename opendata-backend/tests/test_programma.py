@@ -45,6 +45,41 @@ class _StubProgrammaAgent:
         return _StubAgentResponse(text=self.canned)
 
 
+class _FakeStream:
+    """Mima `ResponseStream`: async-iterabile di update + get_final_response()."""
+
+    def __init__(self, deltas: list[str], final: str) -> None:
+        self._deltas = deltas
+        self._final = final
+
+    def __aiter__(self):  # noqa: ANN204
+        return self._gen()
+
+    async def _gen(self):  # noqa: ANN202
+        for d in self._deltas:
+            yield _StubAgentResponse(text=d)
+
+    async def get_final_response(self) -> _StubAgentResponse:
+        return _StubAgentResponse(text=self._final)
+
+
+class _StreamingStubAgent:
+    """Agente che supporta `run(prompt, stream=True)` → _FakeStream (per L3)."""
+
+    def __init__(self, canned: str) -> None:
+        self.canned = canned
+
+    def run(self, prompt: str, stream: bool = False):  # noqa: ANN201
+        if stream:
+            mid = max(1, len(self.canned) // 2)
+            return _FakeStream([self.canned[:mid], self.canned[mid:]], self.canned)
+
+        async def _coro() -> _StubAgentResponse:
+            return _StubAgentResponse(text=self.canned)
+
+        return _coro()
+
+
 @dataclass
 class _StubInnerResponse:
     text: str
@@ -142,6 +177,21 @@ async def test_happy_path_builds_validated_response() -> None:
     assert "RICHIESTA:" in prompt and "comune ISTAT: 110002" in prompt
     assert "=== OPENCOESIONE ===" in prompt and "=== ISTAT ===" in prompt
     assert _OC_URL in prompt and "RISORSE CITABILI" in prompt
+
+
+@pytest.mark.asyncio
+async def test_synthesis_streams_thinking_events_when_emit_provided() -> None:
+    """L3: con `emit`, la sintesi STREAMA i token (eventi 'thinking' + status
+    start/end della fase). Senza emit resta una run non-streaming (altri test)."""
+    events: list[dict[str, Any]] = []
+    agent = _StreamingStubAgent(_llm_json())
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+
+    out = await aggregate(_participants(), emit=events.append)
+    assert out.response is not None and len(out.response.proposte) == 1  # sintesi valida
+    assert any(e["event"] == "thinking" and e.get("delta") for e in events)  # token live
+    assert any(e["event"] == "status" and e["phase"] == "start" for e in events)
+    assert any(e["event"] == "status" and e["phase"] == "end" for e in events)
 
 
 @pytest.mark.asyncio

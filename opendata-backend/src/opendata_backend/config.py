@@ -540,7 +540,7 @@ PROGRAMMA_INSTRUCTIONS = (
     '  "disclaimer": str\n'
     "}\n\n"
     "REGOLE VINCOLANTI:\n"
-    "- `sintesi`: 8-12 frasi di QUADRO DESCRITTIVO del territorio — è "
+    "- `sintesi`: 6-8 frasi di QUADRO DESCRITTIVO del territorio — è "
     "un'analisi GENERALE dell'INTERO COMUNE (non di una singola zona): "
     "popolazione, quanti progetti di coesione insistono e su quali temi (per "
     "AGGREGATI, non elencandoli tutti), quanto finanziato vs speso (spend "
@@ -551,9 +551,9 @@ PROGRAMMA_INSTRUCTIONS = (
     "racconto che apre la scheda: prosa scorrevole, numeri dal bundle, nessun "
     "URL.\n"
     "- PROFONDITÀ: ogni voce SWOT è di 2-4 frasi (il fatto + perché conta per il "
-    "territorio), MAI una riga telegrafica. Punta a 2-4 voci per quadrante "
+    "territorio), MAI una riga telegrafica. Punta a 2-3 voci per quadrante "
     "quando le evidenze lo permettono. Ogni proposta ha una `descrizione` di "
-    "5-10 frasi: in cosa consiste l'intervento, a chi si rivolge, chi sarebbe "
+    "5-7 frasi: in cosa consiste l'intervento, a chi si rivolge, chi sarebbe "
     "l'attuatore-tipo, a quali progetti esistenti si aggancia.\n"
     "- PROGETTI PER NOME: quando citi progetti OpenCoesione usa SEMPRE il "
     "titolo completo + CLP + importo + stato (es. \"Raddoppio della tratta "
@@ -726,9 +726,9 @@ IDEE_INSTRUCTIONS = (
     "bundle. Creatività NON significa inventare dati: significa connettere "
     "dati reali in modo non ovvio.\n"
     "- La SWOT in questa modalità è facoltativa (array vuoti vanno bene): il "
-    "focus sono le `proposte` — punta a 3-6 idee, di generatori DIVERSI quando "
-    "le evidenze lo permettono.\n"
-    "- AZIONABILITÀ: ogni `descrizione` è di 5-10 frasi e deve permettere a un "
+    "focus sono le `proposte` — punta a 3-5 idee (MAX 5), di generatori DIVERSI "
+    "quando le evidenze lo permettono.\n"
+    "- AZIONABILITÀ: ogni `descrizione` è di 5-7 frasi e deve permettere a un "
     "amministratore di passare all'azione — copri TUTTI questi punti: (1) in "
     "cosa consiste l'idea e da quale scarto nasce; (2) a chi si rivolge; "
     "(3) chi l'ha già fatta e con che esito (progetti comparabili PER NOME: "
@@ -831,15 +831,15 @@ MARKETING_INSTRUCTIONS = (
     "- `sintesi` (2-4 frasi): la LETTURA D'INSIEME — quali leve di attrattività "
     "emergono e quali spunti sono i più promettenti (impatto × fattibilità "
     "d'azione, NON disponibilità di fondi).\n"
-    "- ORDINE = PRIORITÀ: dal più promettente al meno; punta a 3-6 spunti su "
-    "LENTI diverse quando le evidenze lo permettono.\n"
+    "- ORDINE = PRIORITÀ: dal più promettente al meno; punta a 3-5 spunti (MAX 5) "
+    "su LENTI diverse quando le evidenze lo permettono.\n"
     "- `finanziamento` è SEMPRE null: il marketing territoriale non è ancorato a "
     "un fondo. La `fattibilita` riflette la FACILITÀ D'AZIONE (organizzativa, "
     "regolamentare), non la copertura finanziaria.\n"
     "- PERTINENZA del caso_analogo: il precedente esterno può venire da fuori "
     "regione, ma deve essere PLAUSIBILMENTE applicabile qui (ente comparabile per "
     "taglia/contesto) — dichiaralo nel `dettaglio`.\n"
-    "- AZIONABILITÀ: ogni `descrizione` (5-10 frasi) copre: (1) in cosa consiste e "
+    "- AZIONABILITÀ: ogni `descrizione` (5-7 frasi) copre: (1) in cosa consiste e "
     "da quale lente/generatore nasce; (2) l'asset o il dato locale che la "
     "giustifica; (3) chi l'ha già fatta e con che esito (il precedente esterno, "
     "per nome ed ente); (4) a chi si rivolge; (5) l'attuatore-tipo (Comune, Pro "
@@ -994,7 +994,11 @@ class Settings(BaseSettings):
     # vuoto. In modalità "completa" il JSON è grande e URL-dense (~8k token già
     # a 24k char): 16384 dà margine ampio. Vale per ogni provider (su ollama
     # mappa su num_predict).
-    synth_max_tokens: int = Field(default=16384)
+    # L1 (perf sintesi): 16384 permetteva generazioni JSON enormi (sintesi lunga +
+    # 6 proposte da 5-10 frasi) → i token di OUTPUT erano il costo dominante della
+    # fase di sintesi. Tetto a 8192 + istruzioni più strette (max 5 proposte, frasi
+    # 5-7). Override via env SYNTH_MAX_TOKENS.
+    synth_max_tokens: int = Field(default=8192)
     # Timeout (s) PER SINGOLO specialista del fan-out. Senza, uno specialista
     # lento (es. CKAN che ritenta download 404) blocca l'intero report fino al
     # timeout totale. Scaduto, quello specialista viene escluso e gli altri
