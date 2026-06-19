@@ -596,7 +596,7 @@ def build_programma_aggregator(
     lavoro_info: dict[str, Any] | None = None,
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
-) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
+) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
     Con `modalita="completa"` il bundle di evidenze (la parte costosa: UN solo
@@ -613,7 +613,10 @@ def build_programma_aggregator(
     if req.modalita == "marketing" and marketing_agent is None:
         raise ValueError("modalita='marketing' richiede anche marketing_agent")
 
-    async def aggregate(results: list[Any]) -> ProgrammaOutput:
+    async def aggregate(
+        results: list[Any],
+        emit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> ProgrammaOutput:
         log.info("programma aggregator: %d participant results", len(results))
         sections: list[str] = []
         all_resources: list[Resource] = []
@@ -837,13 +840,34 @@ def build_programma_aggregator(
         prompt_parts.append("EVIDENZE RACCOLTE:\n\n" + bundle)
         prompt = "\n\n".join(prompt_parts)
 
+        # Etichette "umane" per il feed thinking (U1): cosa sta scrivendo l'LLM.
+        _PHASE_LABEL = {
+            "programma": "Scrivo l'analisi del territorio",
+            "idee": "Genero le idee per il territorio",
+            "marketing": "Cerco spunti di marketing territoriale",
+        }
+
         async def _run(agent: Agent, label: str) -> _LlmProgramma:
+            fase = _PHASE_LABEL.get(label, label)
             try:
-                llm_result = await agent.run(prompt)
-                raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
+                if emit is not None:
+                    # L3: streaming dei token della sintesi → feed "thinking" live.
+                    emit({"event": "status", "source": fase, "phase": "start"})
+                    stream = agent.run(prompt, stream=True)
+                    async for update in stream:
+                        if getattr(update, "text", None):
+                            emit({"event": "thinking", "source": fase, "delta": update.text})
+                    final = await stream.get_final_response()
+                    raw = (getattr(final, "text", None) or str(final)).strip()
+                    emit({"event": "status", "source": fase, "phase": "end"})
+                else:
+                    llm_result = await agent.run(prompt)
+                    raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
                 return _parse_llm_json(raw)
             except Exception:
                 log.exception("%s agent failed; sezione vuota", label)
+                if emit is not None:
+                    emit({"event": "status", "source": fase, "phase": "error"})
                 return _LlmProgramma()
 
         def _build(parsed: _LlmProgramma, modalita: str) -> ProgrammaResponse:

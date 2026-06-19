@@ -995,8 +995,30 @@ class OrchestratorSession:
                 fase = "report completo" if req.modalita == "completa" else req.modalita
                 yield {"event": "status", "source": "sintesi", "phase": "start",
                        "detail": fase}
+                # L3+U1: la sintesi gira come TASK che streama i token degli agenti
+                # (programma/idee/marketing) sulla coda via `emit`; qui consumiamo la
+                # coda finché è in corso, così il feed "thinking" è live (prima la
+                # sintesi era un await opaco → UI ferma per minuti).
+                synth_task = asyncio.create_task(
+                    aggregator(real_results, emit=queue.put_nowait)
+                )
                 try:
-                    output = await aggregator(real_results)
+                    while not synth_task.done():
+                        try:
+                            event = await asyncio.wait_for(queue.get(), timeout=heartbeat_sec)
+                        except asyncio.TimeoutError:
+                            yield {
+                                "event": "heartbeat", "in_flight": ["sintesi"],
+                                "elapsed_ms": int((asyncio.get_event_loop().time() - t0) * 1000),
+                            }
+                            continue
+                        if event is not None:
+                            yield event
+                    while not queue.empty():  # drena gli eventi residui di fine sintesi
+                        ev = queue.get_nowait()
+                        if ev is not None:
+                            yield ev
+                    output = await synth_task
                 except Exception as exc:
                     log.exception("programma aggregator failed in streaming")
                     yield {"event": "status", "source": "sintesi", "phase": "end",
