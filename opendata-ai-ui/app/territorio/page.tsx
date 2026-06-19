@@ -93,6 +93,10 @@ function TerritorioInner() {
   const [stato, setStato] = useState<Stato>({ fase: "idle" });
   const [attesaSec, setAttesaSec] = useState(0);
   const [steps, setSteps] = useState<Step[]>([]);
+  // Buffer "thinking": i token della sintesi (evento `thinking`) accumulati live,
+  // come il pannello di ragionamento dei client Claude/OpenAI. Cap per non crescere
+  // all'infinito (teniamo la coda recente).
+  const [thinking, setThinking] = useState("");
   const [extra, setExtra] = useState<TerritorioExtraData>({});
   const [esportandoSito, setEsportandoSito] = useState(false);
 
@@ -142,6 +146,7 @@ function TerritorioInner() {
     if (!cod) return;
     setStato({ fase: "loading" });
     setSteps([]);
+    setThinking("");
     try {
       const body: ProgrammaRequest = {
         cod_comune: cod,
@@ -203,6 +208,11 @@ function TerritorioInner() {
               kind: "tool",
               phase: (ev.phase as "start" | "end" | "error") ?? "start",
             });
+          } else if (ev.event === "thinking") {
+            const delta = String(ev.delta ?? "");
+            // append + cap alla coda recente (~4000 char): è un'anteprima viva,
+            // non il testo finale (quello arriva strutturato con `result`).
+            if (delta) setThinking((prev) => (prev + delta).slice(-4000));
           } else if (ev.event === "result") {
             scheda = ev.scheda as ProgrammaResponse;
           } else if (ev.event === "error") {
@@ -341,18 +351,46 @@ function TerritorioInner() {
 
             {stato.fase === "loading" ? (
               <div className="mt-3" role="status" aria-label="Avanzamento dell'analisi">
-                <div className="progress" style={{ height: "0.5rem" }}>
-                  <div
-                    className="progress-bar progress-bar-striped progress-bar-animated"
-                    role="progressbar"
-                    aria-valuetext={statusLabel}
-                    style={{ width: "100%" }}
-                  />
+                {/* Riga corrente: spinner "thinking" + attività in corso + cronometro */}
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <span className="spinner-border spinner-border-sm text-primary" aria-hidden="true" />
+                  <span className="fw-semibold text-truncate">{statusLabel}</span>
+                  <span className="ms-auto flex-shrink-0 font-monospace small text-muted">{attesaSec}s</span>
                 </div>
-                <div className="small text-muted mt-2 d-flex align-items-center justify-content-between gap-2">
-                  <span className="text-truncate">{statusLabel}</span>
-                  <span className="flex-shrink-0 font-monospace">{attesaSec}s</span>
-                </div>
+                {/* Timeline delle fasi (come i client Claude/OpenAI): ✓ fatte,
+                    spinner in corso, ✗ errori. */}
+                {steps.length ? (
+                  <ul
+                    className="list-unstyled small mb-0 ps-1"
+                    style={{ maxHeight: "12rem", overflowY: "auto" }}
+                  >
+                    {steps.map((s, i) => (
+                      <li key={`${s.key}:${i}`} className="d-flex align-items-center gap-2 py-1">
+                        {s.phase === "start" ? (
+                          <span
+                            className="spinner-border text-secondary flex-shrink-0"
+                            style={{ width: "0.7rem", height: "0.7rem" }}
+                            aria-hidden="true"
+                          />
+                        ) : s.phase === "error" ? (
+                          <span className="text-danger flex-shrink-0" aria-hidden="true">✗</span>
+                        ) : (
+                          <span className="text-success flex-shrink-0" aria-hidden="true">✓</span>
+                        )}
+                        <span className={s.phase === "end" ? "text-muted" : ""}>{s.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {/* Anteprima "thinking": i token della sintesi che arrivano live. */}
+                {thinking ? (
+                  <pre
+                    className="small text-muted bg-light border rounded p-2 mt-2 mb-0"
+                    style={{ maxHeight: "10rem", overflowY: "auto", whiteSpace: "pre-wrap" }}
+                  >
+                    {thinking}
+                  </pre>
+                ) : null}
               </div>
             ) : null}
           </div>
