@@ -1,4 +1,5 @@
 import type { Evidenza } from "@/lib/types";
+import { resolveSource } from "@/lib/sources";
 
 const FONTE_LABEL: Record<string, string> = {
   istat: "ISTAT",
@@ -37,6 +38,9 @@ export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
   const esterna = evidenza.fonte_tipo === "ispirazione_esterna" || evidenza.fonte === "web";
   // I locator sintetici kg:// non sono URL navigabili — niente link rotto.
   const linkable = /^https?:\/\//.test(evidenza.url);
+  // Fonte chiara per il display: file/API → sito di origine; OSM/Overpass → null
+  // (nessun link: la mappa mostra già il dettaglio).
+  const resolved = linkable ? resolveSource(evidenza.url) : null;
   return (
     <div className="d-flex align-items-start gap-2 small">
       <span
@@ -62,9 +66,9 @@ export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
       ) : null}
       <span style={{ color: "var(--color-text-muted)" }}>
         {evidenza.dettaglio}{" "}
-        {linkable ? (
+        {resolved ? (
           <a
-            href={evidenza.url}
+            href={resolved.href}
             target="_blank"
             rel="noreferrer"
             className="text-decoration-underline"
@@ -72,11 +76,11 @@ export function CitationLink({ evidenza }: { evidenza: Evidenza }) {
           >
             verifica la fonte
           </a>
-        ) : (
+        ) : !linkable ? (
           <span className="fst-italic" style={{ wordBreak: "break-all" }}>
             rif. {evidenza.url}
           </span>
-        )}
+        ) : null /* http ma fonte nascosta (OSM): nessun link, basta la mappa */}
       </span>
     </div>
   );

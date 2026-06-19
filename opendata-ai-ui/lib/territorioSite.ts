@@ -8,6 +8,7 @@
  */
 import type { ProgrammaResponse, Proposta, Resource } from "@/lib/types";
 import type { Portfolio, Report, Scorecard } from "@/components/territorio/TerritorioExtra";
+import { resolveSource } from "@/lib/sources";
 
 type Extra = { scorecard?: Scorecard; report?: Report; portfolio?: Portfolio };
 
@@ -45,41 +46,6 @@ function esc(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-/* Fonti note → pagina-portale riconoscibile (mai un file/API in profondità). */
-const PORTALS: { suffix: string; url: string; name: string }[] = [
-  { suffix: "opencoesione.gov.it", url: "https://opencoesione.gov.it/", name: "OpenCoesione" },
-  { suffix: "isprambiente.it", url: "https://idrogeo.isprambiente.it/", name: "ISPRA IdroGEO" },
-  { suffix: "openstreetmap.org", url: "https://www.openstreetmap.org/", name: "OpenStreetMap" },
-  { suffix: "istat.it", url: "https://www.istat.it/", name: "ISTAT" },
-  { suffix: "dati.gov.it", url: "https://www.dati.gov.it/", name: "dati.gov.it" },
-  { suffix: "ec.europa.eu", url: "https://ec.europa.eu/eurostat", name: "Eurostat" },
-  { suffix: "oecd.org", url: "https://data.oecd.org/", name: "OCSE" },
-];
-const FILE_RE = /\.(csv|json|xml|pbf|zip|xlsx?|geojson|tsv)(\?|#|$)/i;
-
-/** Risolve una fonte CHIARA per i cittadini: niente link a file/API in profondità,
- * sempre una pagina-fonte riconoscibile col suo NOME. Ritorna {href, name} o null. */
-function resolveSource(raw: string | undefined | null): { href: string; name: string } | null {
-  if (!raw) return null;
-  let u: URL;
-  try { u = new URL(String(raw).replace(/&amp;/g, "&")); } catch { return null; }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  const host = u.hostname.replace(/^www\./, "");
-  // OpenCoesione: la pagina del SINGOLO progetto è chiara e utile → la teniamo (mai il JSON).
-  if (host.endsWith("opencoesione.gov.it")) {
-    const m = u.pathname.match(/\/progetti\/([^/.]+)\/?$/i);
-    if (m) return { href: `https://opencoesione.gov.it/it/progetti/${m[1].toLowerCase()}/`, name: "OpenCoesione — progetto" };
-    return { href: "https://opencoesione.gov.it/", name: "OpenCoesione" };
-  }
-  const p = PORTALS.find((x) => host === x.suffix || host.endsWith("." + x.suffix));
-  if (p) return { href: p.url, name: p.name };
-  // Fonte sconosciuta: se è un file o un'API, niente profondità → l'origine del sito.
-  if (FILE_RE.test(u.pathname) || u.pathname.includes("/api/") || u.search) {
-    return { href: u.origin + "/", name: host };
-  }
-  return { href: u.href, name: host };
 }
 
 /** Markdown minimale → HTML (titoli, grassetto/corsivo, link, liste, paragrafi). */

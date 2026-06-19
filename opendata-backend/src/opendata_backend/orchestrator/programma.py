@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from .guardrails import validate_programma
 from .parsing import Resource, parse_agent_reply
+from .sources import resolve_source_url
 from .synth import (
     _capture_tool_resources,
     _executor_id,
@@ -537,6 +538,26 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
 # ─────────────────────────── aggregatore ────────────────────────────────────
 
 
+def _clean_citazioni_for_display(resources: list[Resource]) -> list[Resource]:
+    """Normalizza la lista FONTI per la UI (display-only): file/API → sito di
+    origine, OSM/Overpass NASCOSTE (dato di mappa, non citazione), dedup per URL
+    risolto. Gli URL grezzi restano intatti nella validazione/guardrail (vedi
+    `sources.resolve_source_url`): qui tocchiamo solo ciò che vede il cittadino.
+    """
+    seen: set[str] = set()
+    out: list[Resource] = []
+    for r in resources:
+        resolved = resolve_source_url(r.url)
+        if resolved is None:  # OSM/Overpass o URL inutilizzabile → fuori dalle fonti
+            continue
+        href, name = resolved
+        if href in seen:
+            continue
+        seen.add(href)
+        out.append(r.model_copy(update={"url": href, "name": r.name or name}))
+    return out
+
+
 def build_programma_aggregator(
     programma_agent: Agent,
     req: ProgrammaRequest,
@@ -809,10 +830,13 @@ def build_programma_aggregator(
                 response.idee_sintesi = response.sintesi
                 response.sintesi = ""
 
+        # Display-only: fonti chiare (file→origine), OSM nascosto, dedup. La
+        # validazione sopra ha già usato gli URL grezzi (evidence_urls intatto).
+        response.citazioni = _clean_citazioni_for_display(response.citazioni)
         return ProgrammaOutput(
             text=response.model_dump_json(),
             response=response,
-            evidence_sources=sorted({str(r.source) for r in all_resources if r.source}),
+            evidence_sources=sorted({str(r.source) for r in response.citazioni if r.source}),
         )
 
     return aggregate
