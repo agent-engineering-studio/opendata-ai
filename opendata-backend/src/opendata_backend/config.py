@@ -683,7 +683,15 @@ IDEE_INSTRUCTIONS = (
     "blocco 'LENTE TRASPORTI/MOBILITÀ' (fermate bus, stazioni, tram/metro): citane "
     "SEMPRE il source_url; incrocia con la popolazione. Proponi interventi su TPL/"
     "intermodalità/mobilità dolce coerenti coi numeri. NIENTE precedente web. Se NON "
-    "ci sono dati trasporti nel bundle, NON forzare l'idea: saltala.\n\n"
+    "ci sono dati trasporti nel bundle, NON forzare l'idea: saltala.\n"
+    "  - welfare — 'dove agire su coesione sociale e servizi alla persona': individua "
+    "il carico socio-assistenziale del comune — INVECCHIAMENTO (indice di vecchiaia alto "
+    "rispetto alla media nazionale ~190), dipendenza anziani elevata, alta quota over-65. "
+    "ANCORA = gli indici demografici ISTAT del blocco 'LENTE WELFARE' (indice di vecchiaia/"
+    "dipendenza anziani, % over-65/under-15): citane SEMPRE il source_url; incrocia con la "
+    "popolazione. Proponi interventi su assistenza domiciliare/servizi per anziani/"
+    "infanzia/inclusione coerenti coi numeri. NIENTE precedente web. Se NON ci sono indici "
+    "demografici nel bundle, NON forzare l'idea: saltala.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -691,7 +699,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '

@@ -211,6 +211,7 @@ def build_programma_task(
     turismo_info: dict[str, Any] | None = None,
     lavoro_info: dict[str, Any] | None = None,
     trasporti_info: dict[str, Any] | None = None,
+    welfare_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -398,6 +399,31 @@ def build_programma_task(
                 "abitante, assenza di nodo ferroviario, dipendenza dall'auto); un'idea "
                 "'trasporti' deve ancorarsi a questi numeri e citare questa fonte."
             )
+        if welfare_info:
+            parts.append(
+                "LENTE WELFARE/COESIONE SOCIALE — DATI ISTAT GIÀ RACCOLTI (popolazione "
+                f"residente per età, anno {welfare_info.get('anno')}): indice di vecchiaia="
+                f"{welfare_info.get('indice_vecchiaia')} (over-65/under-15 ×100; Italia ~190), "
+                f"indice di dipendenza anziani={welfare_info.get('indice_dipendenza_anziani')}, "
+                f"indice di dipendenza strutturale={welfare_info.get('indice_dipendenza_strutturale')}, "
+                f"over-65={welfare_info.get('pct_over_65')}%, under-15={welfare_info.get('pct_under_15')}%, "
+                f"popolazione={welfare_info.get('popolazione')}. "
+                f"FONTE DA CITARE VERBATIM: {welfare_info.get('source_url')} . USA questi "
+                "numeri per valutare il carico sui servizi socio-assistenziali (un indice "
+                "di vecchiaia alto con servizi per anziani scarsi è un bisogno scoperto); "
+                "un'idea 'welfare' deve ancorarsi a questi numeri e citare questa fonte."
+            )
+            inv = welfare_info.get("investimenti_sociali") or {}
+            if inv.get("source_url"):
+                parts.append(
+                    "LATO FINANZIAMENTO — INVESTIMENTI OPENCOESIONE TEMA 'inclusione "
+                    f"sociale' del comune: finanziato={inv.get('finanziato_totale')} €, "
+                    f"pagato={inv.get('pagamenti_totali')} €, spend ratio="
+                    f"{inv.get('spend_ratio')}, progetti={inv.get('progetti_totali')}. "
+                    f"FONTE DA CITARE VERBATIM: {inv.get('source_url')} . Usa questi numeri "
+                    "per dimensionare un'idea welfare e citarne il finanziamento (es. risorse "
+                    "sull'inclusione sociale basse o spese male = leva di intervento)."
+                )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -548,6 +574,7 @@ def build_programma_aggregator(
     turismo_info: dict[str, Any] | None = None,
     lavoro_info: dict[str, Any] | None = None,
     trasporti_info: dict[str, Any] | None = None,
+    welfare_info: dict[str, Any] | None = None,
 ) -> Callable[[list[Any]], Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -733,6 +760,53 @@ def build_programma_aggregator(
                 "ancori su questi numeri e citi questa fonte."
             )
             sections.append(_bundle_section("trasporti", narrative, [tra_res]))
+
+        # Ancora WELFARE/COESIONE SOCIALE deterministica (ISTAT DCIS_POPRES1): indici
+        # demografici di fragilità come Resource citabile (host esploradati.istat.it ⊃
+        # istat.it) + sezione evidenza, come commercio/lavoro. Un'idea welfare ancora
+        # su questi numeri e cita la fonte ISTAT.
+        if welfare_info and welfare_info.get("source_url"):
+            src = welfare_info["source_url"].strip()
+            wel_res = Resource(
+                name=f"ISTAT — Popolazione residente per età del comune (anno {welfare_info.get('anno')})",
+                url=src,
+                format="CSV",
+                source="istat",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(wel_res)
+            narrative = (
+                "Struttura demografica e fragilità sociale del comune (ISTAT, popolazione "
+                f"residente per età, anno {welfare_info.get('anno')}). Indice di vecchiaia: "
+                f"{welfare_info.get('indice_vecchiaia')} (over-65/under-15 ×100; Italia ~190), "
+                f"dipendenza anziani: {welfare_info.get('indice_dipendenza_anziani')}, "
+                f"dipendenza strutturale: {welfare_info.get('indice_dipendenza_strutturale')}, "
+                f"over-65: {welfare_info.get('pct_over_65')}%, under-15: {welfare_info.get('pct_under_15')}%, "
+                f"popolazione: {welfare_info.get('popolazione')}. Valuta il carico sui servizi "
+                "socio-assistenziali (vecchiaia alta vs servizi per anziani); un'idea 'welfare' "
+                "ancori su questi numeri e citi questa fonte."
+            )
+            wel_resources = [wel_res]
+            # Complemento finanziario: investimenti OpenCoesione 'inclusione-sociale'
+            # (host opencoesione.gov.it) — citabile per dimensionare/finanziare l'idea.
+            inv = welfare_info.get("investimenti_sociali") or {}
+            inv_src = (inv.get("source_url") or "").strip()
+            if inv_src:
+                inv_res = Resource(
+                    name="OpenCoesione — Investimenti del comune sul tema inclusione sociale",
+                    url=inv_src,
+                    format="JSON",
+                    source="opencoesione",
+                )
+                if inv_src not in {r.url.strip() for r in all_resources}:
+                    all_resources.append(inv_res)
+                wel_resources.append(inv_res)
+                narrative += (
+                    f" Investimenti OpenCoesione 'inclusione sociale': finanziato "
+                    f"{inv.get('finanziato_totale')} €, pagato {inv.get('pagamenti_totali')} €, "
+                    f"spend ratio {inv.get('spend_ratio')}, {inv.get('progetti_totali')} progetti."
+                )
+            sections.append(_bundle_section("welfare", narrative, wel_resources))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

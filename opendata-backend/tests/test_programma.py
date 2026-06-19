@@ -694,6 +694,108 @@ async def test_trasporti_info_injects_citable_osm_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_welfare_requires_local_anchor() -> None:
+    """welfare (lente Welfare): premessa = indici demografici ISTAT DCIS_POPRES1
+    (host in _WELFARE_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    pop_url = (
+        "https://esploradati.istat.it/SDMXWS/rest/data/22_289/A.110002.JAN..9.99"
+        "?startPeriod=2020"
+    )
+    ev_pop = {"fonte": "istat", "url": pop_url, "dettaglio": "indice vecchiaia 248"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("welfare", [ev_pop]),  # ok (ISTAT popolazione)
+                _idea("welfare", [ev_oc]),   # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("istat", "Demografia.", [
+        {"name": "popolazione", "url": pop_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["welfare"]
+
+
+@pytest.mark.asyncio
+async def test_welfare_info_injects_citable_istat_anchor() -> None:
+    """L'ancora Welfare deterministica (indici demografici ISTAT) iniettata dal backend
+    è citabile: una proposta welfare che la cita sopravvive senza risorsa ISTAT dagli
+    specialisti."""
+    pop_url = (
+        "https://esploradati.istat.it/SDMXWS/rest/data/22_289/A.110002.JAN..9.99"
+        "?startPeriod=2020"
+    )
+    welfare_info = {
+        "comune": "110002", "anno": "2023", "popolazione": 27000,
+        "indice_vecchiaia": 248.3, "indice_dipendenza_anziani": 41.2,
+        "indice_dipendenza_strutturale": 58.0, "pct_over_65": 26.0, "pct_under_15": 10.5,
+        "source_url": pop_url,
+    }
+    ev_pop = {"fonte": "istat", "url": pop_url, "dettaglio": "indice vecchiaia 248,3"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("welfare", [ev_pop])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, welfare_info=welfare_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["welfare"]
+    assert any(pop_url == r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
+async def test_welfare_info_social_investments_are_citable() -> None:
+    """Arricchimento Fase A: gli investimenti OpenCoesione 'inclusione-sociale'
+    iniettati con welfare_info diventano una risorsa citabile (lato finanziamento)."""
+    pop_url = (
+        "https://esploradati.istat.it/SDMXWS/rest/data/22_289/A.110002.JAN..9.99"
+        "?startPeriod=2020"
+    )
+    oc_url = "https://opencoesione.gov.it/it/api/aggregati/territori/comune-di-x.json"
+    welfare_info = {
+        "comune": "110002", "anno": "2023", "popolazione": 27000,
+        "indice_vecchiaia": 248.3, "indice_dipendenza_anziani": 41.2,
+        "indice_dipendenza_strutturale": 58.0, "pct_over_65": 26.0, "pct_under_15": 10.5,
+        "source_url": pop_url,
+        "investimenti_sociali": {
+            "finanziato_totale": 340000.0, "pagamenti_totali": 120000.0,
+            "spend_ratio": 0.35, "progetti_totali": 4, "source_url": oc_url,
+        },
+    }
+    ev_pop = {"fonte": "istat", "url": pop_url, "dettaglio": "indice vecchiaia 248,3"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("welfare", [ev_pop])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, welfare_info=welfare_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert any(pop_url == r.url for r in resp.citazioni)      # ancora ISTAT
+    assert any(oc_url == r.url for r in resp.citazioni)        # complemento OpenCoesione
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

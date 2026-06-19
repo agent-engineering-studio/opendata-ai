@@ -720,6 +720,72 @@ class OrchestratorSession:
                            req.cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_welfare(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora WELFARE con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("welfare", req.cod_comune),
+            lambda: OrchestratorSession._resolve_welfare_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_welfare_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora WELFARE/COESIONE SOCIALE deterministica: indici demografici di
+        fragilità del comune da ISTAT DCIS_POPRES1 (popolazione residente per età).
+        Indice di vecchiaia, dipendenza anziani/strutturale, % over-65/under-15 —
+        misurano il carico sui servizi socio-assistenziali. Arricchita (best-effort)
+        con gli investimenti OpenCoesione del tema 'inclusione-sociale' del comune,
+        così un'idea welfare ha anche il lato finanziamento citabile. L'ancora PRIMARIA
+        resta ISTAT: se manca, la lente si salta (non si inventa). Solo idee/completa.
+        """
+        if req.modalita not in ("idee", "completa"):
+            return None
+        try:
+            from opendata_core.sdmx import fetch_welfare_comune
+
+            res = await asyncio.wait_for(
+                fetch_welfare_comune(req.cod_comune), timeout=30.0
+            )
+        except Exception as exc:
+            _log_lens_skip("ancora welfare ISTAT POPRES1 non risolta per %s — lente welfare assente",
+                           req.cod_comune, exc=exc)
+            return None
+        if not (res and res.get("trovato")):
+            return None
+        inv = await OrchestratorSession._welfare_investimenti_sociali(req.cod_comune)
+        return {**res, "investimenti_sociali": inv} if inv else res
+
+    @staticmethod
+    async def _welfare_investimenti_sociali(cod_comune: str) -> dict[str, Any] | None:
+        """Investimenti OpenCoesione del tema 'inclusione-sociale' del comune (best-effort).
+
+        Complemento finanziario della lente Welfare: finanziato/pagato/spend-ratio +
+        progetti sul sociale, con source_url citabile. Fail-safe: se OpenCoesione non
+        ha dati sul tema (o non risponde) l'arricchimento manca, la lente resta valida
+        sui soli indici ISTAT.
+        """
+        try:
+            from opendata_core.opencoesione import OpenCoesioneClient
+
+            async with OpenCoesioneClient() as c:
+                fc = await asyncio.wait_for(
+                    c.funding_capacity(cod_comune=cod_comune, tema="inclusione-sociale"),
+                    timeout=30.0,
+                )
+            return {
+                "finanziato_totale": fc.finanziato_totale,
+                "pagamenti_totali": fc.pagamenti_totali,
+                "spend_ratio": fc.spend_ratio,
+                "progetti_totali": fc.progetti_totali,
+                "source_url": fc.source_url,
+            }
+        except Exception as exc:
+            _log_lens_skip("investimenti sociali OpenCoesione non risolti per %s",
+                           cod_comune, exc=exc)
+            return None
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -751,6 +817,7 @@ class OrchestratorSession:
         turismo = await self._resolve_turismo(req)
         lavoro = await self._resolve_lavoro(req)
         trasporti = await self._resolve_trasporti(req)
+        welfare = await self._resolve_welfare(req)
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -764,9 +831,11 @@ class OrchestratorSession:
                 turismo_info=turismo,
                 lavoro_info=lavoro,
                 trasporti_info=trasporti,
+                welfare_info=welfare,
             )
             task_text = build_programma_task(
-                req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti
+                req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti,
+                welfare_info=welfare,
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -919,6 +988,7 @@ class OrchestratorSession:
         turismo = await self._resolve_turismo(req)
         lavoro = await self._resolve_lavoro(req)
         trasporti = await self._resolve_trasporti(req)
+        welfare = await self._resolve_welfare(req)
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -933,10 +1003,14 @@ class OrchestratorSession:
                 turismo_info=turismo,
                 lavoro_info=lavoro,
                 trasporti_info=trasporti,
+                welfare_info=welfare,
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
-                build_programma_task(req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti)
+                build_programma_task(
+                    req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti,
+                    welfare_info=welfare,
+                )
             )
         outputs = events.get_outputs()
         if not outputs:

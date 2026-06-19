@@ -3,6 +3,7 @@
 from .asia import fetch_imprese_comune
 from .client import SdmxClient, SdmxError, data_path, df_ref
 from .turismo import fetch_ricettivita_comune
+from .welfare import fetch_welfare_comune
 
 __all__ = [
     "SdmxClient",
@@ -11,4 +12,5 @@ __all__ = [
     "df_ref",
     "fetch_imprese_comune",
     "fetch_ricettivita_comune",
+    "fetch_welfare_comune",
 ]
