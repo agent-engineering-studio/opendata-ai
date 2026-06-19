@@ -1,446 +1,537 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { AuthAwareCTAs } from "@/components/AuthAwareCTAs";
+import { LandingReveal } from "@/components/LandingReveal";
 
 export const metadata: Metadata = {
-  title: "OpenData AI — dalla maturità degli open data al valore per il territorio",
+  title: "OpenData AI — dal patrimonio di dati al valore per il territorio",
   description:
     "Misura la maturità del patrimonio di open data di un comune, scopri dove migliorare e trasformalo in progetti concreti per il territorio. Uno strumento per diffondere la cultura del dato nelle PA, al servizio del bene comune.",
 };
 
+/* Stili firma riusati nelle sezioni (token @theme + valori esatti del design). */
+const HERO_BG = "linear-gradient(160deg,#0E2233 0%,#0A1826 100%)";
+const BRAND_BG = "linear-gradient(135deg,#1B6FE3,#0FA3A3)";
+
+const eyebrow: CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+  color: "var(--color-primary)",
+};
+const h2: CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontWeight: 700,
+  fontSize: "clamp(2rem,3.6vw,2.9rem)",
+  lineHeight: 1.08,
+  letterSpacing: "-0.02em",
+  color: "var(--color-primary-900)",
+  margin: "16px 0 14px",
+};
+const lead: CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: 18,
+  lineHeight: 1.6,
+  color: "var(--color-text-muted)",
+  margin: 0,
+};
+const cardBase: CSSProperties = {
+  position: "relative",
+  background: "#fff",
+  border: "1px solid var(--color-border)",
+  borderRadius: 16,
+  padding: 26,
+  boxShadow: "0 1px 3px rgba(14,34,51,.06)",
+  height: "100%",
+};
+
+/* ── Icone line-style (stroke 2px, cap arrotondati). Niente emoji. ── */
+function Icon({
+  path,
+  stroke,
+  size = 22,
+}: {
+  path: string;
+  stroke: string;
+  size?: number;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={stroke}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: path }}
+    />
+  );
+}
+
+const ICON = {
+  bars: '<path d="M12 20v-6M6 20v-3M18 20v-9M3 21h18M4 7l6-3 5 3 4-2"/>',
+  trend: '<path d="M3 3v18h18M7 14l4-4 3 3 5-6"/>',
+  books:
+    '<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>',
+  people:
+    '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13A4 4 0 0116 11"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  building:
+    '<path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/>',
+  code: '<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 4l-4 16"/>',
+  arrow: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+};
+
 export default function Page() {
   return (
-    <div className="bg-bg-muted">
-      {/* HERO */}
-      <section className="bg-primary-900 text-white">
-        <div className="container py-5">
-          <div className="row align-items-center g-5 py-4">
-            <div className="col-lg-7">
-              <p className="mb-2 text-uppercase small fw-semibold" style={{ letterSpacing: "0.1em", opacity: 0.8 }}>
-                Open data · maturità · valore per il territorio
-              </p>
-              <h1 className="display-4 fw-bold mb-3">
-                Trasforma il patrimonio di open data in valore per il territorio
-              </h1>
-              <p className="lead mb-4" style={{ opacity: 0.95 }}>
-                OpenData AI misura la <strong>maturità</strong> degli open data
-                di un comune, mostra <strong>dove migliorare</strong> e li
-                trasforma in <strong>progetti concreti</strong> — commercio,
-                turismo, lavoro, mobilità — leggendo solo le fonti ufficiali
-                (ISTAT, OpenCoesione, OpenStreetMap). Uno strumento per
-                diffondere la <strong>cultura del dato</strong> nelle PA e creare
-                servizi per la comunità e il bene comune.
-              </p>
-              <div className="d-flex flex-wrap gap-3">
-                <AuthAwareCTAs variant="hero" />
-                <Link href="/docs" className="btn btn-outline-light btn-lg">
-                  Documentazione
-                </Link>
-              </div>
-            </div>
-            <div className="col-lg-5">
-              <div
-                className="bg-white text-dark rounded shadow-lg p-4"
-                style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}
+    <div style={{ background: "#fff", overflow: "hidden" }}>
+      <LandingReveal />
+
+      {/* ============ HERO ============ */}
+      <section
+        id="top"
+        style={{ position: "relative", background: HERO_BG, color: "#fff", overflow: "hidden" }}
+      >
+        {/* Marchio gigante drift in filigrana */}
+        <div
+          aria-hidden="true"
+          className="od-drift d-none d-md-block"
+          style={{ position: "absolute", right: -120, top: -80, width: 560, height: 560, opacity: 0.5, pointerEvents: "none" }}
+        >
+          <svg width="560" height="560" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="15" stroke="#1B6FE3" strokeWidth="2" strokeLinecap="round" strokeDasharray="71 26" transform="rotate(-58 24 24)" opacity=".35" />
+            <circle cx="32.8" cy="17.4" r="2.5" fill="#0FA3A3" opacity=".4" />
+          </svg>
+        </div>
+        {/* Glow radiale teal */}
+        <div
+          aria-hidden="true"
+          style={{ position: "absolute", inset: 0, background: "radial-gradient(900px 480px at 80% -10%,rgba(15,163,163,.28),transparent 60%)" }}
+        />
+        <div className="container" style={{ position: "relative" }}>
+          <div className="row align-items-center g-5" style={{ paddingTop: 84, paddingBottom: 92 }}>
+            {/* Colonna testo */}
+            <div className="col-lg-6" data-reveal>
+              <span
+                className="d-inline-flex align-items-center gap-2"
+                style={{ padding: "7px 14px", borderRadius: 999, border: "1px solid rgba(255,255,255,.18)", background: "rgba(255,255,255,.06)", ...eyebrow, color: "#AFC0CE" }}
               >
-                <div className="d-flex align-items-center gap-2 mb-3 text-muted small">
-                  <span className="rounded-circle bg-danger" style={{ width: 10, height: 10 }} />
-                  <span className="rounded-circle bg-warning" style={{ width: 10, height: 10 }} />
-                  <span className="rounded-circle bg-success" style={{ width: 10, height: 10 }} />
-                  <span className="ms-2">chat — opendata-ai</span>
+                <span className="od-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "#1FA971", boxShadow: "0 0 0 4px rgba(31,169,113,.22)" }} />
+                Open data · maturità · valore
+              </span>
+              <h1
+                style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "clamp(2.7rem,4.7vw,4.5rem)", lineHeight: 1.02, letterSpacing: "-0.02em", color: "#fff", margin: "22px 0 0" }}
+              >
+                Dal patrimonio di dati
+                <br />
+                al{" "}
+                <span className="text-gradient-brand" style={{ background: "linear-gradient(100deg,#4D9BFF,#16C4C4 55%,#2BD68C)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+                  valore per il territorio
+                </span>
+              </h1>
+              <p style={{ maxWidth: "50ch", margin: "26px 0 0", fontFamily: "var(--font-sans)", fontSize: 18.5, lineHeight: 1.6, color: "#AFC0CE" }}>
+                OpenData AI misura la <strong style={{ color: "#fff", fontWeight: 600 }}>maturità</strong> degli open data di un comune, mostra <strong style={{ color: "#fff", fontWeight: 600 }}>dove migliorare</strong> e li trasforma in <strong style={{ color: "#fff", fontWeight: 600 }}>progetti concreti</strong> — leggendo solo fonti ufficiali. Cultura del dato nella PA, al servizio del bene comune.
+              </p>
+              <div className="d-flex flex-wrap gap-3" style={{ marginTop: 34 }}>
+                <AuthAwareCTAs variant="hero" />
+                <a
+                  href="#come"
+                  className="d-inline-flex align-items-center gap-2"
+                  style={{ padding: "15px 26px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,.28)", color: "#fff", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 17 }}
+                >
+                  Guarda come funziona
+                  <Icon path={ICON.arrow} stroke="currentColor" size={17} />
+                </a>
+              </div>
+              <div className="d-flex flex-wrap align-items-center gap-2" style={{ marginTop: 30, fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 12.5, color: "#7E8F9C" }}>
+                <span style={{ letterSpacing: "0.06em" }}>FONTI UFFICIALI</span>
+                <span style={{ opacity: 0.4 }}>·</span><span>ISTAT</span>
+                <span style={{ opacity: 0.4 }}>·</span><span>OpenCoesione</span>
+                <span style={{ opacity: 0.4 }}>·</span><span>OpenStreetMap</span>
+                <span style={{ opacity: 0.4 }}>·</span><span>CKAN dati.gov.it</span>
+              </div>
+            </div>
+
+            {/* Colonna pannello chat */}
+            <div className="col-lg-6" data-reveal data-delay="120">
+              <div style={{ background: "#fff", borderRadius: 18, boxShadow: "0 24px 60px rgba(0,0,0,.42)", overflow: "hidden", color: "#42535F" }}>
+                {/* Barra finestra */}
+                <div className="d-flex align-items-center gap-2" style={{ padding: "14px 18px", borderBottom: "1px solid #EDF0F3", background: "#F6F8FA" }}>
+                  <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#E0817A" }} />
+                  <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#E3C06A" }} />
+                  <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#88C07A" }} />
+                  <span style={{ marginLeft: 8, fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 12.5, color: "#7E8F9C" }}>opendata-ai · chat</span>
                 </div>
-                <p className="mb-2"><span className="text-primary fw-bold">▸ tu:</span> qualità dell&apos;aria a Milano nel 2024</p>
-                <p className="mb-2 small text-muted">Interrogo Catalogo CKAN…</p>
-                <p className="mb-2 small text-muted">Interrogo ISTAT…</p>
-                <p className="mb-2 small text-success">CKAN ha risposto · 7 dataset</p>
-                <p className="mb-2 small text-success">ISTAT ha risposto · 2 cubi SDMX</p>
-                <p className="mb-2 small text-muted">Sintesi finale in corso…</p>
-                <p className="mb-0">
-                  <span className="text-primary fw-bold">▸ agente:</span> Nel
-                  2024 ARPA Lombardia ha pubblicato 7 dataset orari per le
-                  centraline di Milano. Le serie PM2.5 e NO₂ mostrano…
-                </p>
+                <div className="d-flex flex-column" style={{ padding: "20px 20px 22px", gap: 13 }}>
+                  {/* Bolla utente */}
+                  <div style={{ alignSelf: "flex-end", maxWidth: "88%", background: BRAND_BG, color: "#fff", padding: "11px 15px", borderRadius: "14px 14px 4px 14px", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 14, lineHeight: 1.5 }}>
+                    Maturità degli open data del Comune di Gioia del Colle
+                  </div>
+                  {/* Pill sorgenti */}
+                  <div className="d-flex flex-wrap" style={{ gap: 7 }}>
+                    <SourcePill bg="#E7F0FD" color="#1959B8" check="#1B6FE3" label="CKAN · 7 dataset" />
+                    <SourcePill bg="#E1F4F4" color="#0B7878" check="#0FA3A3" label="ISTAT · 2 cubi SDMX" />
+                    <SourcePill bg="#E4F5EC" color="#147A52" check="#1FA971" label="OpenCoesione · 18" />
+                  </div>
+                  {/* Risposta agente */}
+                  <div className="d-flex align-items-start" style={{ gap: 11 }}>
+                    <span style={{ flex: "none", width: 28, height: 28, borderRadius: 8, background: BRAND_BG, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="16" height="16" viewBox="0 0 48 48" fill="none">
+                        <circle cx="24" cy="24" r="15" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" strokeDasharray="71 26" transform="rotate(-58 24 24)" />
+                        <circle cx="32.8" cy="17.4" r="4" fill="#7BE7C4" />
+                      </svg>
+                    </span>
+                    <div style={{ fontFamily: "var(--font-sans)", fontSize: 13.5, lineHeight: 1.55, color: "#42535F" }}>
+                      Il patrimonio open data del comune è di <strong style={{ color: "#0E2233" }}>maturità buona</strong>: 23 dataset, ma 3 lacune chiave su mobilità e bilanci.
+                      <span className="od-blink" style={{ display: "inline-block", width: 8, height: 15, background: "#1B6FE3", marginLeft: 2, verticalAlign: -2 }} />
+                    </div>
+                  </div>
+                  {/* Mini-card risultato con donut */}
+                  <div className="d-flex align-items-center" style={{ gap: 16, marginTop: 2, padding: 15, border: "1px solid #EDF0F3", borderRadius: 14, background: "#F6F8FA" }}>
+                    <svg width="84" height="84" viewBox="0 0 120 120" style={{ flex: "none" }}>
+                      <defs>
+                        <linearGradient id="donutg" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0" stopColor="#1B6FE3" />
+                          <stop offset="1" stopColor="#0FA3A3" />
+                        </linearGradient>
+                      </defs>
+                      <circle cx="60" cy="60" r="52" fill="none" stroke="#E1E6EB" strokeWidth="12" />
+                      <circle className="od-dash" cx="60" cy="60" r="52" fill="none" stroke="url(#donutg)" strokeWidth="12" strokeLinecap="round" strokeDasharray="327" strokeDashoffset="124" transform="rotate(-90 60 60)" />
+                      <text x="60" y="58" textAnchor="middle" fontFamily="Space Grotesk,sans-serif" fontWeight="700" fontSize="30" fill="#0E2233">62</text>
+                      <text x="60" y="78" textAnchor="middle" fontFamily="Titillium Web,sans-serif" fontWeight="600" fontSize="12" fill="#7E8F9C">/ 100</text>
+                    </svg>
+                    <div>
+                      <div style={{ fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#1B6FE3" }}>Indice di maturità</div>
+                      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 19, lineHeight: 1.2, color: "#0E2233", marginTop: 6 }}>Buono · in crescita</div>
+                      <div style={{ fontFamily: "var(--font-sans)", fontSize: 13, lineHeight: 1.4, color: "#7E8F9C", marginTop: 3 }}>3 gap da colmare · +14 in 12 mesi</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* MISSIONE */}
-      <section className="bg-white border-bottom">
-        <div className="container py-5">
-          <div className="row">
-            <div className="col-lg-8 mx-auto text-center mb-5">
-              <h2 className="mb-3">Dalla maturità al bene comune</h2>
-              <p className="lead text-muted">
-                Gli open data sono un patrimonio pubblico spesso sottoutilizzato.
-                OpenData AI accompagna le PA lungo un percorso in quattro passi:
-                misurare la maturità dei dati, trasformarli in valore, costruire
-                cultura del dato e generare servizi per la comunità.
+      {/* ============ TRUST STRIP ============ */}
+      <section style={{ background: "#fff", borderBottom: "1px solid #EDF0F3" }}>
+        <div className="container">
+          <div className="row g-4" style={{ paddingTop: 38, paddingBottom: 38 }}>
+            <Stat value="4" label="Fonti ufficiali in parallelo" delay={0} />
+            <Stat value="3" label="Superfici · REST · MCP · A2A" delay={80} />
+            <Stat value="100%" label="Risposte con fonte citata" delay={160} gradient />
+            <Stat value="0" label="Punteggi inventati senza dati" delay={240} />
+          </div>
+        </div>
+      </section>
+
+      {/* ============ IL PERCORSO ============ */}
+      <section id="percorso" style={{ background: "var(--color-bg-muted)", padding: "96px 0", scrollMarginTop: 80 }}>
+        <div className="container">
+          <div data-reveal style={{ maxWidth: 680 }}>
+            <div style={eyebrow}>Il percorso</div>
+            <h2 style={h2}>Dalla maturità al bene comune</h2>
+            <p style={lead}>
+              Gli open data sono un patrimonio pubblico spesso sottoutilizzato. OpenData AI accompagna le PA in quattro passi: misurare, valorizzare, diffondere cultura e generare servizi.
+            </p>
+          </div>
+
+          <div className="row g-3" style={{ marginTop: 34 }}>
+            <PercorsoCard n="01" tag="Maturità" tagColor="#1B6FE3" iconBg="#E7F0FD" icon={ICON.bars} iconStroke="#1B6FE3" title="Misura il patrimonio" body="Valuta quanto i dati sono completi, aggiornati e riusabili — e indica dove intervenire." delay={0} />
+            <PercorsoCard n="02" tag="Valore" tagColor="#0B8E8E" iconBg="#E1F4F4" icon={ICON.trend} iconStroke="#0FA3A3" title="Progetti concreti" body="Lenti su commercio, turismo, lavoro e mobilità individuano gap, potenzialità e idee." delay={90} />
+            <PercorsoCard n="03" tag="Cultura" tagColor="#147A52" iconBg="#E4F5EC" icon={ICON.books} iconStroke="#1FA971" title="Cultura del dato" body="Ogni analisi cita la fonte ufficiale: mostra perché un dato di qualità produce servizi migliori." delay={180} />
+            {/* Card apex gradiente */}
+            <div className="col-md-6 col-lg-3" data-reveal data-delay="270">
+              <div className="od-card" style={{ ...cardBase, background: "linear-gradient(150deg,#1B6FE3,#0FA3A3)", border: 0, boxShadow: "0 12px 30px rgba(27,111,227,.32)" }}>
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "rgba(255,255,255,.5)" }}>04</div>
+                <div className="d-flex align-items-center justify-content-center" style={{ margin: "16px 0 10px", width: 42, height: 42, borderRadius: 11, background: "rgba(255,255,255,.18)" }}>
+                  <Icon path={ICON.people} stroke="#fff" />
+                </div>
+                <div style={{ fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,.85)" }}>Bene comune</div>
+                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18, lineHeight: 1.25, color: "#fff", margin: "8px 0" }}>Servizi per la comunità</h3>
+                <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, lineHeight: 1.55, color: "rgba(255,255,255,.92)", margin: 0 }}>Dati pubblici che diventano servizi per cittadini e territorio. Open source, per il bene comune.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Callout "Non è una pagella" */}
+          <div data-reveal className="d-flex align-items-start gap-3" style={{ marginTop: 26, background: "#fff", border: "1px solid var(--color-border)", borderRadius: 16, padding: "26px 30px", position: "relative", overflow: "hidden" }}>
+            <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: "linear-gradient(180deg,#1B6FE3,#0FA3A3)" }} />
+            <span className="flex-shrink-0 d-flex align-items-center justify-content-center" style={{ width: 44, height: 44, borderRadius: 12, background: "#E7F0FD" }}>
+              <Icon path={ICON.shield} stroke="#1B6FE3" />
+            </span>
+            <div>
+              <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18, lineHeight: 1.3, color: "#0E2233", margin: "0 0 6px" }}>Non è una pagella sulle PA</h4>
+              <p style={{ fontFamily: "var(--font-sans)", fontSize: 15, lineHeight: 1.6, color: "var(--color-text-muted)", margin: 0, maxWidth: "80ch" }}>
+                È una <strong style={{ color: "#0E2233" }}>bussola che mostra dove migliorare</strong> per valorizzare il patrimonio pubblico. Sotto la soglia minima di dati l&apos;analisi dichiara <em style={{ color: "#1B6FE3", fontStyle: "normal", fontWeight: 600 }}>&ldquo;dato insufficiente&rdquo;</em> invece di assegnare punteggi fuorvianti.
               </p>
             </div>
           </div>
-          <div className="row g-4">
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">1 · Maturità</span>
-                  <h5 className="card-title">Misura il patrimonio</h5>
-                  <p className="card-text small text-muted mb-3">
-                    Valuta quanto gli open data di un comune sono completi,
-                    aggiornati e riutilizzabili — e indica dove intervenire.
-                  </p>
-                  <Link href="/maturita" className="small fw-semibold">
-                    Vai alla maturità →
-                  </Link>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">2 · Valore</span>
-                  <h5 className="card-title">Progetti concreti</h5>
-                  <p className="card-text small text-muted mb-3">
-                    Lenti analitiche su commercio, turismo, lavoro e mobilità
-                    individuano gap e potenzialità e propongono idee di sviluppo.
-                  </p>
-                  <Link href="/territorio" className="small fw-semibold">
-                    Analizza un territorio →
-                  </Link>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">3 · Cultura</span>
-                  <h5 className="card-title">Cultura del dato</h5>
-                  <p className="card-text small text-muted mb-0">
-                    Ogni analisi cita la fonte ufficiale e mostra perché un dato
-                    di qualità produce servizi migliori: educa le PA a valorizzare
-                    il proprio patrimonio.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-secondary mb-2">4 · Bene comune</span>
-                  <h5 className="card-title">Servizi per la comunità</h5>
-                  <p className="card-text small text-muted mb-0">
-                    L&apos;obiettivo finale: dati pubblici che diventano servizi
-                    per cittadini e territorio. Progetto open source, al servizio
-                    del bene comune.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+        </div>
+      </section>
 
-          {/* CALLOUT — non è un giudizio */}
-          <div
-            className="mt-5 p-4 rounded border-start border-4 border-primary bg-bg-muted"
-            role="note"
-          >
-            <h5 className="fw-bold mb-2">Non è una pagella sulle PA</h5>
-            <p className="mb-0 text-muted">
-              OpenData AI non giudica come lavora un&apos;amministrazione: è una
-              <strong> bussola che mostra DOVE migliorare</strong> per valorizzare
-              il patrimonio pubblico di dati e creare valore nel territorio. Sotto
-              la soglia minima di dati l&apos;analisi dichiara &ldquo;dato
-              insufficiente&rdquo; invece di assegnare punteggi fuorvianti.
+      {/* ============ COME FUNZIONA — fan-out ============ */}
+      <section id="come" style={{ background: "#fff", padding: "96px 0", scrollMarginTop: 80 }}>
+        <div className="container">
+          <div data-reveal className="text-center mx-auto" style={{ maxWidth: 720 }}>
+            <div style={eyebrow}>Come funziona</div>
+            <h2 style={h2}>Una domanda, quattro specialisti</h2>
+            <p style={lead}>
+              Una sola query in linguaggio naturale viene smistata in parallelo. Ogni specialista risponde con la propria visione; un agente di sintesi fonde tutto in una narrativa coerente, con riferimenti puntuali alle risorse.
             </p>
           </div>
-        </div>
-      </section>
 
-      {/* IN UNA RIGA */}
-      <section className="container py-5">
-        <div className="row g-4 text-center">
-          <div className="col-md-3">
-            <h3 className="display-6 fw-bold text-primary mb-1">4</h3>
-            <p className="text-muted mb-0">fonti dati ufficiali in parallelo</p>
+          {/* Diagramma fan-out */}
+          <div data-reveal className="mx-auto" style={{ marginTop: 52, maxWidth: 1040 }}>
+            <FanOut />
           </div>
-          <div className="col-md-3">
-            <h3 className="display-6 fw-bold text-primary mb-1">3</h3>
-            <p className="text-muted mb-0">server MCP componibili</p>
-          </div>
-          <div className="col-md-3">
-            <h3 className="display-6 fw-bold text-primary mb-1">A2A</h3>
-            <p className="text-muted mb-0">agent card pubblica</p>
-          </div>
-          <div className="col-md-3">
-            <h3 className="display-6 fw-bold text-primary mb-1">REST</h3>
-            <p className="text-muted mb-0">streaming NDJSON autenticato</p>
+
+          {/* 4 card specialista */}
+          <div className="row g-3" style={{ marginTop: 24 }}>
+            <SpecCard tag="CKAN" tagBg="#E7F0FD" tagColor="#1959B8" title="Cataloghi open" body={<>Qualunque portale CKAN. Default <code style={{ fontSize: 12, color: "#1B6FE3" }}>dati.gov.it</code>, override per portale municipale.</>} delay={0} />
+            <SpecCard tag="SDMX 2.1" tagBg="#E1F4F4" tagColor="#0B7878" title="Statistiche ufficiali" body="Stessa interfaccia per ISTAT, Eurostat e OCSE. Osservazioni normalizzate in CSV scaricabile." delay={90} />
+            <SpecCard tag="OSM" tagBg="#E4F5EC" tagColor="#147A52" title="Geocoding + mappa" body="Nominatim, Overpass e OSRM. GeoJSON, KML e Shapefile diventano layer Leaflet accendibili." delay={180} />
+            <SpecCard tag="Sintesi" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Risposta unica" body="Un LLM ricuce le risposte in italiano, citando ogni risorsa con il portale di origine." delay={270} rail />
           </div>
         </div>
       </section>
 
-      {/* COSA FA */}
-      <section className="bg-white border-top border-bottom">
-        <div className="container py-5">
-          <div className="row">
-            <div className="col-lg-8 mx-auto text-center mb-5">
-              <h2 className="mb-3">Una domanda, quattro specialisti</h2>
-              <p className="lead text-muted">
-                Una sola query in linguaggio naturale viene smistata in
-                parallelo. Ogni specialista risponde con la propria visione
-                della stessa domanda; un agente di sintesi fonde i risultati in
-                una narrativa coerente con riferimenti puntuali alle risorse.
+      {/* ============ PER CHI ============ */}
+      <section id="perchi" style={{ background: HERO_BG, color: "#fff", padding: "96px 0", position: "relative", overflow: "hidden", scrollMarginTop: 80 }}>
+        <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(700px 380px at 15% 110%,rgba(15,163,163,.22),transparent 60%)" }} />
+        <div className="container" style={{ position: "relative" }}>
+          <div data-reveal style={{ maxWidth: 680 }}>
+            <div style={{ ...eyebrow, color: "#5FD3D3" }}>Per chi è</div>
+            <h2 style={{ ...h2, color: "#fff", marginBottom: 0 }}>Tre pubblici, un solo backend</h2>
+          </div>
+          <div className="row g-4" style={{ marginTop: 32 }}>
+            <PubblicoCard iconBg="rgba(27,111,227,.2)" icon={ICON.building} iconStroke="#6BA8FF" title="Pubbliche amministrazioni" body="Misura la maturità del proprio patrimonio dati, scopri le lacune e trasformale in progetti per il territorio. Conforme agli standard del Design System italiano." delay={0} />
+            <PubblicoCard iconBg="rgba(31,169,113,.2)" icon={ICON.people} iconStroke="#5FE0A8" title="Cittadini e comunità" body="Un sito civico statico, leggibile e verificabile: ogni numero linkato alla fonte e alla licenza. Trasparenza su cosa è stato fatto e cosa manca." delay={120} />
+            <PubblicoCard iconBg="rgba(15,163,163,.2)" icon={ICON.code} iconStroke="#5FD3D3" title="Sviluppatori e integratori" body="REST autenticato, tre server MCP (stdio o HTTP) e una AgentCard A2A. Tre superfici programmabili, pensate per essere componibili." delay={240} />
+          </div>
+        </div>
+      </section>
+
+      {/* ============ SVILUPPATORI ============ */}
+      <section id="sviluppatori" style={{ background: "var(--color-bg-muted)", padding: "96px 0", scrollMarginTop: 80 }}>
+        <div className="container">
+          <div data-reveal className="row g-5 align-items-start">
+            <div className="col-lg-6">
+              <div style={eyebrow}>Sviluppatori</div>
+              <h2 style={h2}>Tre superfici, un solo backend</h2>
+              <p style={{ ...lead, fontSize: 17, marginBottom: 24 }}>
+                Scegli l&apos;interfaccia più adatta al tuo caso d&apos;uso. Stessa fonte, stessi dati, autenticazione coerente.
               </p>
-            </div>
-          </div>
-
-          <div className="row g-4">
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">CKAN</span>
-                  <h5 className="card-title">Cataloghi open</h5>
-                  <p className="card-text small text-muted mb-0">
-                    Interroga qualsiasi portale CKAN-compatibile. Default
-                    <code> dati.gov.it</code>, ma con un parametro punta a
-                    data.gov.uk, open.canada.ca, data.gov.au o a un portale
-                    municipale.
-                  </p>
-                </div>
+              <div className="d-flex flex-column gap-2">
+                <SurfaceRow title="MCP — Model Context Protocol" sub="3 server (CKAN, ISTAT, OSM) per ogni client MCP" badge="stdio · http" />
+                <SurfaceRow title="A2A — Agent-to-Agent" sub="AgentCard pubblica + JSON-RPC SendMessage" badge="SDK 1.0 + 0.3" />
+                <SurfaceRow title="REST diretto" sub="/datasets/search/stream NDJSON · classify con cache 24h" badge="JWT" />
               </div>
             </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">SDMX 2.1</span>
-                  <h5 className="card-title">Statistiche ufficiali</h5>
-                  <p className="card-text small text-muted mb-0">
-                    Stessa interfaccia per ISTAT, Eurostat e OCSE. Dataflows,
-                    code lists e osservazioni filtrate per dimensione. Le
-                    risposte vengono normalizzate in CSV scaricabile.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-primary mb-2">OSM</span>
-                  <h5 className="card-title">Geocoding + mappa</h5>
-                  <p className="card-text small text-muted mb-0">
-                    Nominatim per il geocoding, Overpass per POI, OSRM per il
-                    routing, Leaflet+OSM per il render finale. Le risorse
-                    GeoJSON, KML e Shapefile diventano layer accendibili.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <div className="card h-100 shadow-sm">
-                <div className="card-body">
-                  <span className="badge bg-secondary mb-2">Sintesi</span>
-                  <h5 className="card-title">Risposta unica</h5>
-                  <p className="card-text small text-muted mb-0">
-                    Un LLM (Claude Haiku/Sonnet o Ollama locale) ricuce le
-                    risposte degli specialisti in italiano, citando ogni
-                    risorsa con il portale di origine.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PER CHI */}
-      <section className="container py-5">
-        <div className="row g-5">
-          <div className="col-lg-6">
-            <h2 className="mb-3">Per chi è</h2>
-            <ul className="list-unstyled">
-              <li className="mb-3">
-                <strong>Giornalisti di dati e ricercatori</strong> — un
-                ricercatore può chiedere &ldquo;serie storica della spesa
-                sanitaria pro capite in Italia&rdquo; e ricevere insieme il
-                dataflow ISTAT, l&apos;equivalente Eurostat e — se esistono —
-                dataset municipali correlati.
-              </li>
-              <li className="mb-3">
-                <strong>Sviluppatori e integratori</strong> — REST autenticato
-                con Clerk, MCP via stdio o streamable-http, A2A su JSON-RPC.
-                Tre superfici programmabili pensate per essere componibili.
-              </li>
-              <li className="mb-3">
-                <strong>Pubbliche amministrazioni</strong> — UI conforme al
-                Design System italiano (Bootstrap Italia + Design React Kit),
-                WCAG 2.1 AA, deployment on-prem o cloud sovrano.
-              </li>
-              <li className="mb-3">
-                <strong>Builder di agenti</strong> — i tre MCP server
-                (CKAN, ISTAT, OSM) si collegano a Claude Desktop, Cursor,
-                Microsoft Agent Framework, LangGraph o qualsiasi client MCP.
-              </li>
-            </ul>
-          </div>
-          <div className="col-lg-6">
-            <h2 className="mb-3">Come si integra</h2>
-            <p className="text-muted">
-              Tre superfici, un solo backend. Scegli quella più adatta al tuo
-              caso d&apos;uso.
-            </p>
-            <div className="list-group">
-              <Link href="/docs/mcp" className="list-group-item list-group-item-action">
-                <div className="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h6 className="mb-1">MCP — Model Context Protocol</h6>
-                    <p className="small text-muted mb-0">
-                      3 server (CKAN, ISTAT, OSM) usabili da qualunque client MCP
-                    </p>
-                  </div>
-                  <span className="badge bg-light text-dark">stdio · http</span>
-                </div>
-              </Link>
-              <Link href="/docs/a2a" className="list-group-item list-group-item-action">
-                <div className="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h6 className="mb-1">A2A — Agent-to-Agent</h6>
-                    <p className="small text-muted mb-0">
-                      AgentCard pubblica + JSON-RPC SendMessage
-                    </p>
-                  </div>
-                  <span className="badge bg-light text-dark">SDK 1.0 + 0.3</span>
-                </div>
-              </Link>
-              <Link href="/docs" className="list-group-item list-group-item-action">
-                <div className="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h6 className="mb-1">REST diretto</h6>
-                    <p className="small text-muted mb-0">
-                      <code>/datasets/search/stream</code> NDJSON,{" "}
-                      <code>/datasets/classify</code> con cache 24h
-                    </p>
-                  </div>
-                  <span className="badge bg-light text-dark">JWT Clerk</span>
-                </div>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ARCHITETTURA */}
-      <section className="bg-white border-top">
-        <div className="container py-5">
-          <h2 className="mb-4">Architettura in 30 secondi</h2>
-          <div className="row g-4 align-items-center">
-            <div className="col-lg-8">
-              <div className="bg-light border rounded p-3">
-                <Image
-                  src="/architecture.svg"
-                  alt="Mind map dell'architettura di OpenData AI: il backend al centro è connesso alla UI Next.js, all'auth Clerk, agli agenti A2A esterni, ai provider LLM, a Postgres+Redis e ai tre server MCP (CKAN, ISTAT, OSM) che parlano con i portali open data."
-                  width={960}
-                  height={560}
-                  style={{ width: "100%", height: "auto" }}
-                  priority
-                />
-              </div>
-            </div>
-            <div className="col-lg-4">
-              <h5>Punti chiave</h5>
-              <ul>
-                <li>Frontend statico, nessun runtime server-side.</li>
-                <li>
-                  Autenticazione Clerk: ogni endpoint REST/A2A è dietro JWT,
-                  eccetto <code>/health</code>.
-                </li>
-                <li>
-                  Cache a tre livelli per classify: Redis 24h → Postgres
-                  durable → Anthropic Haiku 4.5.
-                </li>
-                <li>
-                  Rate limit a finestra fissa per minuto, basato su Redis
-                  (default 60 req/min/utente). Vedi{" "}
-                  <Link href="/docs/rate-limits">/docs/rate-limits</Link>.
-                </li>
-                <li>
-                  MCP server e backend buildati con context al repo root, una
-                  sola immagine per ambiente.
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ESEMPI CODICE */}
-      <section className="container py-5">
-        <h2 className="mb-4">Mostrami il codice</h2>
-        <div className="row g-4">
-          <div className="col-md-6">
-            <h5>
-              <span className="badge bg-dark me-2">cURL</span>
-              REST streaming
-            </h5>
-            <pre
-              className="bg-light border rounded p-3 small font-monospace"
-              style={{ overflowX: "auto", whiteSpace: "pre" }}
-            >
-{`curl -N -X POST https://api.opendata-ai.it/datasets/search/stream \\
-  -H 'Authorization: Bearer <clerk_jwt>' \\
+            <div className="col-lg-6 d-flex flex-column gap-3">
+              <CodeBlock lang="cURL" langBg="rgba(27,111,227,.3)" caption="REST streaming">{`curl -N -X POST https://api.opendata-ai.it/datasets/search/stream \\
+  -H 'Authorization: Bearer <jwt>' \\
   -H 'Content-Type: application/json' \\
-  -d '{"query":"popolazione di Milano per età"}'`}
-            </pre>
-          </div>
-          <div className="col-md-6">
-            <h5>
-              <span className="badge bg-dark me-2">Python</span>
-              A2A SendMessage
-            </h5>
-            <pre
-              className="bg-light border rounded p-3 small font-monospace"
-              style={{ overflowX: "auto", whiteSpace: "pre" }}
-            >
-{`from a2a.client import A2AClient
+  -d '{"query":"popolazione di Milano per età"}'`}</CodeBlock>
+              <CodeBlock lang="Python" langBg="rgba(15,163,163,.32)" caption="A2A SendMessage">{`from a2a.client import A2AClient
 
 client = A2AClient("https://api.opendata-ai.it/a2a/")
 reply = client.send_message(
     "qualità dell'aria a Milano",
     metadata={"skill": "search_open_data"},
 )
-print(reply.artifacts[0].parts[0].text)`}
-            </pre>
+print(reply.artifacts[0].parts[0].text)`}</CodeBlock>
+            </div>
           </div>
-        </div>
-        <div className="text-center mt-4">
-          <Link href="/docs" className="btn btn-outline-primary">
-            Tutta la documentazione →
-          </Link>
         </div>
       </section>
 
-      {/* CTA FINALE */}
-      <section className="bg-primary-900 text-white">
-        <div className="container py-5 text-center">
-          <h2 className="mb-3">Pronto a fare la prima domanda?</h2>
-          <p className="lead mb-4" style={{ opacity: 0.9 }}>
-            Crea un account e prova l&apos;analisi di un territorio. L&apos;uso
-            esplorativo è gratuito con limiti pensati per sostenere
-            l&apos;infrastruttura; abbonamenti, sponsor e convenzioni alzano i
-            limiti e mantengono il progetto open source.
+      {/* ============ CTA FINALE ============ */}
+      <section id="prova" style={{ position: "relative", background: BRAND_BG, color: "#fff", padding: "92px 0", overflow: "hidden", scrollMarginTop: 80 }}>
+        <div aria-hidden="true" style={{ position: "absolute", left: -80, bottom: -120, width: 360, height: 360, opacity: 0.18, pointerEvents: "none" }}>
+          <svg width="360" height="360" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="15" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeDasharray="71 26" transform="rotate(-58 24 24)" />
+          </svg>
+        </div>
+        <div className="container text-center" style={{ position: "relative", maxWidth: 760 }}>
+          <h2 data-reveal style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "clamp(2.1rem,3.8vw,3rem)", lineHeight: 1.08, letterSpacing: "-0.02em", color: "#fff", margin: "0 0 16px" }}>
+            Pronto a fare la prima domanda?
+          </h2>
+          <p data-reveal data-delay="80" className="mx-auto" style={{ fontFamily: "var(--font-sans)", fontSize: 18, lineHeight: 1.6, color: "rgba(255,255,255,.92)", margin: "0 auto 34px", maxWidth: "56ch" }}>
+            Crea un account e prova l&apos;analisi di un territorio. L&apos;uso esplorativo è gratuito; abbonamenti, sponsor e convenzioni alzano i limiti e mantengono il progetto open source.
           </p>
-          <div className="d-flex flex-wrap justify-content-center gap-3">
-            <AuthAwareCTAs variant="footer" />
-            <Link href="/sostenibilita" className="btn btn-outline-light btn-lg">
+          <div data-reveal data-delay="160" className="d-flex flex-wrap justify-content-center gap-3">
+            <AuthAwareCTAs variant="final" />
+            <Link href="/sostenibilita" className="d-inline-flex align-items-center" style={{ padding: "15px 28px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,.55)", color: "#fff", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 17 }}>
               Sostieni il progetto
             </Link>
           </div>
-          <p className="mt-4 small" style={{ opacity: 0.7 }}>
-            Le risposte dell&apos;agente dipendono da modelli LLM esterni e
-            possono contenere errori — verifica sempre i dati consultando la
-            fonte indicata.
+          <p data-reveal data-delay="220" className="mx-auto" style={{ margin: "30px auto 0", fontFamily: "var(--font-sans)", fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,.72)", maxWidth: "60ch" }}>
+            Le risposte dell&apos;agente dipendono da modelli LLM esterni e possono contenere errori — verifica sempre i dati consultando la fonte indicata.
           </p>
         </div>
       </section>
     </div>
+  );
+}
+
+/* ─────────────────────────── sotto-componenti ─────────────────────────── */
+
+function SourcePill({ bg, color, check, label }: { bg: string; color: string; check: string; label: string }) {
+  return (
+    <span className="d-inline-flex align-items-center gap-2" style={{ padding: "5px 11px", borderRadius: 999, background: bg, color, fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 11.5 }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={check} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5" />
+      </svg>
+      {label}
+    </span>
+  );
+}
+
+function Stat({ value, label, delay, gradient }: { value: string; label: string; delay: number; gradient?: boolean }) {
+  const numStyle: CSSProperties = {
+    fontFamily: "var(--font-display)",
+    fontWeight: 700,
+    fontSize: "clamp(2rem,3vw,2.6rem)",
+    lineHeight: 1,
+    letterSpacing: "-0.02em",
+    color: "#0E2233",
+  };
+  return (
+    <div className="col-6 col-md-3" data-reveal data-delay={delay}>
+      {gradient ? (
+        <div className="text-gradient-brand" style={numStyle}>{value}</div>
+      ) : (
+        <div style={numStyle}>{value}</div>
+      )}
+      <div style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 12.5, lineHeight: 1.3, letterSpacing: "0.08em", textTransform: "uppercase", color: "#7E8F9C", marginTop: 9 }}>{label}</div>
+    </div>
+  );
+}
+
+function PercorsoCard({ n, tag, tagColor, iconBg, icon, iconStroke, title, body, delay }: { n: string; tag: string; tagColor: string; iconBg: string; icon: string; iconStroke: string; title: string; body: string; delay: number }) {
+  return (
+    <div className="col-md-6 col-lg-3" data-reveal data-delay={delay}>
+      <div className="od-card" style={cardBase}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "#C5CDD5" }}>{n}</div>
+        <div className="d-flex align-items-center justify-content-center" style={{ margin: "16px 0 10px", width: 42, height: 42, borderRadius: 11, background: iconBg }}>
+          <Icon path={icon} stroke={iconStroke} />
+        </div>
+        <div style={{ fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: tagColor }}>{tag}</div>
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18, lineHeight: 1.25, color: "#0E2233", margin: "8px 0" }}>{title}</h3>
+        <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, lineHeight: 1.55, color: "#7E8F9C", margin: 0 }}>{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function SpecCard({ tag, tagBg, tagColor, title, body, delay, rail }: { tag: string; tagBg: string; tagColor: string; title: string; body: React.ReactNode; delay: number; rail?: boolean }) {
+  return (
+    <div className="col-md-6 col-lg-3" data-reveal data-delay={delay}>
+      <div className="od-card" style={{ ...cardBase, padding: 24, overflow: "hidden" }}>
+        {rail ? <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: "linear-gradient(180deg,#1B6FE3,#0FA3A3)" }} /> : null}
+        <span className="d-inline-block" style={{ padding: "5px 11px", borderRadius: 999, background: tagBg, color: tagColor, fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.05em" }}>{tag}</span>
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, lineHeight: 1.25, color: "#0E2233", margin: "14px 0 8px" }}>{title}</h3>
+        <p style={{ fontFamily: "var(--font-sans)", fontSize: 13.5, lineHeight: 1.55, color: "#7E8F9C", margin: 0 }}>{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function PubblicoCard({ iconBg, icon, iconStroke, title, body, delay }: { iconBg: string; icon: string; iconStroke: string; title: string; body: string; delay: number }) {
+  return (
+    <div className="col-md-4" data-reveal data-delay={delay}>
+      <div style={{ height: "100%", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 18, padding: 30 }}>
+        <span className="d-inline-flex align-items-center justify-content-center" style={{ width: 48, height: 48, borderRadius: 13, background: iconBg, marginBottom: 18 }}>
+          <Icon path={icon} stroke={iconStroke} size={24} />
+        </span>
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 19, lineHeight: 1.25, color: "#fff", margin: "0 0 10px" }}>{title}</h3>
+        <p style={{ fontFamily: "var(--font-sans)", fontSize: 14.5, lineHeight: 1.6, color: "#AFC0CE", margin: 0 }}>{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function SurfaceRow({ title, sub, badge }: { title: string; sub: string; badge: string }) {
+  return (
+    <div className="d-flex align-items-center justify-content-between gap-3" style={{ padding: "16px 18px", background: "#fff", border: "1px solid var(--color-border)", borderRadius: 12 }}>
+      <div>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, lineHeight: 1.2, color: "#0E2233" }}>{title}</div>
+        <div style={{ fontFamily: "var(--font-sans)", fontSize: 13, lineHeight: 1.4, color: "#7E8F9C", marginTop: 3 }}>{sub}</div>
+      </div>
+      <span className="flex-shrink-0" style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 11, color: "#5B6B7B", background: "#EEF1F4", padding: "5px 10px", borderRadius: 6 }}>{badge}</span>
+    </div>
+  );
+}
+
+function CodeBlock({ lang, langBg, caption, children }: { lang: string; langBg: string; caption: string; children: string }) {
+  return (
+    <div style={{ background: "#0E2233", borderRadius: 14, overflow: "hidden", boxShadow: "0 12px 30px rgba(14,34,51,.18)" }}>
+      <div className="d-flex align-items-center gap-2" style={{ padding: "11px 16px", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <span style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 11, color: "#fff", background: langBg, padding: "4px 9px", borderRadius: 5 }}>{lang}</span>
+        <span style={{ fontFamily: "var(--font-sans)", fontSize: 12.5, color: "#8C9BA8" }}>{caption}</span>
+      </div>
+      <pre style={{ margin: 0, padding: "16px 18px", overflowX: "auto", fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: 1.7, color: "#C7D2DC" }}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+function FanOut() {
+  return (
+    <svg viewBox="0 0 1040 300" style={{ width: "100%", height: "auto" }} fontFamily="Titillium Web,sans-serif" role="img" aria-label="Diagramma: una domanda in linguaggio naturale viene smistata in parallelo ai tre specialisti CKAN, SDMX 2.1 e OSM, le cui risposte convergono in un agente di sintesi che produce una risposta unica con fonti citate.">
+      <defs>
+        <linearGradient id="fang" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1B6FE3" />
+          <stop offset="1" stopColor="#0FA3A3" />
+        </linearGradient>
+      </defs>
+      {/* Connettori domanda → specialisti */}
+      <path className="od-flow" d="M236 150 C 330 150, 330 55, 424 55" fill="none" stroke="#1B6FE3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 150 C 330 150, 330 150, 424 150" fill="none" stroke="#0FA3A3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 150 C 330 150, 330 245, 424 245" fill="none" stroke="#1FA971" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      {/* Connettori specialisti → sintesi */}
+      <path className="od-flow--slow" d="M612 55 C 706 55, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 150 C 706 150, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 245 C 706 245, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      {/* Nodo domanda */}
+      <g>
+        <rect x="24" y="116" width="212" height="68" rx="16" fill="#0E2233" />
+        <text x="48" y="146" fill="#fff" fontSize="16" fontWeight="700">Una domanda</text>
+        <text x="48" y="167" fill="#AFC0CE" fontSize="12.5">in linguaggio naturale</text>
+      </g>
+      {/* Specialisti */}
+      <g>
+        <rect x="424" y="27" width="188" height="56" rx="14" fill="#fff" stroke="#1B6FE3" strokeWidth="2" />
+        <circle className="od-pulse" cx="448" cy="55" r="5" fill="#1B6FE3" />
+        <text x="466" y="51" fill="#0E2233" fontSize="14.5" fontWeight="700">CKAN</text>
+        <text x="466" y="69" fill="#7E8F9C" fontSize="11.5">Cataloghi open</text>
+      </g>
+      <g>
+        <rect x="424" y="122" width="188" height="56" rx="14" fill="#fff" stroke="#0FA3A3" strokeWidth="2" />
+        <circle className="od-pulse" cx="448" cy="150" r="5" fill="#0FA3A3" />
+        <text x="466" y="146" fill="#0E2233" fontSize="14.5" fontWeight="700">SDMX 2.1</text>
+        <text x="466" y="164" fill="#7E8F9C" fontSize="11.5">ISTAT · Eurostat · OCSE</text>
+      </g>
+      <g>
+        <rect x="424" y="217" width="188" height="56" rx="14" fill="#fff" stroke="#1FA971" strokeWidth="2" />
+        <circle className="od-pulse" cx="448" cy="245" r="5" fill="#1FA971" />
+        <text x="466" y="241" fill="#0E2233" fontSize="14.5" fontWeight="700">OSM</text>
+        <text x="466" y="259" fill="#7E8F9C" fontSize="11.5">Geocoding + mappa</text>
+      </g>
+      {/* Sintesi */}
+      <g>
+        <rect x="800" y="112" width="216" height="76" rx="18" fill="url(#fang)" />
+        <text x="826" y="146" fill="#fff" fontSize="16" fontWeight="700">Sintesi</text>
+        <text x="826" y="167" fill="rgba(255,255,255,.88)" fontSize="12">Risposta unica · fonti citate</text>
+      </g>
+    </svg>
   );
 }

@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="OpenData AI">
-  <rect width="48" height="48" rx="11" fill="#0066cc"/>
-  <path d="M24 9c-7.18 0-13 5.6-13 12.5C11 31 24 40 24 40s13-9 13-18.5C37 14.6 31.18 9 24 9z" fill="#ffffff"/>
-  <circle cx="24" cy="21.5" r="5" fill="#00cf86"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="odm" x1="6" y1="8" x2="42" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B6FE3"></stop>
+      <stop offset="1" stop-color="#0FA3A3"></stop>
+    </linearGradient>
+  </defs>
+  <circle cx="24" cy="24" r="15" stroke="url(#odm)" stroke-width="4" stroke-linecap="round" stroke-dasharray="71 26" transform="rotate(-58 24 24)"></circle>
+  <circle cx="14.8" cy="30.6" r="2.8" fill="#1B6FE3"></circle>
+  <circle cx="23.6" cy="24.6" r="2.8" fill="#0FA3A3"></circle>
+  <circle cx="32.8" cy="17.4" r="3.7" fill="#1FA971"></circle>
 </svg>

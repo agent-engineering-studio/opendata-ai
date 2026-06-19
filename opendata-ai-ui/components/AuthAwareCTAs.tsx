@@ -1,68 +1,86 @@
 "use client";
 
 import Link from "next/link";
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/clerk-react";
+import type { CSSProperties } from "react";
+import { SignUpButton, SignedIn, SignedOut } from "@clerk/clerk-react";
 
 const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-type Variant = "hero" | "footer";
+type Variant = "hero" | "final";
 
 /**
- * Auth-aware CTA cluster shown on the landing.
+ * CTA primaria auth-aware della landing.
  *
- * - SignedOut → "Accedi" (modal) + "Registrati" (modal): the user has to
- *   authenticate first, no point pushing them to /dashboard which would
- *   just bounce back to /login.
- * - SignedIn  → "Apri la dashboard" + "Apri la mappa": one-click into the
- *   product.
+ * - `hero`  → pill gradiente brand. SignedOut apre il SignUp modale ("Analizza
+ *   un territorio"); SignedIn linka direttamente a /territorio.
+ * - `final` → pill bianca sul fondo gradiente della CTA conclusiva. SignedOut
+ *   "Crea un account gratuito" (SignUp modale); SignedIn "Apri l'analisi".
  *
- * The `hero` variant uses light outline buttons over the dark primary-900
- * hero band; the `footer` variant uses solid primary buttons for the dark
- * final CTA band.
- *
- * Falls through to public links when Clerk isn't configured at build time
- * (local prerender, /_not-found export) so the bundle still compiles.
+ * La secondaria (anchor "Guarda come funziona" / link "Sostieni il progetto")
+ * è statica e vive in `app/page.tsx`. Senza Clerk configurato, fallback ai
+ * link pubblici così il bundle statico compila comunque.
  */
+
+const PILL: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 9,
+  borderRadius: 999,
+  textDecoration: "none",
+  border: 0,
+  cursor: "pointer",
+};
+
+function styleFor(variant: Variant): CSSProperties {
+  if (variant === "hero") {
+    return {
+      ...PILL,
+      padding: "15px 28px",
+      fontSize: 17,
+      fontWeight: 600,
+      background: "var(--gradient-brand)",
+      color: "#fff",
+      boxShadow: "var(--shadow-brand)",
+    };
+  }
+  return {
+    ...PILL,
+    padding: "15px 30px",
+    fontSize: 17,
+    fontWeight: 700,
+    background: "#fff",
+    color: "#0E47A1",
+    boxShadow: "0 10px 28px rgba(0,0,0,.18)",
+  };
+}
+
 export function AuthAwareCTAs({ variant }: { variant: Variant }) {
-  const primary =
-    variant === "hero" ? "btn btn-primary btn-lg" : "btn btn-primary btn-lg";
-  const secondary =
-    variant === "hero"
-      ? "btn btn-outline-light btn-lg"
-      : "btn btn-outline-light btn-lg";
+  const style = styleFor(variant);
+  const signedOutLabel =
+    variant === "hero" ? "Analizza un territorio" : "Crea un account gratuito";
+  const signedInLabel =
+    variant === "hero" ? "Analizza un territorio" : "Apri l'analisi";
 
   if (!hasClerk) {
-    // Build-time fallback. Show the SignedOut shape — best default for a
-    // first-time visitor in environments without Clerk wired up.
     return (
-      <>
-        <Link href="/login" className={primary}>
-          Accedi
-        </Link>
-        <Link href="/sign-up" className={secondary}>
-          Registrati
-        </Link>
-      </>
+      <Link href="/login" style={style}>
+        {signedOutLabel}
+      </Link>
     );
   }
 
   return (
     <>
       <SignedOut>
-        <SignInButton mode="modal">
-          <button type="button" className={primary}>
-            Accedi
-          </button>
-        </SignInButton>
         <SignUpButton mode="modal">
-          <button type="button" className={secondary}>
-            Registrati
+          <button type="button" style={style}>
+            {signedOutLabel}
           </button>
         </SignUpButton>
       </SignedOut>
       <SignedIn>
-        <Link href="/esplora" className={primary}>
-          Apri Esplora
+        <Link href="/territorio" style={style}>
+          {signedInLabel}
         </Link>
       </SignedIn>
     </>

@@ -1,45 +1,76 @@
 /* Designers Italia — Bootstrap Italia v2 first, so Tailwind utilities win on conflicts. */
 @import "bootstrap-italia/dist/css/bootstrap-italia.min.css";
 
-/* Institutional fonts (Titillium Web body, Lora display, Roboto Mono code). */
+/* Fonts: Titillium Web (body/UI, PA), Space Grotesk (display: titoli + numeri),
+   Roboto Mono (codice). Space Grotesk is self-hosted via @fontsource — no
+   runtime Google Fonts request (R6: static export). */
 @import "@fontsource/titillium-web/300.css";
 @import "@fontsource/titillium-web/400.css";
 @import "@fontsource/titillium-web/600.css";
 @import "@fontsource/titillium-web/700.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
 @import "@fontsource/roboto-mono/400.css";
 @import "@fontsource/roboto-mono/500.css";
 
 @import "tailwindcss";
 
 /*
- * Designers Italia design tokens mapped into Tailwind v4 @theme.
- * Reference: https://github.com/italia/design-tokens-italia and
- * https://italia.github.io/bootstrap-italia/docs/customizzazioni/colori/
- * Domain components keep Tailwind classes (bg-primary, text-secondary) but
- * resolve to PA colors instead of hard-coded slate/blue.
+ * OpenData AI — identità di prodotto. Token Tailwind v4 @theme.
+ * Sostituiscono la palette istituzionale PA generica (#0066cc) con la palette
+ * OpenData AI: blu → teal, accento verde "open/AI". Titillium Web resta il
+ * font di testo (PA); Space Grotesk è il font display (titoli, numeri).
+ * I componenti di dominio mantengono le classi Tailwind (bg-primary,
+ * text-secondary) ma ora risolvono ai colori OpenData AI.
  */
 @theme {
-  /* Institutional palette */
-  --color-primary: #0066cc;
-  --color-primary-100: #d4e5f7;
-  --color-primary-200: #a9ccf0;
-  --color-primary-700: #004080;
-  --color-primary-900: #002b56;
-  --color-secondary: #00cf86;
-  --color-success: #008055;
-  --color-warning: #a66300;
+  /* Brand primario: blu OpenData AI */
+  --color-primary: #1b6fe3;
+  --color-primary-100: #e7f0fd;
+  --color-primary-200: #c5dcfb;
+  --color-primary-700: #0e47a1;
+  --color-primary-900: #0e2233; /* navy profondo — sezioni scure / hero */
+
+  /* Secondario: teal (statistiche / flusso dati) */
+  --color-secondary: #0fa3a3;
+  --color-secondary-100: #e1f4f4;
+
+  /* Accento: verde "open / crescita / AI" */
+  --color-accent: #1fa971;
+  --color-accent-100: #e4f5ec;
+
+  /* Stati */
+  --color-success: #1fa971;
+  --color-warning: #f2a33c;
   --color-danger: #d9364f;
 
-  /* Surface / text — neutral PA grays */
+  /* Superfici / testo */
   --color-bg: #ffffff;
-  --color-bg-muted: #f5f5f5;
-  --color-border: #e3e4e6;
-  --color-text: #17324d;
-  --color-text-muted: #5b6f82;
+  --color-bg-muted: #f6f8fa;
+  --color-border: #e6eaef;
+  --color-text: #0e2233; /* ink */
+  --color-text-strong: #0e2233;
+  --color-text-muted: #5b6b7b;
+  --color-text-faint: #7e8f9c;
 
-  /* Typography */
+  /* Tipografia */
   --font-sans: "Titillium Web", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", "Titillium Web", system-ui, sans-serif;
   --font-mono: "Roboto Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Gradiente firma (blu → teal) / hero scuro */
+  --gradient-brand: linear-gradient(135deg, #1b6fe3 0%, #0fa3a3 100%);
+  --gradient-hero: linear-gradient(160deg, #0e2233 0%, #0a1826 100%);
+
+  /* Raggi / ombre (cool, mai nero caldo) */
+  --radius-card: 16px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 3px rgba(14, 34, 51, 0.08);
+  --shadow-md: 0 4px 12px rgba(14, 34, 51, 0.08);
+  --shadow-lg: 0 12px 32px rgba(14, 34, 51, 0.12);
+  --shadow-brand: 0 10px 28px rgba(27, 111, 227, 0.4);
 }
 
 @layer base {
@@ -84,6 +115,141 @@
   .json-null {
     color: var(--color-text-muted);
     font-style: italic;
+  }
+
+  /* ── Pattern firma OpenData AI ─────────────────────────────────────────
+   * .text-gradient-brand → testo con clip sul gradiente blu→teal (hero, stat).
+   * .btn-brand → pill gradiente per le CTA principali. */
+  .text-gradient-brand {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .btn-brand {
+    background: var(--gradient-brand);
+    color: #fff;
+    border: 0;
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+    box-shadow: 0 6px 16px rgba(27, 111, 227, 0.28);
+    transition: box-shadow 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+      transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  .btn-brand:hover {
+    box-shadow: var(--shadow-brand);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+}
+
+/* ── Animazioni landing (progressive enhancement) ───────────────────────
+ * Reveal allo scroll, flusso del diagramma, micro-animazioni hero. Tutto
+ * dietro `prefers-reduced-motion`. La pagina è completa anche senza JS:
+ * `.od-reveal` parte VISIBILE; LandingReveal aggiunge `.od-reveal--armed`
+ * (che la nasconde) solo se JS è attivo, poi `.od-reveal--in` per rivelarla.
+ * Card con hover-lift via `.od-card`. */
+@keyframes odRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes odFlow {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+@keyframes odPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes odBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes odDash {
+  from {
+    stroke-dashoffset: 327;
+  }
+  to {
+    stroke-dashoffset: 124;
+  }
+}
+@keyframes odDrift {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(-16px) rotate(3deg);
+  }
+}
+
+.od-reveal--armed {
+  opacity: 0;
+  transform: translateY(22px);
+}
+.od-reveal--in {
+  animation: odRise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.od-card {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.od-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.od-flow {
+  animation: odFlow 1s linear infinite;
+}
+.od-flow--slow {
+  animation: odFlow 1.2s linear infinite;
+}
+.od-pulse {
+  animation: odPulse 1.6s ease-in-out infinite;
+}
+.od-blink {
+  animation: odBlink 1s step-end infinite;
+}
+.od-dash {
+  animation: odDash 1.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both;
+}
+.od-drift {
+  animation: odDrift 9s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .od-reveal--armed {
+    opacity: 1;
+    transform: none;
+  }
+  .od-reveal--in,
+  .od-flow,
+  .od-flow--slow,
+  .od-pulse,
+  .od-blink,
+  .od-dash,
+  .od-drift {
+    animation: none !important;
   }
 }
 
