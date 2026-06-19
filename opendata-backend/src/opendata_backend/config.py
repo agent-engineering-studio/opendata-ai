@@ -993,7 +993,10 @@ class Settings(BaseSettings):
     # lento (es. CKAN che ritenta download 404) blocca l'intero report fino al
     # timeout totale. Scaduto, quello specialista viene escluso e gli altri
     # alimentano comunque la sintesi.
-    specialist_timeout_sec: float = Field(default=240.0)
+    # B1 (perf): 240s permetteva a UN solo specialista di tenere 4 minuti il
+    # fan-out (parallelo, ma bounded dal più lento) → portato a 120s. Override
+    # via env SPECIALIST_TIMEOUT_SEC se un comune grande lo richiede.
+    specialist_timeout_sec: float = Field(default=120.0)
 
     # ── Ambito territoriale del verticale /territorio ─────────────────
     # Lista (comma-separated) di codici provincia ISTAT a 3 cifre ammessi.

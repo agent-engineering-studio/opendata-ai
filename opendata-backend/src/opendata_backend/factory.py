@@ -786,6 +786,43 @@ class OrchestratorSession:
                            cod_comune, exc=exc)
             return None
 
+    async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
+        """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
+        turismo, lavoro, trasporti, welfare).
+
+        Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
+        dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
+        costo passa da SOMMA a MAX. Ogni lente è già fail-safe (ritorna None su
+        errore); qui isoliamo anche le eccezioni impreviste con return_exceptions,
+        così una lente che esplode non affonda le altre.
+        """
+        zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare = await asyncio.gather(
+            self._resolve_zona(req),
+            self._resolve_zone_commerciali(req),
+            self._resolve_commercio(req),
+            self._resolve_turismo(req),
+            self._resolve_lavoro(req),
+            self._resolve_trasporti(req),
+            self._resolve_welfare(req),
+            return_exceptions=True,
+        )
+
+        def _ok(x: Any) -> Any:
+            if isinstance(x, BaseException):
+                log.warning("resolver lente fallito (isolato): %s", x)
+                return None
+            return x
+
+        return {
+            "zona": _ok(zona),
+            "zone_comm": _ok(zone_comm),
+            "commercio": _ok(commercio),
+            "turismo": _ok(turismo),
+            "lavoro": _ok(lavoro),
+            "trasporti": _ok(trasporti),
+            "welfare": _ok(welfare),
+        }
+
     async def run_programma_streaming(
         self,
         req: ProgrammaRequest,
@@ -811,13 +848,24 @@ class OrchestratorSession:
             raise RuntimeError("OrchestratorSession not entered")
         if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
-        zona_info = await self._resolve_zona(req)
-        zone_comm = await self._resolve_zone_commerciali(req)
-        commercio = await self._resolve_commercio(req)
-        turismo = await self._resolve_turismo(req)
-        lavoro = await self._resolve_lavoro(req)
-        trasporti = await self._resolve_trasporti(req)
-        welfare = await self._resolve_welfare(req)
+        # S1 — primo byte IMMEDIATO: la raccolta evidenze è una fase visibile e
+        # parte subito, in PARALLELO (P1), con heartbeat finché è in corso. Prima i
+        # 6 resolver giravano in sequenza PRIMA di qualsiasi evento → schermo vuoto
+        # per ~150-200s. I resolver restano fuori dal lock (indipendenti, cache-ati).
+        yield {"event": "status", "source": "evidenze territoriali", "phase": "start"}
+        t_lens = asyncio.get_event_loop().time()
+        lens_task = asyncio.create_task(self._resolve_all_lenses(req))
+        while not lens_task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(lens_task), timeout=heartbeat_sec)
+            except asyncio.TimeoutError:
+                yield {
+                    "event": "heartbeat",
+                    "in_flight": ["evidenze territoriali"],
+                    "elapsed_ms": int((asyncio.get_event_loop().time() - t_lens) * 1000),
+                }
+        lenses = await lens_task
+        yield {"event": "status", "source": "evidenze territoriali", "phase": "end"}
 
         async with self._lock:
             aggregator = build_programma_aggregator(
@@ -827,15 +875,16 @@ class OrchestratorSession:
                 # (senza, gli spunti non avrebbero l'ispirazione esterna e
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
-                commercio_info=commercio,
-                turismo_info=turismo,
-                lavoro_info=lavoro,
-                trasporti_info=trasporti,
-                welfare_info=welfare,
+                commercio_info=lenses["commercio"],
+                turismo_info=lenses["turismo"],
+                lavoro_info=lenses["lavoro"],
+                trasporti_info=lenses["trasporti"],
+                welfare_info=lenses["welfare"],
             )
             task_text = build_programma_task(
-                req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti,
-                welfare_info=welfare,
+                req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
+                lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
+                welfare_info=lenses["welfare"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -982,13 +1031,7 @@ class OrchestratorSession:
             raise RuntimeError("OrchestratorSession not entered")
         if self._programma_agent is None:
             raise RuntimeError("Programma disabilitato (enable_programma=false)")
-        zona_info = await self._resolve_zona(req)
-        zone_comm = await self._resolve_zone_commerciali(req)
-        commercio = await self._resolve_commercio(req)
-        turismo = await self._resolve_turismo(req)
-        lavoro = await self._resolve_lavoro(req)
-        trasporti = await self._resolve_trasporti(req)
-        welfare = await self._resolve_welfare(req)
+        lenses = await self._resolve_all_lenses(req)  # P1: lenti in parallelo
         async with self._lock:
             # L'aggregatore riceve entrambi gli agenti: la modalità decide se
             # usarne uno solo (scheda/idee) o fonderli (completa).
@@ -999,17 +1042,18 @@ class OrchestratorSession:
                 # (senza, gli spunti non avrebbero l'ispirazione esterna e
                 # verrebbero scartati dal guardrail A+B).
                 marketing_agent=self._marketing_agent if self._settings.enable_web else None,
-                commercio_info=commercio,
-                turismo_info=turismo,
-                lavoro_info=lavoro,
-                trasporti_info=trasporti,
-                welfare_info=welfare,
+                commercio_info=lenses["commercio"],
+                turismo_info=lenses["turismo"],
+                lavoro_info=lenses["lavoro"],
+                trasporti_info=lenses["trasporti"],
+                welfare_info=lenses["welfare"],
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
                 build_programma_task(
-                    req, zona_info, zone_comm, commercio, turismo, lavoro, trasporti,
-                    welfare_info=welfare,
+                    req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
+                    lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
+                    welfare_info=lenses["welfare"],
                 )
             )
         outputs = events.get_outputs()
