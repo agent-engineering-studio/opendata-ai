@@ -764,7 +764,8 @@ async def test_welfare_info_injects_citable_istat_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["welfare"]
-    assert any(pop_url == r.url for r in resp.citazioni)
+    # display-clean: la fonte ISTAT compare come sito di origine (mai il link SDMX).
+    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -801,8 +802,9 @@ async def test_welfare_info_social_investments_are_citable() -> None:
     )
     resp = (await aggregate(parts)).response
     assert resp is not None
-    assert any(pop_url == r.url for r in resp.citazioni)      # ancora ISTAT
-    assert any(oc_url == r.url for r in resp.citazioni)        # complemento OpenCoesione
+    # display-clean: ISTAT → sito di origine; OpenCoesione aggregati → homepage.
+    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)       # ancora ISTAT
+    assert any(r.url == "https://opencoesione.gov.it/" for r in resp.citazioni)  # OpenCoesione
 
 
 @pytest.mark.asyncio
