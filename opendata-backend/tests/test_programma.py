@@ -128,7 +128,10 @@ async def test_happy_path_builds_validated_response() -> None:
     assert len(resp.proposte) == 1
     # Proposta senza finanziamento → fattibilità degradata dal guardrail.
     assert resp.proposte[0].fattibilita.livello == "da_verificare"
-    assert {r.url for r in resp.citazioni} == {_OC_URL, _ISTAT_URL}
+    # citazioni display-clean: file/API → sito di origine (mai il link profondo).
+    assert {r.url for r in resp.citazioni} == {
+        "https://opencoesione.gov.it/", "https://www.istat.it/"
+    }
     assert resp.disclaimer
     # Il wrapper espone anche il JSON serializzato per events.get_outputs().
     assert json.loads(out.text)["comune"] == "110002"
@@ -331,7 +334,7 @@ async def test_duplicate_tool_citations_are_deduped() -> None:
     )
     resp = (await aggregate([dup, _participants()[1]])).response
     assert resp is not None
-    assert [r.url for r in resp.citazioni].count(_OC_URL) == 1
+    assert [r.url for r in resp.citazioni].count("https://opencoesione.gov.it/") == 1
 
 
 # ───────────────────────── modalità idee (Pezzo 8) ─────────────────────────
@@ -477,8 +480,9 @@ async def test_commercio_info_injects_citable_istat_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["commercio_duc"]
-    # la fonte ISTAT ASIA è tra le citazioni globali (iniettata come risorsa citabile)
-    assert any(asia_url == r.url for r in resp.citazioni)
+    # la fonte ISTAT ASIA è citabile (validata sull'URL grezzo) e in display
+    # compare come sito di origine ISTAT (mai il link SDMX profondo).
+    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -539,7 +543,9 @@ async def test_turismo_info_injects_citable_osm_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["turismo_cultura"]
-    assert any(osm_url == r.url for r in resp.citazioni)
+    # OSM resta àncora di validazione (la proposta sopravvive) ma è NASCOSTA dalle
+    # fonti display: la mappa mostra già il dettaglio, il link OSM è inutile.
+    assert not any("openstreetmap.org" in r.url for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -575,7 +581,8 @@ async def test_turismo_info_injects_citable_istat_ricettivita_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["turismo_cultura"]
-    assert any(istat_url == r.url for r in resp.citazioni)
+    # ricettività ISTAT in display = sito di origine ISTAT (mai il link SDMX).
+    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -633,7 +640,8 @@ async def test_lavoro_info_injects_citable_census_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["lavoro"]
-    assert any(census_url == r.url for r in resp.citazioni)
+    # 8milaCensus in display = sito di origine ISTAT (mai il CSV profondo).
+    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -690,7 +698,9 @@ async def test_trasporti_info_injects_citable_osm_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["trasporti"]
-    assert any(osm_url == r.url for r in resp.citazioni)
+    # Trasporti resta valido (àncora OSM grezza), ma OSM è NASCOSTO dalle fonti
+    # display: la lente vive "ancorata alla mappa, non a un link".
+    assert not any("openstreetmap.org" in r.url for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
