@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 56" fill="none">
+  <defs>
+    <linearGradient id="odm" x1="6" y1="8" x2="42" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B6FE3"></stop>
+      <stop offset="1" stop-color="#0FA3A3"></stop>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8,4)">
+    <rect width="48" height="48" rx="13" fill="url(#odm)"></rect>
+    <g transform="translate(0,0)">
+      <circle cx="24" cy="24" r="15" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="71 26" transform="rotate(-58 24 24)"></circle>
+      <circle cx="14.8" cy="30.6" r="2.8" fill="#fff"></circle>
+      <circle cx="23.6" cy="24.6" r="2.8" fill="#fff"></circle>
+      <circle cx="32.8" cy="17.4" r="3.7" fill="#7BE7C4"></circle>
+    </g>
+  </g>
+  <text x="68" y="35" font-family="&#39;Space Grotesk&#39;,system-ui,sans-serif" font-weight="700" font-size="24" letter-spacing="-0.5" fill="#0E2233">OpenData<tspan fill="#1B6FE3"> AI</tspan></text>
+</svg>

@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
 
 const GITHUB_URL = "https://github.com/agent-engineering-studio/opendata-ai";
 const AE_URL = "https://www.agentengineering.it";
 const ANTHROPIC_URL = "https://www.anthropic.com";
+
+const LINK_COLOR = "#8C9BA8";
+const HEADING_COLOR = "#5B6B7B";
 
 function AnthropicMark({ className = "h-4 w-auto" }: { className?: string }) {
   // Anthropic "A" mark (same path used by Wamply BrandFooter).
@@ -24,131 +28,172 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function FooterCol({
+  title,
+  links,
+}: {
+  title: string;
+  links: { href: string; label: string; external?: boolean }[];
+}) {
+  return (
+    <div>
+      <div
+        className="text-uppercase mb-3"
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          color: HEADING_COLOR,
+        }}
+      >
+        {title}
+      </div>
+      <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+        {links.map((l) => (
+          <li key={l.href + l.label}>
+            {l.external ? (
+              <a
+                href={l.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-decoration-none"
+                style={{ color: LINK_COLOR, fontSize: 14 }}
+              >
+                {l.label}
+              </a>
+            ) : (
+              <Link
+                href={l.href}
+                className="text-decoration-none"
+                style={{ color: LINK_COLOR, fontSize: 14 }}
+              >
+                {l.label}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function SiteFooter() {
   const year = new Date().getFullYear();
   return (
-    <footer className="bg-primary-900 text-white" role="contentinfo">
-      {/* Main footer band: brand + tagline on the left, tech credit on the right. */}
-      <div className="container py-4">
-        <div className="row align-items-center g-4">
-          <div className="col-md-6">
-            <Link href="/" className="text-decoration-none text-white">
-              <h2 className="h4 mb-1">OpenData AI</h2>
-              <p className="small mb-0" style={{ opacity: 0.75 }}>
-                Open data CKAN + statistiche ufficiali (ISTAT, Eurostat, OCSE)
-              </p>
+    <footer
+      role="contentinfo"
+      style={{ background: "#0A1826", color: LINK_COLOR }}
+    >
+      <div className="container" style={{ paddingTop: 54, paddingBottom: 40 }}>
+        <div className="d-flex flex-wrap justify-content-between gap-4">
+          {/* Brand + tagline */}
+          <div style={{ maxWidth: 320 }}>
+            <Link href="/" className="text-decoration-none d-inline-block mb-3">
+              <Logo size={36} theme="dark" />
             </Link>
+            <p
+              className="mb-0"
+              style={{ fontSize: 13.5, lineHeight: 1.6, color: "#7E8B97" }}
+            >
+              Dalla maturità degli open data al valore per il territorio.
+              Progetto open source · licenza MIT.
+            </p>
           </div>
 
-          <div className="col-md-6">
-            <div className="d-flex flex-wrap align-items-center justify-content-md-end gap-3">
-              <a
-                href={ANTHROPIC_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center gap-2 text-decoration-none"
-                style={{ color: "rgba(255,255,255,0.75)" }}
-                title="Powered by Anthropic Claude"
-              >
-                <AnthropicMark className="h-4 w-auto" />
-                <span className="small">Powered by Claude</span>
-              </a>
-
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 1,
-                  height: 16,
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                }}
-              />
-
-              <a
-                href={AE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center gap-2 text-decoration-none"
-                style={{ color: "rgba(255,255,255,0.75)" }}
-                title="Designed by Agent Engineering Studio"
-              >
-                <span
-                  className="text-uppercase"
-                  style={{ fontSize: 10, letterSpacing: "0.12em" }}
-                >
-                  Designed by
-                </span>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/agent-engineering-logo.png"
-                  alt="Agent Engineering Studio"
-                  style={{ height: 28, width: "auto" }}
-                />
-              </a>
-            </div>
+          {/* Link columns */}
+          <div className="d-flex flex-wrap" style={{ gap: 56 }}>
+            <FooterCol
+              title="Prodotto"
+              links={[
+                { href: "/#percorso", label: "Il percorso" },
+                { href: "/#come", label: "Come funziona" },
+                { href: "/#perchi", label: "Per chi è" },
+              ]}
+            />
+            <FooterCol
+              title="Sviluppatori"
+              links={[
+                { href: "/docs", label: "Documentazione" },
+                { href: "/usecases", label: "Casi d'uso" },
+                { href: "/sostenibilita", label: "Sostenibilità" },
+              ]}
+            />
+            <FooterCol
+              title="Legale"
+              links={[
+                { href: "/privacy", label: "Privacy" },
+                { href: "/note-legali", label: "Note legali" },
+                {
+                  href: GITHUB_URL,
+                  label: "Licenza MIT",
+                  external: true,
+                },
+              ]}
+            />
           </div>
         </div>
-      </div>
 
-      {/* Small prints band — divider + bottom row with legal/docs links + GitHub icon. */}
-      <div
-        className="py-3"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}
-      >
-        <div className="container">
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <ul
-              className="list-inline mb-0 d-flex flex-wrap gap-3 small"
-              style={{ opacity: 0.8 }}
+        {/* Bottom band: sources + credits */}
+        <div
+          className="d-flex flex-wrap align-items-center justify-content-between gap-3"
+          style={{
+            marginTop: 36,
+            paddingTop: 22,
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12.5,
+            color: HEADING_COLOR,
+          }}
+        >
+          <span style={{ lineHeight: 1.5 }}>
+            © {year} OpenData AI · Dati da fonti ufficiali ISTAT, OpenCoesione,
+            OpenStreetMap e portali CKAN.
+          </span>
+
+          <div className="d-flex flex-wrap align-items-center gap-3">
+            <a
+              href={ANTHROPIC_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="d-inline-flex align-items-center gap-2 text-decoration-none"
+              style={{ color: LINK_COLOR }}
+              title="Powered by Anthropic Claude"
             >
-              <li className="list-inline-item m-0">
-                © {year} OpenData AI
-              </li>
-              <li className="list-inline-item m-0">
-                <Link href="/usecases" className="text-white text-decoration-none">
-                  Casi d&apos;uso
-                </Link>
-              </li>
-              <li className="list-inline-item m-0">
-                <Link href="/docs" className="text-white text-decoration-none">
-                  Documentazione
-                </Link>
-              </li>
-              <li className="list-inline-item m-0">
-                <Link
-                  href="/sostenibilita"
-                  className="text-white text-decoration-none"
-                >
-                  Sostenibilità
-                </Link>
-              </li>
-              <li className="list-inline-item m-0">
-                <Link
-                  href="/note-legali"
-                  className="text-white text-decoration-none"
-                >
-                  Note legali
-                </Link>
-              </li>
-              <li className="list-inline-item m-0">
-                <Link
-                  href="/privacy"
-                  className="text-white text-decoration-none"
-                >
-                  Privacy
-                </Link>
-              </li>
-            </ul>
-
+              <AnthropicMark className="h-4 w-auto" />
+              <span style={{ fontSize: 12.5 }}>Powered by Claude</span>
+            </a>
+            <span
+              aria-hidden="true"
+              style={{ width: 1, height: 14, background: "rgba(255,255,255,0.16)" }}
+            />
+            <a
+              href={AE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="d-inline-flex align-items-center gap-2 text-decoration-none"
+              style={{ color: LINK_COLOR }}
+              title="Designed by Agent Engineering Studio"
+            >
+              <span
+                className="text-uppercase"
+                style={{ fontSize: 10, letterSpacing: "0.12em" }}
+              >
+                Designed by AES
+              </span>
+            </a>
+            <span
+              aria-hidden="true"
+              style={{ width: 1, height: 14, background: "rgba(255,255,255,0.16)" }}
+            />
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="d-inline-flex align-items-center gap-2 text-decoration-none text-white"
+              className="d-inline-flex align-items-center gap-2 text-decoration-none"
+              style={{ color: LINK_COLOR }}
               aria-label="Repository GitHub opendata-ai"
-              style={{ opacity: 0.85 }}
             >
               <GitHubIcon className="h-4 w-4" />
-              <span className="small">GitHub</span>
+              <span style={{ fontSize: 12.5 }}>GitHub</span>
             </a>
           </div>
         </div>
