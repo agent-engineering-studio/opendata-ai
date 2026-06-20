@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { NextStepsCards } from "@/components/NextStepsCards";
 
+const GITHUB_URL = "https://github.com/agent-engineering-studio/opendata-ai";
+
 export const metadata: Metadata = {
   title: "Server MCP — OpenData AI",
   description:
@@ -16,13 +18,26 @@ export default function Page() {
       </p>
       <h1>Server MCP — panoramica</h1>
       <p className="lead">
-        OpenData AI distribuisce tre server FastMCP indipendenti. Possono
-        essere usati dal backend OpenData AI, da Claude Desktop, da un agente
-        MAF/LangGraph o da qualunque altro host MCP. Ogni server supporta sia{" "}
-        <code>stdio</code> (per i client locali) sia{" "}
-        <code>streamable-http</code> (per il deployment server-side), via la
-        variabile d&apos;ambiente <code>TRANSPORT</code>.
+        OpenData AI distribuisce tre server FastMCP indipendenti, pubblicati
+        come immagini su <strong>GHCR</strong>. Sono pensati per essere{" "}
+        <strong>riusati nei tuoi progetti custom</strong>: dal backend OpenData
+        AI, da Claude Desktop, da un agente MAF/LangGraph o da qualunque altro
+        host MCP. Ogni server supporta sia <code>stdio</code> (per i client
+        locali) sia <code>streamable-http</code> (per il deployment
+        server-side), via la variabile d&apos;ambiente <code>TRANSPORT</code>.
       </p>
+
+      <div className="alert alert-info">
+        <strong>Componente self-host / open source.</strong> I server MCP fanno
+        parte dello stack self-host: non sono esposti nell&apos;offerta in
+        abbonamento (che usa solo l&apos;endpoint{" "}
+        <Link href="/docs/a2a">A2A</Link>). Le immagini sono pubbliche su GHCR e
+        il codice è su{" "}
+        <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>{" "}
+        (licenza MIT): puoi montarli liberamente nei tuoi progetti.
+      </div>
 
       <section className="mt-4">
         <h2>I tre server</h2>
@@ -116,8 +131,13 @@ TRANSPORT=stdio istat-mcp
 TRANSPORT=stdio osm-mcp`}
         </pre>
         <p className="small text-muted">
-          Per la configurazione concreta di Claude Desktop o Cursor vedi{" "}
-          <Link href="/docs/clients">/docs/clients</Link>.
+          La configurazione concreta dei client (Claude Desktop, Cursor, VS
+          Code) e gli esempi di integrazione con MAF e LangGraph sono nel README
+          della{" "}
+          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+            repository GitHub
+          </a>
+          .
         </p>
       </section>
 
@@ -247,28 +267,22 @@ curl -sX POST http://localhost:8080/mcp \\
           heading="Vai oltre"
           items={[
             {
-              href: "/docs/clients",
-              title: "Client AI desktop",
-              blurb: "Config JSON per Claude Desktop e Cursor — connessione stdio in locale.",
-              badge: "Config",
-            },
-            {
-              href: "/docs/maf",
-              title: "Microsoft Agent Framework",
-              blurb: "Agente Python che usa CKAN, ISTAT e OSM via MCPStreamableHTTPTool.",
-              badge: "Python",
-            },
-            {
-              href: "/docs/langgraph",
-              title: "LangGraph",
-              blurb: "Grafo LangGraph con langchain-mcp-adapters: ReAct e custom StateGraph.",
-              badge: "Python",
-            },
-            {
               href: "/docs/a2a",
               title: "Agent-to-Agent",
-              blurb: "Chiamare il backend OpenData AI come agente esterno via JSON-RPC.",
-              badge: "Protocollo",
+              blurb: "Usare la piattaforma hosted via JSON-RPC, senza gestire infrastruttura.",
+              badge: "Abbonamento",
+            },
+            {
+              href: "/docs/api-keys",
+              title: "API key",
+              blurb: "Autenticare le chiamate A2A (e, in self-host, REST e MCP).",
+              badge: "Autenticazione",
+            },
+            {
+              href: GITHUB_URL,
+              title: "Repository GitHub",
+              blurb: "Client desktop, MAF, LangGraph, setup e codice sorgente (MIT).",
+              badge: "Open source",
             },
           ]}
         />

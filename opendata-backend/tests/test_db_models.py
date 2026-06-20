@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from opendata_backend.db.models import ApiKey, Base, Favorite, History, User
+from opendata_backend.db.models import Base
 from opendata_backend.db.repositories import api_keys as api_keys_repo
 from opendata_backend.db.repositories import classifications as classifications_repo
 from opendata_backend.db.repositories import favorites as favorites_repo

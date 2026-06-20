@@ -10,11 +10,13 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import type { Guida } from "@/lib/scorecardPdf";
 import type { ProgrammaResponse } from "@/lib/types";
+import { GUIDA_PATH, guideHref, GAP_GUIDE } from "@/lib/maturityGuidance";
 
 export type Scorecard = {
   entity: { id: number; name: string };
@@ -170,8 +172,11 @@ export function TerritorioExtra({
           ) : sc.dato?.insufficient_data && sc.dato.guida ? (
             <div>
               <span className="badge bg-warning text-dark mb-2">Dato insufficiente</span>
-              <p className="mb-2" style={{ fontSize: 14 }}>{sc.dato.guida.premessa}</p>
-              <ol className="d-flex flex-column gap-2 mb-0" style={{ fontSize: 14, paddingLeft: 18 }}>
+              <p className="mb-2" style={{ fontSize: 14 }}>
+                Sul catalogo nazionale non risultano (ancora) open data valutabili per questo comune:
+                il punteggio resta a 0. Non è un giudizio, è il punto di partenza tipico. {sc.dato.guida.premessa}
+              </p>
+              <ol className="d-flex flex-column gap-2 mb-2" style={{ fontSize: 14, paddingLeft: 18 }}>
                 {sc.dato.guida.passi.map((p, i) => (
                   <li key={i}>
                     <strong>{p.titolo}</strong>
@@ -179,6 +184,9 @@ export function TerritorioExtra({
                   </li>
                 ))}
               </ol>
+              <Link href={GUIDA_PATH} className="btn btn-primary btn-sm">
+                Come avviare gli open data: guida passo passo
+              </Link>
             </div>
           ) : (
             <div className="d-flex flex-wrap align-items-center gap-3">
@@ -252,11 +260,14 @@ export function TerritorioExtra({
                   <div className="col-sm-6">
                     <div className="border rounded p-3 h-100">
                       <div className="small text-muted mb-1">Gap di dato</div>
-                      <ul className="small mb-0" style={{ paddingLeft: 18 }}>
+                      <ul className="small mb-2" style={{ paddingLeft: 18 }}>
                         {rep.dato.sezioni.gap_dato.map((g, i) => (
                           <li key={i}>{g}</li>
                         ))}
                       </ul>
+                      <Link href={guideHref(GAP_GUIDE.anchor)} className="small">
+                        Come colmare questi gap →
+                      </Link>
                     </div>
                   </div>
                 ) : null}

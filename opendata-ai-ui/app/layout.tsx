@@ -26,18 +26,21 @@ export default function RootLayout({
           </a>
           <SiteHeader />
           {/*
-            `overflow-y-auto` is the key here: chat/mappa fill `main` exactly
-            via internal `flex-1` children (no overflow → no scrollbar shown),
-            while long-form pages like /info or /privacy scroll inside `main`
-            instead of pushing their <article> visually over the footer.
+            Sticky-footer layout, IDENTICAL on every page. `main` is the scroll
+            container; inside it `children` sit in a `flex-1` wrapper that GROWS
+            to fill the viewport, so the footer is pushed to the bottom on short
+            pages and flows after the content (scroll) on long ones — never
+            pinned/floating mid-page. Full-bleed pages (chat/mappa) fill the
+            wrapper via their own `h-100` roots, and the footer sits just below
+            their chrome — same footer everywhere.
           */}
           <main
             id="main-content"
             className="flex flex-1 min-h-0 flex-col overflow-y-auto"
           >
-            {children}
+            <div className="flex flex-1 min-h-0 flex-col">{children}</div>
+            <SiteFooter />
           </main>
-          <SiteFooter />
         </AuthShell>
       </body>
     </html>

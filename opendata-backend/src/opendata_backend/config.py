@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Provider = Literal["auto", "ollama", "azure_foundry", "claude"]
+Provider = Literal["auto", "ollama", "ollama_cloud", "azure_foundry", "claude"]
 
 
 # Verbatim copy of ckan_agent.config.AGENT_INSTRUCTIONS — keep in sync.
@@ -900,11 +900,14 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_llm_model: str = Field(default="qwen2.5:16k")
     ollama_num_ctx: int = Field(default=16384)
-    # Ollama Cloud (hosted) — used for BYOK users on the ollama_cloud provider
-    # and (later) for paying subscribers. The exact model is still TBD; this
-    # default is a placeholder until the subscription model picks one.
+    # Ollama Cloud (hosted) — used both for BYOK users on the ollama_cloud
+    # provider AND as a SYSTEM provider: set OLLAMA_CLOUD_API_KEY and (with
+    # LLM_PROVIDER=auto) it's picked when no ANTHROPIC_API_KEY is present.
     ollama_cloud_base_url: str = Field(default="https://ollama.com")
     ollama_cloud_model: str = Field(default="gpt-oss:120b")
+    # System-level Ollama Cloud key. None → ollama_cloud is BYOK-only. The
+    # exact model is still TBD; the default above is a placeholder.
+    ollama_cloud_api_key: str | None = Field(default=None)
     # temperature 0 = greedy decoding: maximises faithfulness to tool results
     # (less dataflow-id / number hallucination) on small local models.
     ollama_temperature: float = Field(default=0.0)
@@ -1185,11 +1188,16 @@ def check_territorio_scope(cod_comune: str, settings: Settings) -> None:
 def resolve_provider(settings: Settings) -> Provider:
     """Resolve the effective LLM provider.
 
-    Priority when llm_provider == "auto":
+    Priority when llm_provider == "auto" (the recommended production setting —
+    drive the provider with the keys present in the env, not a hardcoded name):
       1. claude         — if ANTHROPIC_API_KEY is set
       2. azure_foundry  — if AZURE_AI_PROJECT_ENDPOINT + deployment name are set
-      3. ollama         — fallback (local inference; OLLAMA_BASE_URL may point at
+      3. ollama_cloud   — if OLLAMA_CLOUD_API_KEY is set (hosted, metered)
+      4. ollama         — fallback (local inference; OLLAMA_BASE_URL may point at
                           a remote inference container in production)
+
+    Claude wins over Ollama Cloud when both keys are present. A user's own BYOK
+    credential overrides this entirely (see llm_access / build_chat_client).
     """
     if settings.llm_provider != "auto":
         return settings.llm_provider
@@ -1197,6 +1205,8 @@ def resolve_provider(settings: Settings) -> Provider:
         return "claude"
     if settings.azure_ai_project_endpoint and settings.azure_ai_model_deployment_name:
         return "azure_foundry"
+    if settings.ollama_cloud_api_key:
+        return "ollama_cloud"
     return "ollama"
 
 

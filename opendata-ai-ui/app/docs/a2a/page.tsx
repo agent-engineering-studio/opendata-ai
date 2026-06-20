@@ -23,14 +23,15 @@ export default function Page() {
       </p>
 
       <div className="alert alert-info">
-        <strong>Autenticazione.</strong> La discovery della AgentCard è
-        pubblica; le invocazioni JSON-RPC su <code>/a2a/</code> richiedono una
-        credenziale, esattamente come la REST API: un JWT Clerk{" "}
-        <em>oppure</em> un&apos;API key (<code>Authorization: Bearer od_…</code>{" "}
-        o <code>X-API-Key</code>). Per agenti server-to-server usa un&apos;API
-        key — vedi <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi
-        qui sotto mostrano il JWT, ma la chiave <code>od_…</code> è
-        interscambiabile.
+        <strong>A2A è la superficie pubblica dell&apos;abbonamento.</strong> La
+        discovery della AgentCard è pubblica; le invocazioni JSON-RPC su{" "}
+        <code>/a2a/</code> richiedono una credenziale. Per gli agenti
+        server-to-server usa un&apos;<strong>API key</strong> (
+        <code>Authorization: Bearer od_…</code> o <code>X-API-Key</code>) — vedi{" "}
+        <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi qui sotto
+        mostrano un JWT Clerk (la credenziale della UI), ma la chiave{" "}
+        <code>od_…</code> è interscambiabile ed è quella consigliata per le
+        integrazioni headless.
       </div>
 
       <section className="mt-4">
@@ -53,7 +54,9 @@ export default function Page() {
   "skills": [
     { "id": "search_open_data",   "name": "Cerca open data multi-fonte" },
     { "id": "find_geo_resources", "name": "Cerca risorse geografiche" },
-    { "id": "classify_dataset",   "name": "Classifica un dataset" }
+    { "id": "classify_dataset",   "name": "Classifica un dataset" },
+    { "id": "assess_maturity",    "name": "Valuta la maturità di un ente" },
+    { "id": "analyze_territory",  "name": "Analizza un territorio (SWOT + proposte)" }
   ],
   "endpoints": { "jsonrpc": "https://api.opendata-ai.it/a2a/" }
 }`}
@@ -101,6 +104,32 @@ export default function Page() {
                 <td>
                   <code>source</code>, <code>dataset_id</code>,{" "}
                   <code>taxonomy[]</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>assess_maturity</code>
+                </td>
+                <td>
+                  Scorecard di maturità ODM 2025 di un ente: 4 dimensioni,
+                  livello, raccomandazioni e leve di miglioramento.
+                </td>
+                <td>
+                  Nome ente (testo) o{" "}
+                  <code>{`{"entity":…,"istat_code"?}`}</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>analyze_territory</code>
+                </td>
+                <td>
+                  Scheda programmatica di un comune: sintesi, SWOT e
+                  proposte/idee con citazioni risolvibili (fan-out multi-fonte).
+                </td>
+                <td>
+                  <code>{`{"cod_comune":…,"modalita"?}`}</code> (scheda · idee
+                  · completa · marketing).
                 </td>
               </tr>
             </tbody>

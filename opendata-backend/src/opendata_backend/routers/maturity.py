@@ -5,11 +5,15 @@ Tutti gli endpoint sono autenticati (Clerk) + rate-limited come gli altri.
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
+import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +22,8 @@ from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..maturity.service import build_ranking, build_scorecard, run_assessment
 from ..shared.ratelimit import enforce_rate_limit
+
+log = logging.getLogger("opendata-backend.maturity.router")
 
 router = APIRouter(tags=["maturity"])
 
@@ -50,6 +56,61 @@ async def assess(
         session, entity=entity, base_url=body.base_url, settings=settings,
         force=body.force, istat_code=body.istat_code, comune_nome=body.comune_nome,
     )
+
+
+@router.post("/maturity/assess/stream")
+async def assess_stream(
+    body: AssessIn,
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> StreamingResponse:
+    """Come /maturity/assess ma con eventi NDJSON di avanzamento granulari.
+
+    Evita lo stato di "freeze" sulla valutazione: una riga JSON per evento
+    (`status` start/end per fase: portale, analisi, punteggio, salvataggio;
+    `heartbeat` mentre una fase è in corso), poi un'unica riga `result` con la
+    scorecard completa.
+    """
+    entity = body.entity.strip()
+    if not entity:
+        raise HTTPException(status_code=422, detail="campo 'entity' obbligatorio")
+
+    async def _events():
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def _run() -> dict[str, Any]:
+            try:
+                return await run_assessment(
+                    session, entity=entity, base_url=body.base_url, settings=settings,
+                    force=body.force, istat_code=body.istat_code, comune_nome=body.comune_nome,
+                    emit=queue.put_nowait,
+                )
+            finally:
+                queue.put_nowait(None)  # sentinel
+
+        task = asyncio.create_task(_run())
+        try:
+            while True:
+                try:
+                    ev = await asyncio.wait_for(queue.get(), timeout=8.0)
+                except asyncio.TimeoutError:
+                    # Nessun cambio di fase entro 8s: heartbeat così la UI non
+                    # sembra bloccata (l'harvest del portale può essere lento).
+                    yield json.dumps({"event": "heartbeat"}, ensure_ascii=False) + "\n"
+                    continue
+                if ev is None:
+                    break
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+            scorecard = await task
+            yield json.dumps({"event": "result", "scorecard": scorecard}, ensure_ascii=False) + "\n"
+        except Exception as exc:  # mai un troncamento muto verso il client
+            log.exception("/maturity/assess/stream failed")
+            if not task.done():
+                task.cancel()
+            yield json.dumps({"event": "error", "message": str(exc)}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(_events(), media_type="application/x-ndjson")
 
 
 @router.get("/maturity/entities/{entity_id}")

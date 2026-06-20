@@ -1,40 +1,70 @@
-# ckan-mcp-server
+# CKAN MCP Server
 
-> Part of the **opendata-ai** mono-repo — see the [root README](../README.md) for the full architecture and the two supported stack configurations.
+> Un solo server MCP, qualsiasi catalogo open data del mondo basato su CKAN.
 
-MCP server exposing [CKAN Action API](https://docs.ckan.org/en/2.8/api/index.html) tools for **any** CKAN open data portal.
+`ckan-mcp-server` è un wrapper [FastMCP](https://github.com/modelcontextprotocol/python-sdk) che espone i tool dell'[Action API di CKAN](https://docs.ckan.org/en/latest/api/index.html) a qualunque client MCP (Claude Desktop, Cursor, VS Code, agenti). La parte interessante: **ogni tool accetta un argomento `base_url` per-chiamata**, quindi una sola immagine Docker interroga `dati.gov.it`, `data.gov.uk`, `data.gov`, `open.canada.ca` o qualsiasi altro portale CKAN — senza redeploy. Quando `base_url` è omesso, il server usa il default `https://www.dati.gov.it/opendata`. È uno dei componenti dell'orchestratore **opendata-ai** per open data civici italiani ed europei.
 
-Built with the official [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) (`FastMCP`). Supports both **stdio** (for local MCP hosts) and **Streamable HTTP** (for container deployment).
+## Cosa fa
 
-## Tools exposed
+CKAN è il software dietro la maggior parte dei portali open data pubblici. Questo server traduce le sue azioni HTTP in tool MCP tipizzati e pronti per un LLM: cercare dataset, leggere i metadati completi (risorse, tag, organizzazione), navigare organizzazioni e gruppi tematici, interrogare tabelle DataStore (anche via SQL read-only) e scaricare il contenuto di risorse testuali. Le risposte dei dataset vengono "snellite" (campi essenziali, note troncate) per restare entro il contesto del modello. Tutto passa dalle API pubbliche di sola lettura: nessuna scrittura, nessuna credenziale richiesta.
 
-| Tool                       | CKAN action            |
-|----------------------------|------------------------|
-| `ckan_status_show`         | `status_show`          |
-| `ckan_site_read`           | `site_read`            |
-| `ckan_package_search`      | `package_search`       |
-| `ckan_package_show`        | `package_show`         |
-| `ckan_organization_list`   | `organization_list`    |
-| `ckan_organization_show`   | `organization_show`    |
-| `ckan_group_list`          | `group_list`           |
-| `ckan_group_show`          | `group_show`           |
-| `ckan_tag_list`            | `tag_list`             |
-| `ckan_datastore_search`    | `datastore_search`     |
-| `ckan_datastore_search_sql`| `datastore_search_sql` |
+## Strumenti MCP
 
-Every tool accepts an optional `base_url` argument, so a single server instance can query any CKAN portal (dati.gov.it, data.gov.uk, data.gov, open.canada.ca, etc.). When omitted, falls back to `CKAN_DEFAULT_BASE_URL`.
+| Tool | Cosa fa | Argomenti chiave |
+|------|---------|------------------|
+| `ckan_status_show` | Verifica che il portale sia raggiungibile e restituisce i metadati del sito (versione, estensioni, titolo). | `base_url` |
+| `ckan_site_read` | Conferma l'accesso pubblico in lettura e restituisce il flag di autorizzazione del portale. | `base_url` |
+| `ckan_package_search` | Cerca dataset con query Solr; ritorna conteggio, faccette e lista di risultati (snelliti). | `q`, `fq`, `rows` (max 10), `start`, `sort`, `base_url` |
+| `ckan_package_show` | Recupera i metadati completi di un dataset (risorse, tag, organizzazione, extras). | `id`, `base_url` |
+| `ckan_organization_list` | Elenca le organizzazioni del portale. | `all_fields`, `limit`, `base_url` |
+| `ckan_organization_show` | Metadati di un'organizzazione, opzionalmente con i suoi dataset. | `id`, `include_datasets`, `base_url` |
+| `ckan_group_list` | Elenca i gruppi (categorie tematiche) del portale. | `all_fields`, `limit`, `base_url` |
+| `ckan_group_show` | Metadati di un gruppo, opzionalmente con i dataset associati. | `id`, `include_datasets`, `base_url` |
+| `ckan_tag_list` | Elenca o cerca i tag del portale. | `query`, `all_fields`, `base_url` |
+| `ckan_datastore_search` | Interroga le righe di una risorsa tabellare DataStore. | `resource_id`, `q`, `limit`, `offset`, `filters`, `base_url` |
+| `ckan_datastore_search_sql` | Esegue una query SQL read-only sul DataStore (il nome tabella è l'UUID della risorsa). | `sql`, `base_url` |
+| `ckan_resource_download` | Scarica il contenuto di una risorsa e lo restituisce come testo. Solo formati CSV, JSON, GeoJSON, TXT; per gli altri (PDF, XLSX, SHP…) restituisce solo l'URL. | `resource_url`, `format` |
 
-## Run locally (stdio)
+Ogni tool accetta l'argomento opzionale `base_url` (URL radice del portale, es. `https://data.gov.uk`): è questo che rende una sola istanza utilizzabile contro qualsiasi catalogo CKAN.
+
+## Avvio rapido
+
+### stdio (host MCP locali)
 
 ```bash
 pip install -e .
 TRANSPORT=stdio ckan-mcp-server
 ```
 
-> For the combined Claude Desktop config across all three opendata-ai MCP
-> servers (CKAN + ISTAT + OSM), see [`docs/claude-desktop.md`](../docs/claude-desktop.md).
+### Streamable HTTP (Docker / container)
 
-Configure in Claude Desktop (`claude_desktop_config.json`):
+```bash
+docker build -t ckan-mcp-server .          # build context = repo root
+docker run --rm -p 8080:8080 \
+  -e TRANSPORT=streamable-http \
+  -e CKAN_DEFAULT_BASE_URL=https://www.dati.gov.it/opendata \
+  ckan-mcp-server
+```
+
+Endpoint MCP: `http://localhost:8080/mcp` (porta interna `8080`). Healthcheck su `GET /healthz`.
+
+### Variabili d'ambiente
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `TRANSPORT` | `stdio` | `stdio` \| `streamable-http` \| `sse` |
+| `HOST` | `0.0.0.0` | Indirizzo di bind per i transport HTTP |
+| `PORT` | `8080` | Porta per i transport HTTP |
+| `MCP_PATH` | `/mcp` | Mount path dello Streamable HTTP |
+| `CKAN_DEFAULT_BASE_URL` | `https://www.dati.gov.it/opendata` | Portale di default quando `base_url` è omesso |
+| `CKAN_HTTP_TIMEOUT` | `30` | Timeout per richiesta, in secondi |
+| `LOG_LEVEL` | `INFO` | Livello di logging Python |
+
+## Usalo con un client MCP
+
+### Claude Desktop (stdio)
+
+In `claude_desktop_config.json`:
 
 ```json
 {
@@ -47,25 +77,52 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-## Run over HTTP (Docker)
+### Cursor, VS Code e altri client MCP
 
-```bash
-docker build -t ckan-mcp-server .
-docker run --rm -p 8080:8080 \
-  -e CKAN_DEFAULT_BASE_URL=https://www.dati.gov.it/opendata \
-  ckan-mcp-server
+Qualsiasi client MCP funziona. Per i client stdio usa lo stesso `command`/`env` dell'esempio sopra; per i client che parlano HTTP avvia il server con `TRANSPORT=streamable-http` e puntalo all'endpoint `http://localhost:8080/mcp`.
+
+## Esempio
+
+Chiamata al tool `ckan_package_search` su un portale diverso dal default:
+
+```json
+{
+  "tool": "ckan_package_search",
+  "arguments": {
+    "q": "qualità dell'aria",
+    "rows": 3,
+    "base_url": "https://www.dati.gov.it/opendata"
+  }
+}
 ```
 
-Endpoint: `http://localhost:8080/mcp`
+Risposta (snellita per l'LLM):
 
-## Environment variables
+```json
+{
+  "count": 42,
+  "results": [
+    {
+      "name": "dati-qualita-aria-2025",
+      "title": "Dati qualità dell'aria 2025",
+      "organization": "arpa-esempio",
+      "tags": ["aria", "ambiente", "pm10"],
+      "resources": [
+        { "name": "centraline.csv", "format": "CSV", "url": "https://…/centraline.csv" }
+      ]
+    }
+  ]
+}
+```
 
-| Var                       | Default                              | Description                          |
-|---------------------------|--------------------------------------|--------------------------------------|
-| `TRANSPORT`               | `stdio`                              | `stdio` \| `streamable-http` \| `sse` |
-| `HOST`                    | `0.0.0.0`                            | Bind address for HTTP transports     |
-| `PORT`                    | `8080`                               | Port for HTTP transports             |
-| `MCP_PATH`                | `/mcp`                               | Mount path for Streamable HTTP       |
-| `CKAN_DEFAULT_BASE_URL`   | `https://www.dati.gov.it/opendata`   | Default portal when no `base_url`    |
-| `CKAN_HTTP_TIMEOUT`       | `30`                                 | Per-request timeout in seconds       |
-| `LOG_LEVEL`               | `INFO`                               | Python logging level                 |
+Da qui un agente può chiamare `ckan_package_show` per i metadati completi, oppure `ckan_resource_download` sull'URL del CSV per leggerne il contenuto.
+
+## 📣 Per i social
+
+> Un solo server MCP, qualsiasi catalogo open data del mondo. Abbiamo costruito **ckan-mcp-server**: un wrapper FastMCP che espone l'Action API di CKAN a Claude e a qualunque client MCP. La chiave? Ogni chiamata accetta un `base_url` — quindi la stessa identica immagine interroga dati.gov.it, data.gov.uk, data.gov o open.canada.ca senza un solo redeploy. Cerca dataset, leggi metadati, interroga tabelle DataStore in SQL: gli open data civici diventano una conversazione. Open source, fa parte del progetto opendata-ai. 🇮🇹🇪🇺
+
+`#opendata #MCP #CKAN #AI #datigovit #civictech #LLM #ModelContextProtocol`
+
+## Licenza & note
+
+Il codice del server è rilasciato sotto licenza **MIT** ed è infrastruttura del progetto **opendata-ai** (vedi il [README della root](../README.md) per l'architettura completa). I dataset restituiti restano soggetti alla **licenza del portale di origine**: verifica sempre i termini d'uso del catalogo CKAN che stai interrogando prima di riusare i dati.

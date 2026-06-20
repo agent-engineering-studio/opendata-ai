@@ -1,5 +1,7 @@
 # opendata-ai
 
+![OpenData AI — dal patrimonio di dati al valore per il territorio](docs/assets/hero.png)
+
 Conversational + map-based access to **Italian and European open data
 portals** through a single AI-powered backend. The user asks for
 "electric-vehicle charging stations in Lombardy" and the platform fans the

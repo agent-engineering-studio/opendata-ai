@@ -166,6 +166,25 @@ def build_chat_client(settings: Settings, byok: "BYOKCreds | None" = None) -> An
             model=settings.ollama_llm_model,
         )
 
+    if provider == "ollama_cloud":
+        if not settings.ollama_cloud_api_key:
+            raise RuntimeError(
+                "OLLAMA_CLOUD_API_KEY is required when the system provider is ollama_cloud"
+            )
+        from agent_framework_ollama import OllamaChatClient
+        from ollama import AsyncClient as OllamaAsyncClient
+
+        log.info("Ollama Cloud (system): host=%s model=%s",
+                 settings.ollama_cloud_base_url, settings.ollama_cloud_model)
+        cloud_client = OllamaAsyncClient(
+            host=settings.ollama_cloud_base_url,
+            headers={"Authorization": f"Bearer {settings.ollama_cloud_api_key}"},
+        )
+        return OllamaChatClient(
+            client=cloud_client,
+            model=settings.ollama_cloud_model,
+        )
+
     if provider == "azure_foundry":
         if not settings.azure_ai_project_endpoint:
             raise RuntimeError(

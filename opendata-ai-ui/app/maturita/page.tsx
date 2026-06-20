@@ -1,8 +1,10 @@
 "use client";
 
 import { Suspense, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { downloadScorecardPdf, type Guida } from "@/lib/scorecardPdf";
+import { GUIDA_PATH, guideHref, recGuide, GAP_GUIDE } from "@/lib/maturityGuidance";
 import {
   PolarAngleAxis,
   PolarGrid,
@@ -45,6 +47,7 @@ type Scorecard = {
   truncated: boolean | null;
   insufficient_data?: boolean;
   guida?: Guida | null;
+  unmet_reuse_demand?: { count: number; items: string[]; penalty: number };
 };
 
 type Portfolio = {
@@ -56,11 +59,22 @@ type Portfolio = {
   avg_reuse: number | null;
 };
 
+type FaseId = "portale" | "analisi" | "punteggio" | "salvataggio";
+
 type Stato =
   | { fase: "idle" }
-  | { fase: "loading" }
+  | { fase: "loading"; corrente: FaseId | null; fatte: FaseId[]; nota: string | null }
   | { fase: "errore"; messaggio: string }
   | { fase: "risultato"; scorecard: Scorecard };
+
+// Ordine + etichette delle fasi dell'assessment (in linea con gli eventi
+// emessi da /maturity/assess/stream).
+const FASI: { id: FaseId; label: string }[] = [
+  { id: "portale", label: "Raccolta dei dataset dal portale" },
+  { id: "analisi", label: "Analisi semantica e domanda di riuso" },
+  { id: "punteggio", label: "Calcolo dei punteggi (4 dimensioni ODM)" },
+  { id: "salvataggio", label: "Salvataggio e scorecard" },
+];
 
 const LEVEL_COLOR: Record<string, string> = {
   Beginner: "#dc2626",
@@ -143,11 +157,11 @@ function MaturitaInner() {
     e?.preventDefault();
     const name = entity.trim();
     if (!name) return;
-    setStato({ fase: "loading" });
+    setStato({ fase: "loading", corrente: "portale", fatte: [], nota: null });
     setPortfolio(null);
     try {
       const token = await getToken();
-      const resp = await apiFetch("/maturity/assess", {
+      const resp = await apiFetch("/maturity/assess/stream", {
         method: "POST",
         token,
         body: JSON.stringify({
@@ -156,8 +170,53 @@ function MaturitaInner() {
           istat_code: istat.trim() || undefined,
         }),
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const scorecard = (await resp.json()) as Scorecard;
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let scorecard: Scorecard | null = null;
+      const fatte: FaseId[] = [];
+
+      // Legge l'NDJSON riga per riga aggiornando il feed di stato.
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: Record<string, unknown>;
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.event === "result") {
+            scorecard = ev.scorecard as Scorecard;
+          } else if (ev.event === "error") {
+            throw new Error(String(ev.message ?? "Errore"));
+          } else if (ev.event === "status") {
+            const phase = ev.phase as FaseId;
+            if (ev.state === "end") {
+              if (!fatte.includes(phase)) fatte.push(phase);
+            }
+            const idx = FASI.findIndex((f) => f.id === phase);
+            const next = FASI[idx + 1]?.id ?? null;
+            const corrente: FaseId | null =
+              ev.state === "start" ? phase : next && !fatte.includes(next) ? next : null;
+            const nota =
+              phase === "portale" && ev.state === "end" && typeof ev.n_datasets === "number"
+                ? `${ev.n_datasets} dataset trovati`
+                : null;
+            setStato({ fase: "loading", corrente, fatte: [...fatte], nota });
+          }
+          // heartbeat / cache: nessun aggiornamento di fase richiesto.
+        }
+      }
+
+      if (!scorecard) throw new Error("Nessun risultato ricevuto.");
       setStato({ fase: "risultato", scorecard });
       // Valore del patrimonio dello stesso ente (best-effort, non blocca la scorecard).
       const eid = scorecard.entity?.id;
@@ -175,7 +234,7 @@ function MaturitaInner() {
   }
 
   return (
-    <main id="main-content" className="container py-4">
+    <div className="container py-4">
       <h1 className="h3 mb-1">Maturità open data</h1>
       <p className="text-slate-500 mb-3" style={{ fontSize: 14 }}>
         Valuta quanto sono completi, aperti e riutilizzabili gli open data di un{" "}
@@ -207,6 +266,8 @@ function MaturitaInner() {
         </button>
       </form>
 
+      {stato.fase === "loading" ? <AssessProgress stato={stato} /> : null}
+
       {stato.fase === "errore" ? (
         <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-red-700" style={{ fontSize: 14 }}>
           Errore nell&apos;assessment: {stato.messaggio}
@@ -216,13 +277,72 @@ function MaturitaInner() {
       {stato.fase === "risultato" ? (
         <ScorecardView scorecard={stato.scorecard} portfolio={portfolio} />
       ) : null}
-    </main>
+    </div>
+  );
+}
+
+/** Feed di avanzamento granulare durante la valutazione (no stato di "freeze"). */
+function AssessProgress({
+  stato,
+}: {
+  stato: { fase: "loading"; corrente: FaseId | null; fatte: FaseId[]; nota: string | null };
+}) {
+  return (
+    <div className="rounded border bg-bg-muted p-3" style={{ maxWidth: 560 }} aria-live="polite">
+      <p className="mb-2" style={{ fontSize: 14, fontWeight: 600 }}>
+        Valutazione in corso…
+      </p>
+      <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+        {FASI.map((f) => {
+          const done = stato.fatte.includes(f.id);
+          const active = stato.corrente === f.id;
+          const color = done ? "#059669" : active ? "#2563eb" : "#94a3b8";
+          return (
+            <li key={f.id} className="d-flex align-items-center gap-2" style={{ fontSize: 14 }}>
+              <span
+                aria-hidden="true"
+                className={active ? "spinner-border spinner-border-sm" : ""}
+                style={
+                  active
+                    ? { width: 14, height: 14, color }
+                    : {
+                        width: 14,
+                        height: 14,
+                        borderRadius: "50%",
+                        background: done ? color : "transparent",
+                        border: done ? "none" : `2px solid ${color}`,
+                        display: "inline-block",
+                      }
+                }
+              />
+              <span style={{ color: active || done ? "#0f172a" : "#94a3b8" }}>
+                {f.label}
+                {done && f.id === "portale" && stato.nota ? (
+                  <span className="text-slate-500"> · {stato.nota}</span>
+                ) : null}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
 function GuidaView({ guida }: { guida: Guida }) {
   return (
     <div className="rounded border border-primary bg-bg-muted p-4">
+      {/* Disclaimer: punteggio 0 / nessun dataset → non è un giudizio, è il punto di
+          partenza. Link alla guida operativa completa. */}
+      <div className="alert alert-warning mb-3" role="note">
+        <strong>Nessun open data valutabile per questo ente.</strong> Il punteggio resta a 0 perché
+        sul catalogo nazionale non risultano (ancora) dataset: non è un giudizio negativo, è il punto
+        di partenza tipico. Ecco come avviare la pubblicazione — la{" "}
+        <Link href={GUIDA_PATH} className="alert-link">
+          guida completa passo passo
+        </Link>{" "}
+        spiega ogni passaggio in dettaglio.
+      </div>
       <h3 className="h5 mb-2">{guida.titolo}</h3>
       <p className="text-slate-600" style={{ fontSize: 14 }}>{guida.premessa}</p>
       <ol className="d-flex flex-column gap-3 mt-3" style={{ paddingLeft: 18 }}>
@@ -239,8 +359,11 @@ function GuidaView({ guida }: { guida: Guida }) {
         ))}
       </ol>
       {guida.nota ? (
-        <p className="text-slate-500 fst-italic mt-3 mb-0" style={{ fontSize: 12 }}>{guida.nota}</p>
+        <p className="text-slate-500 fst-italic mt-3 mb-2" style={{ fontSize: 12 }}>{guida.nota}</p>
       ) : null}
+      <Link href={GUIDA_PATH} className="btn btn-primary btn-sm mt-2">
+        Apri la guida completa per avviare gli open data
+      </Link>
     </div>
   );
 }
@@ -409,32 +532,68 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
             {/* Valore del patrimonio (unito alla maturità) */}
             {portfolio && portfolio.count > 0 ? <ValoreCard pf={portfolio} /> : null}
 
-            {/* Raccomandazioni complete */}
+            {/* Raccomandazioni complete: ogni gap rimanda alla sezione della guida che lo risolve */}
             <div>
-              <h3 className="h6 text-slate-500">Raccomandazioni</h3>
+              <h3 className="h6 text-slate-500">Raccomandazioni e come colmarle</h3>
               {scorecard.recommendations.length === 0 ? (
                 <p className="text-slate-500" style={{ fontSize: 14 }}>
                   Nessuna raccomandazione: l&apos;ente soddisfa le soglie principali.
                 </p>
               ) : (
-                <ul className="list-unstyled d-flex flex-column gap-2">
-                  {scorecard.recommendations.map((r) => (
-                    <li key={r.code} className="d-flex align-items-start gap-2">
-                      <span
-                        className="badge rounded-pill"
-                        style={{ backgroundColor: SEVERITY_COLOR[r.severity] ?? "#64748b", color: "white" }}
-                      >
-                        {r.severity}
-                      </span>
-                      <span style={{ fontSize: 14 }}>
-                        {r.message}
-                        <span className="text-slate-400"> · {r.dimension}</span>
-                      </span>
-                    </li>
-                  ))}
+                <ul className="list-unstyled d-flex flex-column gap-3">
+                  {scorecard.recommendations.map((r) => {
+                    const g = recGuide(r.code);
+                    return (
+                      <li key={r.code} className="d-flex align-items-start gap-2">
+                        <span
+                          className="badge rounded-pill"
+                          style={{ backgroundColor: SEVERITY_COLOR[r.severity] ?? "#64748b", color: "white" }}
+                        >
+                          {r.severity}
+                        </span>
+                        <span style={{ fontSize: 14 }}>
+                          {r.message}
+                          <span className="text-slate-400"> · {r.dimension}</span>
+                          {g ? (
+                            <>
+                              <div className="text-slate-600 mt-1" style={{ fontSize: 13 }}>
+                                {g.consiglio}
+                              </div>
+                              <Link
+                                href={guideHref(g.anchor)}
+                                className="d-inline-block mt-1"
+                                style={{ fontSize: 13 }}
+                              >
+                                Guida: {g.sezione} →
+                              </Link>
+                            </>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
+
+            {/* Gap di domanda di riuso (anello valore⇄maturità): penalizzano l'Impatto */}
+            {scorecard.unmet_reuse_demand && scorecard.unmet_reuse_demand.count > 0 ? (
+              <div>
+                <h3 className="h6 text-slate-500">Domanda di riuso non soddisfatta</h3>
+                <p className="text-slate-600 mb-2" style={{ fontSize: 13 }}>
+                  Le analisi di Territorio segnalano dati richiesti ma non ancora pubblicati: questi gap
+                  riducono l&apos;Impatto. {GAP_GUIDE.consiglio}
+                </p>
+                <ul className="text-slate-600" style={{ fontSize: 13, paddingLeft: 20 }}>
+                  {scorecard.unmet_reuse_demand.items.map((it, i) => (
+                    <li key={i}>{it}</li>
+                  ))}
+                </ul>
+                <Link href={guideHref(GAP_GUIDE.anchor)} style={{ fontSize: 13 }}>
+                  Guida: {GAP_GUIDE.sezione} →
+                </Link>
+              </div>
+            ) : null}
           </>
         )}
       </div>
