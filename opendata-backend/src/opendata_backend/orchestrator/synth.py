@@ -573,7 +573,10 @@ def build_aggregator(
     the filter entirely (tests, callers without a query in hand).
     """
 
-    async def aggregate(results: list[Any]) -> _SynthOutput:
+    async def aggregate(
+        results: list[Any],
+        emit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> _SynthOutput:
         log.info("Aggregator received %d participant results", len(results))
         parts: list[tuple[str | None, list[Resource]]] = []
         narratives_by_source: dict[str, str] = {}
@@ -619,13 +622,24 @@ def build_aggregator(
         if user_query:
             merged_resources = filter_resources(merged_resources, user_query)
 
-        # Ask the synth agent to merge the narratives.
+        # Ask the synth agent to merge the narratives. With `emit`, stream the
+        # tokens as `thinking` events so the client sees the answer being
+        # written instead of a frozen wait (mirrors run_programma_streaming).
         synth_prompt = _build_synth_prompt(narratives_by_source)
         try:
-            synth_result = await synth_agent.run(synth_prompt)
-            unified_narrative = (
-                getattr(synth_result, "text", None) or str(synth_result)
-            ).strip()
+            if emit is not None:
+                chunks: list[str] = []
+                async for update in synth_agent.run(synth_prompt, stream=True):
+                    delta = getattr(update, "text", None)
+                    if delta:
+                        chunks.append(delta)
+                        emit({"event": "thinking", "source": "synth", "delta": delta})
+                unified_narrative = "".join(chunks).strip()
+            else:
+                synth_result = await synth_agent.run(synth_prompt)
+                unified_narrative = (
+                    getattr(synth_result, "text", None) or str(synth_result)
+                ).strip()
         except Exception:
             log.exception("synth agent failed; falling back to concatenated narratives")
             unified_narrative = "\n\n".join(

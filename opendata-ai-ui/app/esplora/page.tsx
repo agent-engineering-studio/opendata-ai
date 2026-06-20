@@ -38,6 +38,8 @@ const SOURCE_LABEL: Record<string, string> = {
 type StreamEvent =
   | { event: "status"; source: string; phase: "start" | "end"; error?: string }
   | { event: "heartbeat"; in_flight: string[]; elapsed_ms: number }
+  | { event: "partial"; source: string; narrative: string }
+  | { event: "thinking"; source: string; delta: string }
   | { event: "result"; text: string; resources: Resource[] }
   | { event: "error"; message: string };
 
@@ -112,6 +114,7 @@ function EsploraInner() {
     let buffer = "";
     let final: { text: string; resources: Resource[] } | undefined;
     let streamError: string | undefined;
+    let synthBuf = ""; // accumulated synth tokens (live answer preview)
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -129,7 +132,13 @@ function EsploraInner() {
         }
         if (ev.event === "status") setStatus(statusLabel(ev));
         else if (ev.event === "heartbeat") setStatus(heartbeatLabel(ev));
-        else if (ev.event === "result") final = { text: ev.text, resources: ev.resources ?? [] };
+        else if (ev.event === "partial")
+          setStatus(`${SOURCE_LABEL[ev.source] ?? ev.source} ha risposto`);
+        else if (ev.event === "thinking") {
+          // Live preview of the synthesis being written (kills the final freeze).
+          synthBuf += ev.delta;
+          setStatus(`✍️ ${synthBuf.slice(-180)}`);
+        } else if (ev.event === "result") final = { text: ev.text, resources: ev.resources ?? [] };
         else if (ev.event === "error") streamError = ev.message;
       }
     }

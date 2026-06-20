@@ -94,6 +94,14 @@ class ClassifyResponse(BaseModel):
     cached: bool
 
 
+# /esplora is dataset search, not the territorio profile. Scope the fan-out to
+# the dataset/statistics sources (CKAN + SDMX family) and leave funding (OpenCoesione),
+# hazard (ISPRA), OSM profiles and web/searxng to /territorio. Fewer sources =
+# faster, no web noise, and CKAN isn't crowded out / timed out (the regression
+# where the map went empty). eurostat/oecd are opt-in; harmless if disabled.
+_DATASET_SOURCES = {"ckan", "istat", "eurostat", "oecd"}
+
+
 _MAP_MODE_HINT = (
     "MAP_MODE: l'utente sta visualizzando una mappa. PREFERISCI risorse "
     "geografiche (GeoJSON, Shapefile, KML, GPX, WMS) e confini amministrativi "
@@ -232,7 +240,7 @@ async def search_stream(
         t0 = time.perf_counter()
         try:
             async with acquire_orchestrator(access, settings) as sess:
-                async for ev in sess.run_streaming(query):
+                async for ev in sess.run_streaming(query, sources=_DATASET_SOURCES):
                     yield await _one_event(ev)
             log.info("/datasets/search/stream reply in %.0fms", (time.perf_counter() - t0) * 1000)
         except Exception as exc:

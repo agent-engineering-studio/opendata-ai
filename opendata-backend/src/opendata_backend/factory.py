@@ -55,7 +55,8 @@ from .orchestrator.programma import (
     build_programma_aggregator,
     build_programma_task,
 )
-from .orchestrator.synth import build_aggregator
+from .orchestrator.parsing import parse_agent_reply
+from .orchestrator.synth import _normalise_source_tag, build_aggregator
 from .orchestrator.workflow import build_workflow
 
 log = logging.getLogger("orchestrator.factory")
@@ -1181,6 +1182,7 @@ class OrchestratorSession:
         self,
         query: str,
         *,
+        sources: set[str] | None = None,
         heartbeat_sec: float = 10.0,
         total_timeout_sec: float = 600.0,
     ) -> AsyncIterator[dict[str, Any]]:
@@ -1203,6 +1205,35 @@ class OrchestratorSession:
         # and the underlying MCP sessions don't tolerate concurrent reuse.
         async with self._lock:
             aggregator = build_aggregator(self._synth_agent, user_query=query)
+
+            # Source scoping (esplora): fan out to a subset only — a "find me the
+            # data" query needs CKAN + SDMX, not OpenCoesione/ISPRA/OSM/web. Fewer
+            # sources = faster AND avoids the heavy ones crowding out / timing out
+            # CKAN (the regression where the map went empty). Falls back to all if
+            # the filter matches nothing.
+            participants = self._participants
+            if sources:
+                scoped = [
+                    p for p in participants
+                    if (_normalise_source_tag(getattr(p, "name", "") or "") or "") in sources
+                ]
+                excluded = [
+                    getattr(p, "name", "?") for p in participants if p not in scoped
+                ]
+                if scoped:
+                    participants = scoped
+                    if excluded:
+                        log.info(
+                            "run_streaming scope=%s → %d/%d participants (excluded: %s)",
+                            sorted(sources), len(scoped), len(self._participants),
+                            ", ".join(excluded),
+                        )
+                else:
+                    log.warning(
+                        "run_streaming: scope %s matched no participant; using all %d",
+                        sorted(sources), len(self._participants),
+                    )
+
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
             t0 = asyncio.get_event_loop().time()
@@ -1231,10 +1262,22 @@ class OrchestratorSession:
                     )
                     raise
                 in_flight.discard(name)
+                # Partial result (R1): stream this source's narrative as soon as
+                # it finishes, so the UI fills progressively instead of waiting
+                # for the synth. Best-effort — never block the worker.
+                try:
+                    p_narr, _ = parse_agent_reply(getattr(resp, "text", None) or "")
+                    if p_narr.strip():
+                        await queue.put({
+                            "event": "partial", "source": name,
+                            "narrative": p_narr.strip()[:600],
+                        })
+                except Exception:  # pragma: no cover — purely cosmetic
+                    pass
                 await queue.put({"event": "status", "source": name, "phase": "end"})
                 return _WrappedAgentResult(executor_id=name, agent_response=resp)
 
-            tasks = [asyncio.create_task(_worker(p)) for p in self._participants]
+            tasks = [asyncio.create_task(_worker(p)) for p in participants]
 
             async def _drain_then_sentinel() -> list[Any]:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1289,9 +1332,45 @@ class OrchestratorSession:
                 # Bubble up unexpected non-Exception failures the same way run() would.
                 real_results = [r for r in results if not isinstance(r, BaseException)]
 
+                # Diagnostics (Fase 3): which sources were dropped (timeout/error)
+                # before synth. The "merged 0 resources" regression was a silently
+                # dropped CKAN — make it visible.
+                dropped = [
+                    getattr(p, "name", "?")
+                    for p, r in zip(participants, results)
+                    if isinstance(r, BaseException)
+                ]
+                if dropped:
+                    log.warning(
+                        "run_streaming: %d/%d source(s) dropped before synth: %s",
+                        len(dropped), len(participants), ", ".join(dropped),
+                    )
+
                 yield {"event": "status", "source": "synth", "phase": "start"}
+                # Stream the synth tokens (R2): run the aggregator as a task that
+                # emits `thinking` deltas on the shared queue, and drain them live
+                # so the answer streams in instead of landing in one burst after a
+                # frozen wait. Mirrors run_programma_streaming.
+                synth_task = asyncio.create_task(
+                    aggregator(real_results, emit=queue.put_nowait)
+                )
                 try:
-                    synth_output = await aggregator(real_results)
+                    while not synth_task.done():
+                        try:
+                            event = await asyncio.wait_for(queue.get(), timeout=heartbeat_sec)
+                        except asyncio.TimeoutError:
+                            yield {
+                                "event": "heartbeat", "in_flight": ["synth"],
+                                "elapsed_ms": int((asyncio.get_event_loop().time() - t0) * 1000),
+                            }
+                            continue
+                        if event is not None:
+                            yield event
+                    while not queue.empty():  # drain trailing synth deltas
+                        ev = queue.get_nowait()
+                        if ev is not None:
+                            yield ev
+                    synth_output = await synth_task
                 except Exception as exc:
                     log.exception("synth aggregator failed in run_streaming")
                     yield {"event": "status", "source": "synth", "phase": "end", "error": str(exc)}
