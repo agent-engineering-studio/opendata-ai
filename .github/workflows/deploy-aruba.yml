@@ -70,6 +70,18 @@ jobs:
             IMAGE_TAG="$2"
             cd "$COMPOSE_DIR"
 
+            # Sync the aes-infra checkout to origin/main first. The compose
+            # topology (service definitions like web-mcp / searxng) lives in
+            # that repo, NOT here; this workflow only pulls images. Without the
+            # sync a service added to docker-compose.opendata.yml upstream is
+            # unknown to `docker compose pull` on the VPS ("no such service").
+            # .env* files are gitignored, so --ff-only never conflicts with them.
+            if [[ -d .git ]]; then
+              git fetch --prune origin
+              git checkout main
+              git pull --ff-only origin main || true
+            fi
+
             # The opendata services we own. We deliberately do NOT touch the
             # shared aes-infra services (traefik, redis) — those are managed
             # by the infra repo, not by this workflow. web-mcp is our GHCR image
