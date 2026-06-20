@@ -340,9 +340,13 @@ async def classify(
 # Sane defaults — opendata files are sometimes large (shapefile zips, KML).
 _PROXY_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
 _PROXY_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
+# NB: we deliberately do NOT forward `content-length` (nor `content-encoding`).
+# httpx with stream=True transparently decompresses gzip/br/deflate bodies, so
+# the bytes we re-stream are longer than the upstream `content-length` →
+# uvicorn raises "Response content longer than Content-Length" (500). Letting
+# StreamingResponse use chunked transfer encoding avoids the mismatch.
 _PROXY_FORWARD_HEADERS = {
     "content-type",
-    "content-length",
     "content-disposition",
     "etag",
     "last-modified",
