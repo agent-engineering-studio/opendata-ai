@@ -368,7 +368,7 @@ print(reply.artifacts[0].parts[0].text)`}</CodeBlock>
           </p>
           <div data-reveal data-delay="160" className="d-flex flex-wrap justify-content-center gap-3">
             <AuthAwareCTAs variant="final" />
-            <Link href="/sostenibilita" className="d-inline-flex align-items-center" style={{ padding: "15px 28px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,.55)", color: "#fff", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 17 }}>
+            <Link href="/sostieni" className="d-inline-flex align-items-center" style={{ padding: "15px 28px", borderRadius: 999, border: "1.5px solid rgba(255,255,255,.55)", color: "#fff", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 17 }}>
               Sostieni il progetto
             </Link>
           </div>

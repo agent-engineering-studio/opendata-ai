@@ -6,6 +6,12 @@ on its handlers.
 """
 
 from .clerk import ClerkAuthError, ClerkUser, verify_clerk_token
-from .dependencies import require_user
+from .dependencies import authenticate_credentials, require_user
 
-__all__ = ["ClerkAuthError", "ClerkUser", "require_user", "verify_clerk_token"]
+__all__ = [
+    "ClerkAuthError",
+    "ClerkUser",
+    "authenticate_credentials",
+    "require_user",
+    "verify_clerk_token",
+]

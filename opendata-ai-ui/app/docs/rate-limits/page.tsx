@@ -11,7 +11,7 @@ export default function Page() {
   return (
     <article className="container py-5">
       <p className="text-muted small mb-2">
-        <Link href="/docs">← Documentazione</Link>
+        <Link href="/docs">← Portale Sviluppatori</Link>
       </p>
       <h1>Rate limits e quota</h1>
       <p className="lead">
@@ -36,7 +36,10 @@ export default function Page() {
           </li>
           <li>
             <strong>Identità</strong>: il limit è per <code>sub</code> del JWT
-            Clerk. Più sessioni dallo stesso utente condividono il bucket.
+            Clerk. Più sessioni dallo stesso utente condividono il bucket. Le
+            chiamate fatte con un&apos;<Link href="/docs/api-keys">API key</Link>{" "}
+            condividono lo stesso bucket dell&apos;utente proprietario: CLI e UI
+            attingono allo stesso budget.
           </li>
           <li>
             <strong>Failure-open</strong>: se Redis è irraggiungibile, le
@@ -61,15 +64,61 @@ export default function Page() {
           className="bg-light border rounded p-3 small font-monospace"
           style={{ overflowX: "auto", whiteSpace: "pre" }}
         >
-{`# Default (in pyproject.toml / Settings)
+{`# Limite base (tier "free") — vale per tutti finché non hanno un piano
 RATE_LIMIT_PER_MINUTE=60
 
 # Disabilita il rate limit (dev/test)
 RATE_LIMIT_PER_MINUTE=0
 
-# Burst-tollerante (es. 5 req/sec medio)
-RATE_LIMIT_PER_MINUTE=300`}
+# Override per piano (subscription tier): tier=limit, separati da virgola.
+# Un tier non elencato — incluso "free" — ricade sul limite base sopra.
+RATE_LIMIT_TIERS=pro=300,enterprise=1200`}
         </pre>
+      </section>
+
+      <section className="mt-4">
+        <h2>Quota per piano (subscription tier)</h2>
+        <p>
+          Ogni utente ha un <code>subscription_tier</code> (default{" "}
+          <code>free</code>). Il limite al minuto è risolto dal tier: i valori
+          per piano si configurano con <code>RATE_LIMIT_TIERS</code>; un tier non
+          elencato ricade sul limite base. Finché i piani non sono assegnati
+          tutti restano <code>free</code>, quindi gli override sono inerti.
+        </p>
+        <div className="table-responsive">
+          <table className="table table-bordered align-middle">
+            <thead className="table-light">
+              <tr>
+                <th>Tier</th>
+                <th>req/min (consigliato)</th>
+                <th>Per chi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>free</code></td>
+                <td>60 (base)</td>
+                <td>utente UI registrato</td>
+              </tr>
+              <tr>
+                <td><code>pro</code></td>
+                <td>300</td>
+                <td>singolo integratore / agente, job batch</td>
+              </tr>
+              <tr>
+                <td><code>enterprise</code></td>
+                <td>1200</td>
+                <td>PA / partner: più agenti, carichi pianificati</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="small text-muted">
+          Per un tier &ldquo;illimitato&rdquo; usa un numero molto alto, non{" "}
+          <code>0</code>: lo <code>0</code> disattiva del tutto il limitatore per
+          quel tier. I valori sopra sono un punto di partenza prudente — si
+          alzano da config, senza rideploy del codice.
+        </p>
       </section>
 
       <section className="mt-4">
@@ -146,13 +195,13 @@ def call_with_retry(client: httpx.Client, request: httpx.Request) -> httpx.Respo
       <section className="mt-4">
         <h2>Quote elevate o piani dedicati</h2>
         <p>
-          Il limite di default è pensato per uso esplorativo. Per integrazioni
-          server-to-server o picchi noti (carichi batch, cron job) puoi
-          chiedere una quota più alta o una <em>API key</em> dedicata —
-          generabile dal pannello (in arrivo) tramite{" "}
-          <code>POST /api-keys/generate</code>. Le API key applicano lo
-          stesso meccanismo di rate limit ma usano un bucket separato dal
-          token utente, così CLI e UI non si rubano richieste a vicenda.
+          Il limite base è pensato per uso esplorativo. Per integrazioni
+          server-to-server o picchi noti (carichi batch, cron job) la strada è
+          un <strong>tier più alto</strong> sul tuo account (vedi tabella sopra)
+          e una <Link href="/docs/api-keys">API key</Link> dedicata, generabile
+          con <code>POST /api-keys/generate</code>. La chiave eredita il tier e
+          il bucket del tuo utente: alzare il piano alza il limite per UI, CLI e
+          A2A insieme.
         </p>
       </section>
 

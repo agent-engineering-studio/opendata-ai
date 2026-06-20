@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Documentazione tecnica — OpenData AI",
+  title: "Portale Sviluppatori — OpenData AI",
   description:
-    "Guide pratiche per integrare OpenData AI: server MCP (stdio/streamable-http), client AI (Claude Desktop, Cursor), Microsoft Agent Framework, LangGraph, protocollo A2A e rate limits.",
+    "Guide pratiche per integrare OpenData AI: API key e autenticazione, server MCP (stdio/streamable-http), client AI (Claude Desktop, Cursor), Microsoft Agent Framework, LangGraph, protocollo A2A e rate limits.",
 };
 
 const SECTIONS: Array<{
@@ -19,6 +19,13 @@ const SECTIONS: Array<{
     blurb:
       "Istruzioni passo-passo per clonare la repo, configurare .env.local e avviare l'intero stack (backend, 3 MCP, UI, Postgres, Redis, Ollama o Claude) con make up.",
     badge: "Quickstart",
+  },
+  {
+    href: "/docs/api-keys",
+    title: "API key — accesso programmatico",
+    blurb:
+      "Genera, elenca e revoca le API key. Usale come Authorization: Bearer od_… o X-API-Key su tutti gli endpoint REST e su A2A, al posto del JWT Clerk.",
+    badge: "Autenticazione",
   },
   {
     href: "/docs/mcp",
@@ -67,7 +74,7 @@ const SECTIONS: Array<{
 export default function Page() {
   return (
     <article className="container py-5">
-      <h1 className="mb-3">Documentazione tecnica</h1>
+      <h1 className="mb-3">Portale Sviluppatori</h1>
       <p className="lead text-muted">
         Tutto quello che serve per chiamare OpenData AI da un client MCP, da
         un agente MAF/LangGraph o da un altro agente via protocollo A2A. Gli
@@ -100,9 +107,12 @@ export default function Page() {
         <ul>
           <li>
             <strong>Autenticazione</strong>: ogni endpoint REST/A2A vuole un
-            JWT Clerk in <code>Authorization: Bearer …</code>. In sviluppo
-            locale puoi disabilitare il controllo con{" "}
-            <code>AUTH_ENABLED=false</code> sul backend.
+            JWT Clerk (dalla UI) <em>oppure</em> un&apos;API key in{" "}
+            <code>Authorization: Bearer od_…</code> / <code>X-API-Key</code> per
+            l&apos;accesso programmatico — vedi{" "}
+            <Link href="/docs/api-keys">/docs/api-keys</Link>. In sviluppo locale
+            puoi disabilitare il controllo con <code>AUTH_ENABLED=false</code>{" "}
+            sul backend.
           </li>
           <li>
             <strong>Hostnames MCP</strong>: nei docker-compose i servizi si

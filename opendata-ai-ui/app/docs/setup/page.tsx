@@ -14,7 +14,7 @@ export default function Page() {
   return (
     <article className="container py-5">
       <p className="text-muted small mb-2">
-        <Link href="/docs">← Documentazione</Link>
+        <Link href="/docs">← Portale Sviluppatori</Link>
       </p>
       <h1>Setup locale — clone ed esecuzione</h1>
       <p className="lead">

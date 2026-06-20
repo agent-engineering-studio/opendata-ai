@@ -1065,6 +1065,18 @@ class Settings(BaseSettings):
     # JWKS cache TTL — how long we trust a downloaded JWKS before refetching.
     clerk_jwks_cache_seconds: int = Field(default=600)
 
+    # ── Stripe billing (contributi) ──────────────────────────────────
+    # Webhook signing secret (`whsec_…`) issued per endpoint in the Stripe
+    # Dashboard; verifies POST /webhooks/stripe via Stripe's construct_event.
+    stripe_webhook_secret: str | None = Field(default=None)
+    # Restricted API key (`rk_…`, least-privilege) — optional; only needed if
+    # the webhook later calls back into Stripe (e.g. retrieve a subscription).
+    stripe_api_key: str | None = Field(default=None)
+    # Maps Stripe price IDs to subscription tiers, comma-separated `price=tier`:
+    # "price_xxx=sostenitore,price_yyy=pro,price_zzz=team". A price not listed
+    # drives no tier (binding still happens; the tier falls back to "free").
+    stripe_price_tiers: str = Field(default="")
+
     # ── Database ─────────────────────────────────────────────────────
     # Required at runtime when any /me/* or /api-keys/* or /datasets/classify
     # endpoint is hit. Format: postgresql+asyncpg://user:pass@host:5432/db
@@ -1078,13 +1090,64 @@ class Settings(BaseSettings):
     # dependency is bypassed.
     redis_url: str | None = Field(default=None)
     # Requests per minute per Clerk user (fixed window). Set to 0 to disable.
+    # This is the baseline limit applied to every user (the "free" tier).
     rate_limit_per_minute: int = Field(default=60)
+    # Per-subscription-tier overrides as a comma-separated `tier=limit` list,
+    # e.g. "pro=600,enterprise=6000". A tier not listed here (including "free")
+    # falls back to `rate_limit_per_minute`. The concrete plans/values are
+    # defined later — this is just the injection point so tiering needs no code
+    # change once the subscription model lands. Empty = uniform limit for all.
+    rate_limit_tiers: str = Field(default="")
 
     # ── Maturità (Fase 1) ────────────────────────────────────────────
     # Tetto sui dataset valutati per ente in POST /maturity/assess (sincrono).
     maturity_max_datasets: int = Field(default=50)
     # TTL della scorecard in Redis (default 24h).
     maturity_cache_ttl_seconds: int = Field(default=86400)
+
+
+def rate_limit_for(tier: str | None, settings: Settings) -> int:
+    """Requests-per-minute allowed for `tier`.
+
+    Reads the `rate_limit_tiers` override map ("pro=600,enterprise=6000");
+    any tier not listed — including the default "free" / None — falls back to
+    `rate_limit_per_minute`. Returns the baseline on a malformed entry so a
+    typo in config can never silently grant an unlimited budget.
+    """
+    if not tier or not settings.rate_limit_tiers:
+        return settings.rate_limit_per_minute
+    for part in settings.rate_limit_tiers.split(","):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        name, _, raw = part.partition("=")
+        if name.strip() != tier:
+            continue
+        try:
+            return int(raw.strip())
+        except ValueError:
+            return settings.rate_limit_per_minute
+    return settings.rate_limit_per_minute
+
+
+def tier_for_price(price_id: str | None, settings: Settings) -> str | None:
+    """Subscription tier mapped to a Stripe `price_id` via `stripe_price_tiers`.
+
+    Mirrors `rate_limit_for`'s parsing of a comma-separated `key=value` map
+    ("price_xxx=pro,price_yyy=team"). Returns None when the price is unknown or
+    the map is empty, so the caller decides the fallback (usually "free").
+    """
+    if not price_id or not settings.stripe_price_tiers:
+        return None
+    for part in settings.stripe_price_tiers.split(","):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        pid, _, tier = part.partition("=")
+        if pid.strip() != price_id:
+            continue
+        return tier.strip() or None
+    return None
 
 
 def province_scope(settings: Settings) -> frozenset[str]:

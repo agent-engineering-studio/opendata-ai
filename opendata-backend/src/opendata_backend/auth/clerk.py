@@ -41,6 +41,23 @@ class ClerkUser:
     email: str | None
     claims: dict[str, Any]
 
+    @property
+    def subscription_tier(self) -> str:
+        """Subscription tier driving rate limits / access gating.
+
+        For API-key auth it is read from the owning user row; for Clerk JWTs
+        it can be surfaced via a `subscription_tier` claim (Clerk JWT template
+        / publicMetadata). Defaults to "free" when absent.
+        """
+        tier = self.claims.get("subscription_tier")
+        return tier if isinstance(tier, str) and tier else "free"
+
+    @property
+    def auth_method(self) -> str:
+        """How this identity authenticated: "clerk", "api_key" or "dev"."""
+        method = self.claims.get("auth_method")
+        return method if isinstance(method, str) and method else "clerk"
+
 
 # JWKS clients are keyed by issuer so swapping environments at test time
 # doesn't poison the cache.

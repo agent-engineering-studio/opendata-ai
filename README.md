@@ -100,7 +100,16 @@ call via `base_url` in the chat payload or via `CKAN_DEFAULT_BASE_URL` env.
 
 ## Endpoints
 
-All authenticated with a Clerk Bearer token, except where noted.
+All endpoints (except `/health`) require authentication. Two credentials are
+accepted interchangeably:
+
+- **Clerk session JWT** — `Authorization: Bearer <jwt>`, used by the web UI.
+- **API key** — `Authorization: Bearer od_…` or `X-API-Key: od_…`, for
+  headless clients, scripts and agent integrations (see
+  [Authentication & API keys](#authentication--api-keys)).
+
+The same rule guards the A2A JSON-RPC endpoint (`/a2a/`); only the AgentCard
+discovery (`/.well-known/agent-card.json`) is public.
 
 | Method | Path | Description |
 |---|---|---|
@@ -112,8 +121,11 @@ All authenticated with a Clerk Bearer token, except where noted.
 | POST | `/datasets/classify` | Score a dataset against a taxonomy with Claude Haiku 4.5. 24h cache, durable on Postgres |
 | GET / POST / DELETE | `/me/favorites[/{src}/{id}]` | Per-user dataset bookmarks |
 | GET | `/me/history` | Search history per user |
-| POST | `/api-keys/generate` | Programmatic API key — token returned once, persisted as SHA-256 |
+| POST | `/api-keys/generate` | Create a programmatic API key — token returned once, persisted as SHA-256 |
+| GET | `/api-keys` | List your keys (metadata only: name, created/last-used/revoked) |
+| DELETE | `/api-keys/{id}` | Revoke one of your keys (soft-delete; 204 on success) |
 | POST | `/webhooks/clerk` | svix-signed; upserts `opendata.users` on `user.{created,updated,deleted}` |
+| POST | `/a2a/` | A2A JSON-RPC (authenticated). AgentCard at `/.well-known/agent-card.json` is public |
 
 ### `POST /datasets/search` — example
 
@@ -161,10 +173,49 @@ curl -X POST https://api.opendata.example.com/datasets/classify \
 #   "model":"claude-haiku-4-5-20251001", "cached":false }
 ```
 
-## Use the MCP servers from Claude Desktop
+### Authentication & API keys
 
-The three MCP servers ship a stdio transport. Drop this into your
-`claude_desktop_config.json` (full reference in `docs/claude-desktop.md`):
+For programmatic access (no browser / Clerk session) use an **API key**. Mint
+one from an authenticated session, then send it as a Bearer token (keys are
+prefixed `od_` so the backend tells them apart from Clerk JWTs) or via the
+`X-API-Key` header. The clear-text token is shown **once** — only its SHA-256
+hash is stored.
+
+```bash
+# 1. Create a key (from a Clerk-authenticated session)
+curl -sX POST https://api.opendata.example.com/api-keys/generate \
+  -H "Authorization: Bearer $CLERK_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-cli"}'
+# → { "id":42, "name":"my-cli", "token":"od_…", "created_at":"…" }
+
+# 2. Use it on any endpoint (REST or A2A)
+export OPENDATA_API_KEY="od_…"
+curl -s https://api.opendata.example.com/datasets/search \
+  -H "X-API-Key: $OPENDATA_API_KEY" \
+  -G --data-urlencode 'q=qualità aria a Milano'
+
+# 3. List / revoke
+curl -s https://api.opendata.example.com/api-keys     -H "X-API-Key: $OPENDATA_API_KEY"
+curl -sX DELETE https://api.opendata.example.com/api-keys/42 -H "X-API-Key: $OPENDATA_API_KEY"
+```
+
+A key inherits its owner's `subscription_tier` (default `free`), which drives
+the per-minute rate limit. Tiers are tuned via `RATE_LIMIT_TIERS`
+(`tier=limit,…`); an unlisted tier falls back to `RATE_LIMIT_PER_MINUTE`. The
+concrete subscription plans are defined separately — this is the access-control
+hook they build on. Full guide: `/docs/api-keys` in the developer portal.
+
+## Use the MCP servers from an AI client
+
+The three servers (`ckan-mcp`, `istat-mcp`, `osm-mcp`) work with any
+MCP-capable client — Claude Desktop, Claude Code, Cursor, VS Code, … — over
+two transports. Full walk-through (multiple clients, `mcp-remote` bridge,
+troubleshooting) in the developer portal at **`/docs/clients`**.
+
+**A · stdio** — the client launches the server as a subprocess. Easiest via
+the published GHCR images (no local Python needed). Drop this into Claude
+Desktop's `claude_desktop_config.json`:
 
 ```json
 {
@@ -172,22 +223,45 @@ The three MCP servers ship a stdio transport. Drop this into your
     "opendata-ckan": {
       "command": "docker",
       "args": ["run","--rm","-i","-e","TRANSPORT=stdio",
-               "ghcr.io/agent-engineering-studio/ckan-mcp-server:latest"],
+               "ghcr.io/agent-engineering-studio/ckan-mcp-server:main"],
       "env": { "CKAN_DEFAULT_BASE_URL": "https://www.dati.gov.it/opendata" }
     },
     "opendata-istat": {
       "command": "docker",
       "args": ["run","--rm","-i","-e","TRANSPORT=stdio",
-               "ghcr.io/agent-engineering-studio/istat-mcp-server:latest"]
+               "ghcr.io/agent-engineering-studio/istat-mcp-server:main"]
     },
     "opendata-osm": {
       "command": "docker",
-      "args": ["run","--rm","-i","-e","MCP_TRANSPORT=stdio",
-               "ghcr.io/agent-engineering-studio/osm-mcp:latest"]
+      "args": ["run","--rm","-i","-e","TRANSPORT=stdio",
+               "ghcr.io/agent-engineering-studio/osm-mcp:main"]
     }
   }
 }
 ```
+
+Installed from source instead of Docker? Point `command` at the absolute path
+of the console script (`…/.venv/bin/ckan-mcp`). From the **Claude Code** CLI:
+
+```bash
+pip install -e ./ckan-mcp-server -e ./istat-mcp-server -e ./osm-mcp
+claude mcp add opendata-ckan --env TRANSPORT=stdio -- ckan-mcp   # + istat, osm
+```
+
+**B · streamable-http** — run the servers as a service (`make up` →
+ckan `:18080`, istat `:18081`, osm `:18085`) and connect over HTTP. Clients
+that speak HTTP natively (Cursor, VS Code, Claude Code) use the URL directly:
+
+```bash
+claude mcp add --transport http opendata-ckan http://localhost:18080/mcp
+```
+
+stdio-only clients (Claude Desktop) bridge with `npx -y mcp-remote
+http://localhost:18080/mcp`. If you expose a hosted MCP endpoint publicly
+behind the gateway, authenticate it with your API key —
+`mcp-remote … --header "Authorization: Bearer od_…"`. (The servers themselves
+are auth-free infra; in prod they sit on a private network reached only by the
+backend.)
 
 ## Local development
 

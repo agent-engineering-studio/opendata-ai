@@ -12,7 +12,7 @@ export default function Page() {
   return (
     <article className="container py-5">
       <p className="text-muted small mb-2">
-        <Link href="/docs">← Documentazione</Link>
+        <Link href="/docs">← Portale Sviluppatori</Link>
       </p>
       <h1>Server MCP — panoramica</h1>
       <p className="lead">
@@ -232,6 +232,12 @@ curl -sX POST http://localhost:8080/mcp \\
           <li>
             Per i casi multi-tenant, mettili dietro un reverse proxy con mTLS
             o un token statico nelle env (il client MCP lo riusa come header).
+            Se esponi gli endpoint <code>streamable-http</code> sullo stesso
+            gateway del backend, usa la tua{" "}
+            <Link href="/docs/api-keys">API key</Link> <code>od_…</code> come
+            header (<code>Authorization: Bearer</code> o <code>X-API-Key</code>)
+            così l&apos;accesso è gestito con la stessa credenziale di REST e
+            A2A. In locale via <code>stdio</code> non serve alcuna chiave.
           </li>
         </ul>
       </section>

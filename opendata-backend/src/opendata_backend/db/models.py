@@ -42,6 +42,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         Index("ix_users_email", "email"),
+        Index("ix_users_stripe_customer_id", "stripe_customer_id"),
         {"schema": "opendata"},
     )
 
@@ -49,6 +50,16 @@ class User(Base):
     clerk_user_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Subscription tier gating API/A2A access limits. "free" is the default for
+    # every authenticated user; richer tiers ("pro", "enterprise", …) and their
+    # quotas are defined later — this column is the data hook they hang off.
+    subscription_tier: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="free"
+    )
+    # Stripe customer id (`cus_…`) — bound on checkout.session.completed so that
+    # later customer.subscription.* events (keyed only by the customer) map back
+    # to this user. Null until a contribution checkout completes.
+    stripe_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
