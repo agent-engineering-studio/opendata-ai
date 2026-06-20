@@ -261,7 +261,7 @@ function EsploraInner() {
 
   // Chat pane (reused on desktop side-by-side AND on mobile when "chat" tab).
   const chatPane = (
-    <div className="d-flex flex-column h-100 min-h-0">
+    <div className="d-flex flex-column h-100 min-h-0 min-w-0">
       <ChatHeader
         onReset={resetChat}
         canReset={messages.length > 0 && !loading}
@@ -284,7 +284,10 @@ function EsploraInner() {
         }
       />
       {messages.length > 0 ? (
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-2">
+        <div
+          className="border-t border-slate-200 bg-slate-50 px-3 py-1.5 overflow-y-auto"
+          style={{ maxHeight: "4.5rem", flexShrink: 0 }}
+        >
           <ExampleQueries onPick={pickExample} disabled={loading} />
         </div>
       ) : null}
@@ -431,15 +434,19 @@ function EsploraInner() {
       </div>
 
       {/* Desktop split (50/50) + mobile single-pane via tab. */}
-      <div className="flex-grow-1 d-flex flex-column flex-lg-row min-h-0">
+      {/* `min-w-0` on both columns is essential: without it a wide child (a
+          many-column table preview) refuses to shrink below its content width
+          and steals the other column's 50% — the map collapses. With min-w-0
+          the column keeps its basis and the table scrolls inside its own box. */}
+      <div className="flex-grow-1 d-flex flex-column flex-lg-row min-h-0 min-w-0">
         <div
-          className={`${mobilePane === "chat" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0`}
+          className={`${mobilePane === "chat" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0 min-w-0`}
           style={{ flex: "1 1 50%", borderRight: "1px solid var(--color-border)" }}
         >
           {chatPane}
         </div>
         <div
-          className={`${mobilePane === "mappa" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0`}
+          className={`${mobilePane === "mappa" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0 min-w-0`}
           style={{ flex: "1 1 50%" }}
         >
           {mapPane}

@@ -24,7 +24,9 @@ function sourceLabel(source: ExampleQuery["source"]): string {
 
 export function ExampleQueries({ onPick, disabled }: Props) {
   return (
-    <div className="flex flex-wrap gap-2">
+    // Chip compatte e fitte: occupano poco spazio verticale per lasciare
+    // respiro alla chat (font + padding ridotti, gap stretto).
+    <div className="flex flex-wrap gap-1">
       {EXAMPLE_QUERIES.map((ex) => (
         <Chip
           key={ex.label}
@@ -34,14 +36,15 @@ export function ExampleQueries({ onPick, disabled }: Props) {
           onClick={() => onPick(ex.query)}
           disabled={disabled}
           className="cursor-pointer"
+          style={{ height: "auto", padding: "1px 9px", fontSize: "0.72rem", lineHeight: 1.5 }}
           {...({ type: "button" } as Record<string, unknown>)}
         >
           {ex.source ? (
-            <span className="me-2 text-[10px] font-semibold uppercase tracking-wide">
+            <span className="me-1 text-[8.5px] font-semibold uppercase tracking-wide opacity-70">
               {sourceLabel(ex.source)}
             </span>
           ) : null}
-          <ChipLabel>{ex.label}</ChipLabel>
+          <ChipLabel style={{ fontSize: "0.72rem", margin: 0 }}>{ex.label}</ChipLabel>
         </Chip>
       ))}
     </div>
