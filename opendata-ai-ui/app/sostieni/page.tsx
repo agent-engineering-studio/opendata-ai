@@ -116,9 +116,10 @@ export default function Page() {
               <div className="card-body">
                 <h5 className="card-title">Modelli linguistici</h5>
                 <p className="card-text small text-muted mb-0">
-                  Ogni analisi del territorio richiede più chiamate a modelli LLM
-                  (Anthropic Claude): è la voce di costo che cresce con
-                  l&apos;uso.
+                  Ogni analisi del territorio richiede più chiamate a modelli LLM.
+                  Per gli abbonati gireranno su <strong>Ollama Cloud</strong> (modello
+                  in via di definizione); chi preferisce può usare una propria chiave
+                  Claude o Ollama. È la voce di costo che cresce con l&apos;uso.
                 </p>
               </div>
             </div>
@@ -160,6 +161,14 @@ export default function Page() {
                 Scegli quello più vicino al tuo utilizzo: ogni contributo, anche
                 il più piccolo, fa la differenza.
               </p>
+              <div className="alert alert-info text-start mt-4 mb-0" role="note">
+                <strong>Cosa sblocca l&apos;abbonamento.</strong> Con un piano attivo le
+                analisi useranno <strong>modelli ospitati su Ollama Cloud</strong> (il modello
+                preciso lo definiremo a breve), senza che tu debba gestire una chiave. In
+                alternativa, puoi usare gratuitamente una <strong>tua chiave</strong> (Claude
+                API, Ollama Cloud o un Ollama locale) dal{" "}
+                <a href="/account/llm-key">tuo profilo</a>.
+              </div>
             </div>
           </div>
           <div className="row g-4">

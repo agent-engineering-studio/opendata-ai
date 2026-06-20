@@ -33,6 +33,8 @@ dependencies = [
     # Stripe contributi (pagina /sostieni): verifica firma webhook
     # (stripe.Webhook.construct_event) e sync subscription_tier su opendata.users.
     "stripe>=11.0.0",
+    # BYOK: Fernet symmetric encryption for users' LLM API keys at rest.
+    "cryptography>=42.0.0",
     "a2a-sdk[fastapi]>=1.1.0",
     # Upload documenti (F2): FastAPI UploadFile/Form richiedono python-multipart.
     "python-multipart>=0.0.9",
@@ -66,6 +68,7 @@ opendata-opencoesione-sync = "opendata_backend.ingest.opencoesione:main"
 opendata-comuni-sync = "opendata_backend.ingest.comuni:main"
 opendata-territorio-seed = "opendata_backend.ingest.territory_seed:main"
 opendata-batch = "opendata_backend.ingest.batch:main"
+opendata-byok-keygen = "opendata_backend.byok:_keygen_cli"
 
 [build-system]
 requires = ["hatchling"]

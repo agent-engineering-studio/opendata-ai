@@ -27,6 +27,7 @@ from .config import get_settings
 from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
 from .routers import (
+    account,
     api_keys,
     community,
     datasets,
@@ -149,6 +150,7 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(datasets.router)
+app.include_router(account.router)
 app.include_router(me.router)
 app.include_router(api_keys.router)
 app.include_router(webhooks.router)

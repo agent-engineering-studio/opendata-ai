@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import ClerkUser
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
+from ..llm_access import LLMAccess, require_llm_access
 from ..shared.ratelimit import enforce_rate_limit
 from ..usecases.apriqui import run_apriqui
 from ..usecases.pugliatrip import run_pugliatrip
@@ -33,6 +34,7 @@ async def apriqui(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),  # noqa: ARG001 — gate only
 ) -> dict[str, Any]:
     """Attrattività 0–100 per categoria di attività in uno o più comuni (confronto) + spiegazione."""
     codes = [c.strip() for c in body.istat_codes if c.strip()]
@@ -47,6 +49,7 @@ async def pugliatrip(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),  # noqa: ARG001 — gate only
 ) -> dict[str, Any]:
     """Itinerario turistico meteo-aware per un comune (POI + mobilità + Open-Meteo) + spiegazione."""
     code = body.istat_code.strip()

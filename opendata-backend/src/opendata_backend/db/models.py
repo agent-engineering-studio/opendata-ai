@@ -60,6 +60,14 @@ class User(Base):
     # later customer.subscription.* events (keyed only by the customer) map back
     # to this user. Null until a contribution checkout completes.
     stripe_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # BYOK — the user's own LLM credential (alternative to a subscription).
+    # `byok_provider` is "claude" | "ollama_cloud" | NULL; `byok_key_encrypted`
+    # holds the Fernet-encrypted API key (never the plaintext); `byok_model` is
+    # the chosen Ollama Cloud model (NULL for claude). Access is granted when a
+    # provider is set OR the subscription_tier is paid (see require_llm_access).
+    byok_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
+    byok_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    byok_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

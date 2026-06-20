@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from opendata_core.kg import KgClient
 
 from ..auth import ClerkUser
+from ..llm_access import LLMAccess, acquire_orchestrator, require_llm_access
 from ..db.repositories import comuni as comuni_repo
 from ..db.repositories import history as history_repo
 from ..db.repositories import programma_cache as cache_repo
@@ -184,11 +185,9 @@ async def _audit(user: ClerkUser, req: ProgrammaRequest, resp: ProgrammaResponse
 async def genera_programma(
     req: ProgrammaRequest,
     user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008
+    access: LLMAccess = Depends(require_llm_access),  # noqa: B008
 ) -> ProgrammaResponse:
     """Genera la scheda SWOT + proposte per un comune, con citazioni risolvibili."""
-    sess = session_holder.session
-    if sess is None:
-        raise HTTPException(status_code=503, detail="Orchestratore non inizializzato")
     settings = session_holder.settings
     if settings is not None and not settings.enable_programma:
         raise HTTPException(status_code=404, detail="Endpoint /programma disabilitato")
@@ -224,7 +223,8 @@ async def genera_programma(
             return cached
 
     try:
-        resp = await sess.run_programma(req)
+        async with acquire_orchestrator(access, settings) as sess:
+            resp = await sess.run_programma(req)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -240,6 +240,7 @@ async def genera_programma(
 async def genera_programma_stream(
     req: ProgrammaRequest,
     user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008
+    access: LLMAccess = Depends(require_llm_access),  # noqa: B008
 ) -> StreamingResponse:
     """Come /programma ma con eventi NDJSON di avanzamento granulari.
 
@@ -247,9 +248,6 @@ async def genera_programma_stream(
     `tool` (ogni chiamata MCP: nome strumento, start/end/error), `heartbeat`,
     poi un'unica riga `result` con la scheda completa.
     """
-    sess = session_holder.session
-    if sess is None:
-        raise HTTPException(status_code=503, detail="Orchestratore non inizializzato")
     settings = session_holder.settings
     if settings is not None:
         from ..config import check_territorio_scope
@@ -281,15 +279,16 @@ async def genera_programma_stream(
                         ensure_ascii=False,
                     ) + "\n"
                     return
-            async for ev in sess.run_programma_streaming(req):
-                if ev.get("event") == "result":
-                    resp = ProgrammaResponse.model_validate(ev["scheda"])
-                    if ck:
-                        await _cache_store(ck[0], ck[1], req, resp)
-                    await _push_analysis_to_kg(resp)
-                    await _audit(user, req, resp)
-                    log.info("programma (stream) generato: %s", _summary(resp))
-                yield json.dumps(ev, ensure_ascii=False) + "\n"
+            async with acquire_orchestrator(access, settings) as sess:
+                async for ev in sess.run_programma_streaming(req):
+                    if ev.get("event") == "result":
+                        resp = ProgrammaResponse.model_validate(ev["scheda"])
+                        if ck:
+                            await _cache_store(ck[0], ck[1], req, resp)
+                        await _push_analysis_to_kg(resp)
+                        await _audit(user, req, resp)
+                        log.info("programma (stream) generato: %s", _summary(resp))
+                    yield json.dumps(ev, ensure_ascii=False) + "\n"
         except Exception as exc:  # mai un troncamento muto verso il client
             log.exception("/programma/stream failed")
             yield json.dumps(

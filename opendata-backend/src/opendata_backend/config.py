@@ -900,6 +900,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434")
     ollama_llm_model: str = Field(default="qwen2.5:16k")
     ollama_num_ctx: int = Field(default=16384)
+    # Ollama Cloud (hosted) — used for BYOK users on the ollama_cloud provider
+    # and (later) for paying subscribers. The exact model is still TBD; this
+    # default is a placeholder until the subscription model picks one.
+    ollama_cloud_base_url: str = Field(default="https://ollama.com")
+    ollama_cloud_model: str = Field(default="gpt-oss:120b")
     # temperature 0 = greedy decoding: maximises faithfulness to tool results
     # (less dataflow-id / number hallucination) on small local models.
     ollama_temperature: float = Field(default=0.0)
@@ -915,6 +920,11 @@ class Settings(BaseSettings):
     # from `claude_model` so we can run synthesis on Sonnet while classifying
     # on Haiku.
     claude_classify_model: str = Field(default="claude-haiku-4-5-20251001")
+
+    # BYOK (bring your own key): Fernet key used to encrypt users' LLM API keys
+    # at rest in opendata.users. Generate with `opendata-byok-keygen`. Without
+    # it, the /account/llm-key endpoints refuse to store a key (fail-closed).
+    byok_encryption_key: str | None = Field(default=None)
 
     # Agent names — these become executor_ids in the ConcurrentBuilder and
     # are the strings the synth aggregator uses to tag resources with `source`.
