@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AuthShell } from "@/components/AuthShell";
 import { SiteHeader } from "@/components/SiteHeader";
-import { ConditionalFooter } from "@/components/ConditionalFooter";
+import { SiteFooter } from "@/components/SiteFooter";
 
 import "./globals.css";
 
@@ -26,20 +26,20 @@ export default function RootLayout({
           </a>
           <SiteHeader />
           {/*
-            `overflow-y-auto` is the key here: chat/mappa fill `main` exactly
-            via internal `h-100` children (no overflow → no scrollbar shown),
-            while long-form pages (landing, docs, /privacy…) scroll inside
-            `main`. The footer lives INSIDE `main` (via ConditionalFooter) so it
-            scrolls at the END of the page instead of being pinned to the
-            viewport bottom — the previous sibling-of-`main` footer overlapped
-            the landing. It's hidden on the full-bleed app pages.
+            Sticky-footer layout, IDENTICAL on every page. `main` is the scroll
+            container; inside it `children` sit in a `flex-1` wrapper that GROWS
+            to fill the viewport, so the footer is pushed to the bottom on short
+            pages and flows after the content (scroll) on long ones — never
+            pinned/floating mid-page. Full-bleed pages (chat/mappa) fill the
+            wrapper via their own `h-100` roots, and the footer sits just below
+            their chrome — same footer everywhere.
           */}
           <main
             id="main-content"
             className="flex flex-1 min-h-0 flex-col overflow-y-auto"
           >
-            {children}
-            <ConditionalFooter />
+            <div className="flex flex-1 min-h-0 flex-col">{children}</div>
+            <SiteFooter />
           </main>
         </AuthShell>
       </body>

@@ -47,6 +47,16 @@ const cardBase: CSSProperties = {
   boxShadow: "0 1px 3px rgba(14,34,51,.06)",
   height: "100%",
 };
+// Sotto-titolo delle sotto-sezioni di "Come funziona".
+const comeSub: CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontWeight: 700,
+  fontSize: "clamp(1.4rem,2.4vw,1.9rem)",
+  lineHeight: 1.15,
+  letterSpacing: "-0.01em",
+  color: "var(--color-primary-900)",
+  margin: "44px 0 12px",
+};
 
 /* ── Icone line-style (stroke 2px, cap arrotondati). Niente emoji. ── */
 function Icon({
@@ -279,11 +289,15 @@ export default function Page() {
       {/* ============ COME FUNZIONA — fan-out ============ */}
       <section id="come" style={{ background: "#fff", padding: "96px 0", scrollMarginTop: 80 }}>
         <div className="container">
-          <div data-reveal className="text-center mx-auto" style={{ maxWidth: 720 }}>
+          <div data-reveal className="text-center mx-auto" style={{ maxWidth: 760 }}>
             <div style={eyebrow}>Come funziona</div>
-            <h2 style={h2}>Una domanda, quattro specialisti</h2>
+            <h2 style={h2}>Una domanda, tanti specialisti, una risposta con le fonti</h2>
             <p style={lead}>
-              Una sola query in linguaggio naturale viene smistata in parallelo. Ogni specialista risponde con la propria visione; un agente di sintesi fonde tutto in una narrativa coerente, con riferimenti puntuali alle risorse.
+              Una sola domanda in linguaggio naturale viene smistata <strong>in parallelo</strong> a più
+              specialisti: ognuno è un agente che interroga, tramite il suo <strong>server MCP</strong>,
+              una fonte ufficiale diversa. Un agente di <strong>sintesi</strong> fonde le risposte in una
+              narrativa coerente in italiano, citando ogni risorsa con la sua origine. Niente numeri
+              inventati: ogni dato proviene da una chiamata realmente eseguita in quel momento.
             </p>
           </div>
 
@@ -292,12 +306,62 @@ export default function Page() {
             <FanOut />
           </div>
 
-          {/* 4 card specialista */}
-          <div className="row g-3" style={{ marginTop: 24 }}>
-            <SpecCard tag="CKAN" tagBg="#E7F0FD" tagColor="#1959B8" title="Cataloghi open" body={<>Qualunque portale CKAN. Default <code style={{ fontSize: 12, color: "#1B6FE3" }}>dati.gov.it</code>, override per portale municipale.</>} delay={0} />
-            <SpecCard tag="SDMX 2.1" tagBg="#E1F4F4" tagColor="#0B7878" title="Statistiche ufficiali" body="Stessa interfaccia per ISTAT, Eurostat e OCSE. Osservazioni normalizzate in CSV scaricabile." delay={90} />
-            <SpecCard tag="OSM" tagBg="#E4F5EC" tagColor="#147A52" title="Geocoding + mappa" body="Nominatim, Overpass e OSRM. GeoJSON, KML e Shapefile diventano layer Leaflet accendibili." delay={180} />
-            <SpecCard tag="Sintesi" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Risposta unica" body="Un LLM ricuce le risposte in italiano, citando ogni risorsa con il portale di origine." delay={270} rail />
+          {/* Le fonti — un server MCP per ciascuna */}
+          <h3 style={comeSub}>Le fonti: un server MCP per ciascuna</h3>
+          <p style={{ ...lead, fontSize: 15, marginTop: -4, marginBottom: 18, maxWidth: "70ch" }}>
+            Ogni fonte è incapsulata in un piccolo server <strong>MCP</strong> (Model Context Protocol)
+            componibile: lo stesso mattone funziona nel backend e in qualsiasi client MCP (Claude
+            Desktop, Cursor…). Le fonti attive dipendono dalla domanda.
+          </p>
+          <div className="row g-3">
+            <SpecCard tag="CKAN" tagBg="#E7F0FD" tagColor="#1959B8" title="Cataloghi open" body={<>Qualunque portale CKAN-compatibile. Default <code style={{ fontSize: 12, color: "#1B6FE3" }}>dati.gov.it</code>, override per portale regionale/municipale.</>} delay={0} />
+            <SpecCard tag="SDMX 2.1" tagBg="#E1F4F4" tagColor="#0B7878" title="Statistiche ufficiali" body="Una sola interfaccia per ISTAT, Eurostat e OCSE: dataflow, codelist e osservazioni normalizzate in CSV." delay={60} />
+            <SpecCard tag="OpenCoesione" tagBg="#E4F5EC" tagColor="#147A52" title="Spesa di coesione" body="Progetti finanziati sul territorio: quanto finanziato vs speso, spend ratio e capacità di realizzazione." delay={120} />
+            <SpecCard tag="OSM" tagBg="#E4F5EC" tagColor="#147A52" title="Accessibilità + mappe" body="Geocoding, POI, routing e profili di zona; GeoJSON, KML e Shapefile resi su mappa Leaflet." delay={180} />
+            <SpecCard tag="ISPRA" tagBg="#FDE9D6" tagColor="#A35B12" title="Vincoli ambientali" body="Pericolosità frane e alluvioni ed esposti per comune (IdroGEO): vincoli di pianificazione, non giudizi." delay={0} />
+            <SpecCard tag="Web" tagBg="#EEF1F4" tagColor="#5B6B7B" title="Iniziative analoghe" body="Ricerca web self-hosted (SearXNG) per best practice di altri enti — la lente del marketing territoriale." delay={60} />
+            <SpecCard tag="Memoria" tagBg="#F3E8FD" tagColor="#7C3AED" title="Riuso delle analisi" body="Le analisi già prodotte vengono richiamate per non rifare lavoro — memoria di lavoro, non fonte ufficiale." delay={120} />
+            <SpecCard tag="Sintesi" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Risposta unica" body="Un LLM fonde le risposte in italiano, citando ogni risorsa con la fonte di origine." delay={180} rail />
+          </div>
+
+          {/* Maturità ODM 2025 */}
+          <div data-reveal className="od-card" style={{ ...cardBase, marginTop: 40, padding: "30px 32px", overflow: "hidden" }}>
+            <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: "linear-gradient(180deg,#1B6FE3,#0FA3A3)" }} />
+            <h3 style={{ ...comeSub, marginTop: 0 }}>Maturità degli open data — modello ODM 2025</h3>
+            <p style={{ ...lead, fontSize: 15, maxWidth: "75ch" }}>
+              Oltre a cercare i dati, OpenData AI ne misura la <strong>maturità</strong>: raccoglie il
+              patrimonio di un ente e lo valuta su <strong>quattro dimensioni</strong>, restituendo un
+              punteggio 0–100, un livello e raccomandazioni concrete su dove intervenire.
+            </p>
+            <div className="row g-3" style={{ marginTop: 8 }}>
+              <DimCard n="Policy" desc="Licenze aperte e metadati DCAT-AP_IT: la base legale per riusare e trovare i dati." />
+              <DimCard n="Portale" desc="Quanti dataset l'ente espone e quanto sono indicizzati e accessibili." />
+              <DimCard n="Qualità" desc="Formati aperti e machine-readable, aggiornamento regolare, completezza." />
+              <DimCard n="Impatto" desc="Dataset ad alto valore (HVD) e domanda di riuso soddisfatta." />
+            </div>
+            <p style={{ ...lead, fontSize: 14, marginTop: 16, marginBottom: 0, color: "var(--color-text-faint)" }}>
+              Quattro livelli crescenti — <strong>Beginner → Follower → Fast-tracker → Trend-setter</strong>.
+              Sotto la soglia minima di dati l&apos;analisi dichiara <em style={{ color: "#1B6FE3", fontStyle: "normal", fontWeight: 600 }}>&ldquo;dato insufficiente&rdquo;</em> invece di inventare un punteggio.
+            </p>
+          </div>
+
+          {/* A2A */}
+          <div data-reveal className="od-card" style={{ ...cardBase, marginTop: 18, padding: "30px 32px" }}>
+            <h3 style={{ ...comeSub, marginTop: 0 }}>Aperto ad altri agenti — protocollo A2A</h3>
+            <p style={{ ...lead, fontSize: 15, maxWidth: "75ch" }}>
+              Se <strong>MCP</strong> espone i singoli tool a un LLM, <strong>A2A</strong> espone l&apos;intero
+              agente ad altri agenti. Il backend pubblica una <strong>AgentCard</strong> su{" "}
+              <code style={{ fontSize: 12, color: "#1B6FE3" }}>/.well-known/agent-card.json</code> e accetta
+              richieste JSON-RPC su <code style={{ fontSize: 12, color: "#1B6FE3" }}>/a2a/</code>: un altro
+              agente può invocarne le skill senza conoscerne l&apos;implementazione.
+            </p>
+            <div className="row g-2" style={{ marginTop: 8 }}>
+              <SkillRow id="search_open_data" desc="cerca dataset multi-fonte (CKAN + SDMX) con sintesi e risorse" />
+              <SkillRow id="find_geo_resources" desc="come sopra, ma solo risorse geografiche mappabili" />
+              <SkillRow id="classify_dataset" desc="classifica un dataset rispetto a una tassonomia" />
+              <SkillRow id="assess_maturity" desc="scorecard di maturità ODM 2025 di un ente" />
+              <SkillRow id="analyze_territory" desc="SWOT + proposte per un comune, con citazioni" />
+            </div>
           </div>
         </div>
       </section>
@@ -426,6 +490,28 @@ function PercorsoCard({ n, tag, tagColor, iconBg, icon, iconStroke, title, body,
         <div style={{ fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: tagColor }}>{tag}</div>
         <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18, lineHeight: 1.25, color: "#0E2233", margin: "8px 0" }}>{title}</h3>
         <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, lineHeight: 1.55, color: "#7E8F9C", margin: 0 }}>{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function DimCard({ n, desc }: { n: string; desc: string }) {
+  return (
+    <div className="col-sm-6 col-lg-3">
+      <div style={{ height: "100%", background: "var(--color-bg-muted)", border: "1px solid var(--color-border)", borderRadius: 12, padding: "14px 16px" }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, color: "#1B6FE3", marginBottom: 4 }}>{n}</div>
+        <div style={{ fontFamily: "var(--font-sans)", fontSize: 13, lineHeight: 1.5, color: "#7E8F9C" }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function SkillRow({ id, desc }: { id: string; desc: string }) {
+  return (
+    <div className="col-12 col-md-6">
+      <div className="d-flex align-items-baseline gap-2" style={{ fontSize: 14 }}>
+        <code style={{ fontSize: 12.5, color: "#1B6FE3", background: "#EEF3FE", padding: "2px 7px", borderRadius: 6, whiteSpace: "nowrap" }}>{id}</code>
+        <span style={{ color: "#5B6B7B" }}>{desc}</span>
       </div>
     </div>
   );
