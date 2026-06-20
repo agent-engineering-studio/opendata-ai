@@ -23,14 +23,15 @@ export default function Page() {
       </p>
 
       <div className="alert alert-info">
-        <strong>Autenticazione.</strong> La discovery della AgentCard è
-        pubblica; le invocazioni JSON-RPC su <code>/a2a/</code> richiedono una
-        credenziale, esattamente come la REST API: un JWT Clerk{" "}
-        <em>oppure</em> un&apos;API key (<code>Authorization: Bearer od_…</code>{" "}
-        o <code>X-API-Key</code>). Per agenti server-to-server usa un&apos;API
-        key — vedi <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi
-        qui sotto mostrano il JWT, ma la chiave <code>od_…</code> è
-        interscambiabile.
+        <strong>A2A è la superficie pubblica dell&apos;abbonamento.</strong> La
+        discovery della AgentCard è pubblica; le invocazioni JSON-RPC su{" "}
+        <code>/a2a/</code> richiedono una credenziale. Per gli agenti
+        server-to-server usa un&apos;<strong>API key</strong> (
+        <code>Authorization: Bearer od_…</code> o <code>X-API-Key</code>) — vedi{" "}
+        <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi qui sotto
+        mostrano un JWT Clerk (la credenziale della UI), ma la chiave{" "}
+        <code>od_…</code> è interscambiabile ed è quella consigliata per le
+        integrazioni headless.
       </div>
 
       <section className="mt-4">
