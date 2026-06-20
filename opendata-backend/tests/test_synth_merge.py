@@ -539,3 +539,42 @@ async def test_geo_filter_keeps_matching_opencoesione_resources() -> None:
     urls = {r.url for r in kept}
     assert barletta.url in urls
     assert taranto.url not in urls
+
+
+# ───────── template-placeholder guardrail (weak-model "[Spend Ratio]%" leak) ─────────
+
+
+def test_strip_placeholder_sentences_unit() -> None:
+    from opendata_backend.orchestrator.synth import _strip_placeholder_sentences
+
+    txt = (
+        "Sui portali CKAN ci sono dataset pertinenti. "
+        "Il territorio ha un tasso di spesa del [Spend Ratio]% con "
+        "[Numero di Progetti Completati] progetti."
+    )
+    out = _strip_placeholder_sentences(txt)
+    assert "[Spend Ratio]" not in out
+    assert "[Numero" not in out
+    assert "CKAN ci sono dataset" in out
+
+    # no placeholder → unchanged
+    assert _strip_placeholder_sentences("Tutto regolare, 7% nel 2023.") == (
+        "Tutto regolare, 7% nel 2023."
+    )
+    # all placeholders → empty (caller's fallback produces an honest message)
+    assert _strip_placeholder_sentences("Importo [Totale €] su [Numero].") == ""
+
+
+@pytest.mark.asyncio
+async def test_aggregator_strips_synth_template_placeholders() -> None:
+    agent = _StubAgent(
+        canned=(
+            "Sui portali CKAN ci sono dataset pertinenti. "
+            "Il tasso di spesa è del [Spend Ratio]% con [Numero di Progetti]."
+        )
+    )
+    aggregate = build_aggregator(agent)
+    out = await aggregate([_result("ckan-agent", _ckan_reply([]))])
+    assert "[Spend Ratio]" not in out.text
+    assert "[Numero" not in out.text
+    assert "CKAN ci sono dataset" in out.text
