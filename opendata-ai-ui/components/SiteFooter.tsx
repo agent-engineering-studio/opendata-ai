@@ -94,7 +94,7 @@ export function SiteFooter() {
       role="contentinfo"
       style={{ background: "#0A1826", color: LINK_COLOR }}
     >
-      <div className="container" style={{ paddingTop: 54, paddingBottom: 40 }}>
+      <div className="container" style={{ paddingTop: 40, paddingBottom: 28 }}>
         <div className="d-flex flex-wrap justify-content-between gap-4">
           {/* Brand + tagline */}
           <div style={{ maxWidth: 320 }}>
@@ -118,13 +118,14 @@ export function SiteFooter() {
                 { href: "/#percorso", label: "Il percorso" },
                 { href: "/#come", label: "Come funziona" },
                 { href: "/#perchi", label: "Per chi è" },
+                { href: "/guida-open-data", label: "Guida open data" },
               ]}
             />
             <FooterCol
               title="Sviluppatori"
               links={[
                 { href: "/docs", label: "Documentazione" },
-                { href: "/usecases", label: "Casi d'uso" },
+                { href: GITHUB_URL, label: "Repository GitHub", external: true },
                 { href: "/sostieni", label: "Sostieni il progetto" },
               ]}
             />
@@ -147,8 +148,8 @@ export function SiteFooter() {
         <div
           className="d-flex flex-wrap align-items-center justify-content-between gap-3"
           style={{
-            marginTop: 36,
-            paddingTop: 22,
+            marginTop: 28,
+            paddingTop: 20,
             borderTop: "1px solid rgba(255,255,255,0.08)",
             fontSize: 12.5,
             color: HEADING_COLOR,

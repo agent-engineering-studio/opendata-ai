@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AuthShell } from "@/components/AuthShell";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
+import { ConditionalFooter } from "@/components/ConditionalFooter";
 
 import "./globals.css";
 
@@ -27,17 +27,20 @@ export default function RootLayout({
           <SiteHeader />
           {/*
             `overflow-y-auto` is the key here: chat/mappa fill `main` exactly
-            via internal `flex-1` children (no overflow → no scrollbar shown),
-            while long-form pages like /info or /privacy scroll inside `main`
-            instead of pushing their <article> visually over the footer.
+            via internal `h-100` children (no overflow → no scrollbar shown),
+            while long-form pages (landing, docs, /privacy…) scroll inside
+            `main`. The footer lives INSIDE `main` (via ConditionalFooter) so it
+            scrolls at the END of the page instead of being pinned to the
+            viewport bottom — the previous sibling-of-`main` footer overlapped
+            the landing. It's hidden on the full-bleed app pages.
           */}
           <main
             id="main-content"
             className="flex flex-1 min-h-0 flex-col overflow-y-auto"
           >
             {children}
+            <ConditionalFooter />
           </main>
-          <SiteFooter />
         </AuthShell>
       </body>
     </html>

@@ -7,10 +7,11 @@ trend, mediana cluster). Cache Redis per (entity, base_url).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from statistics import median
-from typing import Any
+from typing import Any, Callable
 
 from opendata_core.maturity import MaturityResult, assess_entity, build_guida_opendata
 from opendata_core.maturity.harvest import HarvestResult, harvest_entity
@@ -131,19 +132,30 @@ async def _semantic(harvest: HarvestResult, settings: Settings) -> dict[str, flo
 async def run_assessment(
     session: AsyncSession, *, entity: str, base_url: str | None, settings: Settings,
     force: bool = False, istat_code: str | None = None, comune_nome: str | None = None,
+    emit: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Esegue (o riusa da cache) l'assessment di un ente e ritorna la scorecard.
 
     `istat_code` (opzionale) collega l'ente a un comune: la domanda di riuso non
     soddisfatta (gap di dato) riduce l'Impact — anello valore⇄maturità. La
     risoluzione del portale prova dati.gov.it e (se vuoto) il portale regionale.
+
+    `emit` (opzionale) riceve eventi di avanzamento granulari per lo streaming:
+    `{"event":"status","phase":"<fase>","state":"start|end", ...}`. Senza, è
+    un no-op (chiamata classica sincrona). Le fasi indipendenti (analisi
+    semantica Haiku + domanda di riuso) girano in PARALLELO.
     """
+    _emit = emit or (lambda _e: None)
     key = _cache_key(entity, base_url)
     if not force:
         cached = await cache_get(key)
         if cached is not None:
+            _emit({"event": "status", "phase": "cache", "state": "hit"})
             return cached
 
+    # 1) Raccolta dataset dal portale (la fase più lunga: prova dati.gov.it e,
+    #    se vuoto, il portale regionale).
+    _emit({"event": "status", "phase": "portale", "state": "start"})
     harvest, base_url = await _resolve_harvest(
         entity=entity, comune_nome=comune_nome, istat_code=istat_code,
         base_url=base_url, max_datasets=settings.maturity_max_datasets,
@@ -153,18 +165,37 @@ async def run_assessment(
             "maturity: ente %s troncato a %d/%d dataset",
             entity, len(harvest.datasets), harvest.total,
         )
-    semantic = await _semantic(harvest, settings)
+    _emit({
+        "event": "status", "phase": "portale", "state": "end",
+        "n_datasets": len(harvest.datasets), "total": harvest.total,
+        "portal": base_url,
+    })
 
-    demand = {"count": 0, "items": [], "penalty": 0.0}
-    if istat_code:
+    # 2) Analisi semantica (Haiku) + domanda di riuso (DB) — INDIPENDENTI, in
+    #    parallelo: il costo passa da somma a max. La semantica non tocca il DB,
+    #    la domanda di riuso non tocca l'LLM → nessun uso concorrente di session.
+    _emit({"event": "status", "phase": "analisi", "state": "start"})
+
+    async def _demand() -> dict[str, Any]:
+        if not istat_code:
+            return {"count": 0, "items": [], "penalty": 0.0}
         from .reuse_demand import unmet_reuse_demand
 
-        demand = await unmet_reuse_demand(session, istat_code=istat_code)
+        return await unmet_reuse_demand(session, istat_code=istat_code)
+
+    semantic, demand = await asyncio.gather(_semantic(harvest, settings), _demand())
+    _emit({"event": "status", "phase": "analisi", "state": "end"})
+
+    # 3) Punteggio deterministico (4 dimensioni ODM) — veloce.
+    _emit({"event": "status", "phase": "punteggio", "state": "start"})
     result = assess_entity(
         list(harvest.datasets), weights=_weights(), semantic=semantic,
         reuse_demand_penalty=demand["penalty"],
     )
+    _emit({"event": "status", "phase": "punteggio", "state": "end"})
 
+    # 4) Persistenza snapshot + scorecard.
+    _emit({"event": "status", "phase": "salvataggio", "state": "start"})
     assessed_at = datetime.now(timezone.utc)
     ent = await repo.upsert_entity(
         session, name=harvest.org_title or entity, ckan_org_id=harvest.ckan_org_id,
@@ -184,6 +215,7 @@ async def run_assessment(
     scorecard = await build_scorecard(session, ent.id)
     if scorecard is not None:
         await cache_set(key, scorecard, ttl_seconds=settings.maturity_cache_ttl_seconds)
+    _emit({"event": "status", "phase": "salvataggio", "state": "end"})
     return scorecard or {}
 
 
