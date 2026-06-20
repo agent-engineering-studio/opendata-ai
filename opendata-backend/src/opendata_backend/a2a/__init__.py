@@ -11,6 +11,12 @@ Mounted via `register_a2a` on the FastAPI app when `settings.a2a_enabled`.
 
 from .agent_card import build_agent_card
 from .executor import OpenDataAgentExecutor
+from .middleware import register_a2a_auth
 from .router import register_a2a
 
-__all__ = ["build_agent_card", "OpenDataAgentExecutor", "register_a2a"]
+__all__ = [
+    "build_agent_card",
+    "OpenDataAgentExecutor",
+    "register_a2a",
+    "register_a2a_auth",
+]

@@ -115,7 +115,7 @@ export function SiteFooter() {
               links={[
                 { href: "/docs", label: "Documentazione" },
                 { href: "/usecases", label: "Casi d'uso" },
-                { href: "/sostenibilita", label: "Sostenibilità" },
+                { href: "/sostieni", label: "Sostieni il progetto" },
               ]}
             />
             <FooterCol

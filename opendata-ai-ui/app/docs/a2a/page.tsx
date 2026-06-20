@@ -11,7 +11,7 @@ export default function Page() {
   return (
     <article className="container py-5">
       <p className="text-muted small mb-2">
-        <Link href="/docs">← Documentazione</Link>
+        <Link href="/docs">← Portale Sviluppatori</Link>
       </p>
       <h1>A2A — Agent-to-Agent</h1>
       <p className="lead">
@@ -22,12 +22,24 @@ export default function Page() {
         questo dataset&rdquo; da un orchestratore esterno.
       </p>
 
+      <div className="alert alert-info">
+        <strong>Autenticazione.</strong> La discovery della AgentCard è
+        pubblica; le invocazioni JSON-RPC su <code>/a2a/</code> richiedono una
+        credenziale, esattamente come la REST API: un JWT Clerk{" "}
+        <em>oppure</em> un&apos;API key (<code>Authorization: Bearer od_…</code>{" "}
+        o <code>X-API-Key</code>). Per agenti server-to-server usa un&apos;API
+        key — vedi <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi
+        qui sotto mostrano il JWT, ma la chiave <code>od_…</code> è
+        interscambiabile.
+      </div>
+
       <section className="mt-4">
         <h2>Discovery — AgentCard</h2>
         <p>
           La AgentCard è esposta su <code>/.well-known/agent-card.json</code>{" "}
           (SDK 1.0) e su <code>/.well-known/agent.json</code> come alias
-          legacy 0.3. Contiene metadata, skill esposte e supported versions.
+          legacy 0.3. Contiene metadata, skill esposte e supported versions.{" "}
+          Questo endpoint <strong>non</strong> richiede autenticazione.
         </p>
         <pre
           className="bg-light border rounded p-3 small font-monospace"
@@ -202,9 +214,11 @@ for r in data["resources"]:
             <code>search_open_data</code>).
           </li>
           <li>
-            <strong>Auth</strong>: in produzione gli endpoint A2A sono dietro
-            JWT Clerk. In dev locale con <code>AUTH_ENABLED=false</code>{" "}
-            l&apos;header diventa opzionale.
+            <strong>Auth</strong>: in produzione le chiamate <code>/a2a/</code>{" "}
+            vogliono un JWT Clerk o un&apos;API key <code>od_…</code> (header{" "}
+            <code>Authorization: Bearer</code> o <code>X-API-Key</code>); la sola
+            AgentCard resta pubblica. In dev locale con{" "}
+            <code>AUTH_ENABLED=false</code> l&apos;header diventa opzionale.
           </li>
         </ul>
       </section>

@@ -163,8 +163,11 @@ app.include_router(community.router)
 
 # Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
 # and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.
-from .a2a import register_a2a  # noqa: E402 — late import to avoid circulars
+# The auth middleware guards /a2a/ (JSON-RPC) with the same Clerk-JWT / API-key
+# rules as the REST surface; AgentCard discovery stays public.
+from .a2a import register_a2a, register_a2a_auth  # noqa: E402 — late import
 register_a2a(app, get_settings())
+register_a2a_auth(app, get_settings())
 
 
 def run() -> None:
