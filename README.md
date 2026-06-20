@@ -24,6 +24,16 @@ accountability di community, e un **anello valore⇄maturità** (i gap di dato
 penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
 modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
 
+### Maturità open data (modello ODM 2025)
+
+![Maturità open data — scorecard ODM 2025 con radar delle 4 dimensioni e leve di miglioramento](docs/assets/maturita.png)
+
+Scorecard 0–100 di un ente su quattro dimensioni — **Policy, Portale, Qualità,
+Impatto** — con livello (Beginner → Follower → Fast-tracker → Trend-setter),
+radar delle dimensioni e leve di miglioramento ordinate per impatto sul
+punteggio. Sotto la soglia minima di dati dichiara *"dato insufficiente"*
+invece di assegnare punteggi fuorvianti.
+
 ## Supported open data sources
 
 | Source | Endpoint | What we fetch | Tool |

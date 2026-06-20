@@ -34,7 +34,11 @@ export function MessageList({ messages, loading, statusMessage, emptyState }: Pr
   }
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+    // `min-h-0` è essenziale: in una colonna flex un figlio `flex-1` NON si
+    // restringe sotto il contenuto senza di esso, quindi la lista crescerebbe
+    // con i messaggi spingendo la ChatInput sotto il footer invece di scrollare
+    // qui dentro. Con min-h-0 i messaggi scorrono e l'input resta ancorato.
+    <div className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4">
       {messages.map((m, i) => (
         <Message key={i} message={m} />
       ))}

@@ -19,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="it">
-      <body className="min-h-screen flex flex-col antialiased">
+      <body className="h-screen flex flex-col antialiased">
         <AuthShell>
           <a href="#main-content" className="visually-hidden-focusable">
             Vai al contenuto principale

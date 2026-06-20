@@ -373,7 +373,12 @@ function TerritorioInner() {
                             aria-hidden="true"
                           />
                         ) : s.phase === "error" ? (
-                          <span className="text-danger flex-shrink-0" aria-hidden="true">✗</span>
+                          <span
+                            className="text-secondary flex-shrink-0"
+                            aria-hidden="true"
+                            title="nessun dato da questa fonte"
+                            style={{ opacity: 0.6 }}
+                          >–</span>
                         ) : (
                           <span className="text-success flex-shrink-0" aria-hidden="true">✓</span>
                         )}
@@ -382,14 +387,19 @@ function TerritorioInner() {
                     ))}
                   </ul>
                 ) : null}
-                {/* Anteprima "thinking": i token della sintesi che arrivano live. */}
+                {/* Quando la sintesi sta scrivendo la scheda (arrivano token
+                    `thinking`), mostriamo un messaggio pulito — NON il JSON grezzo
+                    in streaming (illeggibile per l'utente). Il testo finale arriva
+                    strutturato con l'evento `result`. */}
                 {thinking ? (
-                  <pre
-                    className="small text-muted bg-light border rounded p-2 mt-2 mb-0"
-                    style={{ maxHeight: "10rem", overflowY: "auto", whiteSpace: "pre-wrap" }}
-                  >
-                    {thinking}
-                  </pre>
+                  <div className="d-flex align-items-center gap-2 mt-2 small text-muted">
+                    <span
+                      className="spinner-grow spinner-grow-sm text-primary flex-shrink-0"
+                      style={{ width: "0.7rem", height: "0.7rem" }}
+                      aria-hidden="true"
+                    />
+                    <span>Compongo l&apos;analisi e verifico le citazioni…</span>
+                  </div>
                 ) : null}
               </div>
             ) : null}
