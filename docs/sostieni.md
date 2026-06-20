@@ -282,14 +282,15 @@ collegamento contributo → privilegi è ora parzialmente cablato.
   `subscription_tier` per customer). Endpoint backend dietro verifica firma,
   **non** una route Next.js (R6, `output: 'export'`). Mappa price→tier via
   `STRIPE_PRICE_TIERS` (`config.tier_for_price`).
+- **binding robusto lato UI**: `components/SostieniButton.tsx` (client component)
+  appende `?client_reference_id=<clerkUserId>` al Payment Link per gli utenti
+  loggati, così il webhook lega il contributo all'utente senza dipendere dal
+  match email né dall'ordine degli eventi Stripe. Guardia keyless come
+  `DashboardGate`: build senza chiave Clerk → link semplice.
 
 **Da fare (hardening + prodotto):**
 - **idempotency** per `event.id` (oggi le scritture sono set-op idempotenti, ok
   per i retry, ma un dedup store evita lavoro doppio) e **IP allowlist** Stripe;
-- **ordering**: se `subscription.created` precede il binding del checkout, il tier
-  non viene settato finché non arriva un `subscription.updated` — alternativa
-  robusta: appendere `?client_reference_id=<clerkUserId>` al Payment Link per gli
-  utenti loggati (richiede un client component sulla pagina statica);
 - **quota analisi per-piano** (contatore mensile su Redis/Postgres) oltre al
   `rate_limit_tiers` già presente;
 - **IVA/Stripe Tax** se necessario;
