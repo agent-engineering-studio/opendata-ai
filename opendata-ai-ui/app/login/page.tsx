@@ -120,9 +120,15 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder`}
               <p className="small mb-0">
                 In questa modalità il backend tratta ogni request come
                 <code> dev-user</code> e la UI mostra le route. Non usare in
-                produzione. Vedi{" "}
-                <Link href="/docs/setup">/docs/setup</Link> per il setup
-                completo.
+                produzione. Vedi il{" "}
+                <a
+                  href="https://github.com/agent-engineering-studio/opendata-ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  README su GitHub
+                </a>{" "}
+                per il setup completo.
               </p>
             </div>
           )}
@@ -201,21 +207,23 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder`}
               tuo stack agentico:
             </p>
             <div className="d-flex flex-wrap gap-2">
-              <Link href="/docs/mcp" className="btn btn-sm btn-outline-secondary">
-                MCP
-              </Link>
               <Link href="/docs/a2a" className="btn btn-sm btn-outline-secondary">
                 A2A
               </Link>
-              <Link href="/docs/maf" className="btn btn-sm btn-outline-secondary">
-                MAF
+              <Link href="/docs/api-keys" className="btn btn-sm btn-outline-secondary">
+                API key
               </Link>
-              <Link href="/docs/langgraph" className="btn btn-sm btn-outline-secondary">
-                LangGraph
+              <Link href="/docs/mcp" className="btn btn-sm btn-outline-secondary">
+                MCP
               </Link>
-              <Link href="/docs/rate-limits" className="btn btn-sm btn-outline-secondary">
-                Rate limits
-              </Link>
+              <a
+                href="https://github.com/agent-engineering-studio/opendata-ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-sm btn-outline-secondary"
+              >
+                GitHub
+              </a>
             </div>
           </div>
         </div>

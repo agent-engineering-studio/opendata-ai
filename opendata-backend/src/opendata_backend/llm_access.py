@@ -1,9 +1,19 @@
 """LLM access gate + per-user orchestrator resolution.
 
-Policy: an authenticated user may run the LLM-backed surfaces (territorio
-analysis, dataset search/synthesis, usecases, classify) only if they either
-(a) configured their OWN LLM key (BYOK), or (b) hold a paid subscription tier.
-Otherwise the endpoint returns 402 Payment Required — there is no free LLM use.
+Policy: the paid gate applies only when the SYSTEM provider bills per use
+(Anthropic Claude in production). There an authenticated user may run the
+LLM-backed surfaces (territorio analysis, dataset search/synthesis, usecases,
+classify) only if they either (a) configured their OWN LLM key (BYOK), or
+(b) hold a paid subscription tier — otherwise the endpoint returns 402.
+
+When the system provider is a self-hosted Ollama (`LLM_PROVIDER=ollama`, e.g.
+`make up-host-ollama` locally or a remote inference container in production)
+there is no per-use cost to meter, so the gate is open to every authenticated
+user. The metered system providers — Claude and Ollama Cloud (the latter when
+OLLAMA_CLOUD_API_KEY is set) — keep the paid gate.
+
+A user's own BYOK credential (Claude / Ollama Cloud / their own Ollama server)
+overrides the system provider entirely and is always allowed.
 
 - `require_llm_access` is the FastAPI dependency that enforces the gate and
   resolves the user's BYOK credential (decrypted) once per request.
@@ -24,7 +34,7 @@ from fastapi import Depends, HTTPException, status
 from .auth import ClerkUser
 from .auth.dependencies import require_user
 from .byok import BYOKCreds, BYOKError, decrypt_key
-from .config import Settings, get_settings
+from .config import Settings, get_settings, resolve_provider
 from .factory import OrchestratorSession
 from .state import session_holder
 
@@ -76,16 +86,20 @@ async def require_llm_access(
     user: ClerkUser = Depends(require_user),
     settings: Settings = Depends(get_settings),
 ) -> LLMAccess:
-    """Gate dependency: 402 unless the user has a BYOK key or a paid tier.
+    """Gate dependency. Resolution order:
 
-    Dev mode (auth disabled → synthetic dev-user) is always allowed and runs on
-    the system provider, so local development needs no key.
+      1. dev mode (auth disabled) → always allowed on the system provider;
+      2. the user's OWN key (BYOK) → wins over the system provider entirely;
+      3. self-hosted Ollama as the system provider → free → open to all;
+      4. metered system provider (Claude / Ollama Cloud) → paid tier required,
+         otherwise 402.
     """
     if user.claims.get("dev_mode") or user.claims.get("auth_method") == "dev":
         return LLMAccess(clerk_user_id=user.subject, byok=None, tier="dev", is_dev=True)
 
-    # Load the user row to read BYOK + tier. Without a DB we can't gate by key,
-    # so fall back to the tier carried in the token (api_key path) / deny.
+    # Load the user row to read BYOK + tier FIRST: a configured BYOK key must
+    # override the system provider logic (incl. local Ollama). Without a DB we
+    # can't gate by key, so fall back to the tier carried in the token.
     byok: BYOKCreds | None = None
     tier = str(user.claims.get("subscription_tier") or "free")
     try:
@@ -102,8 +116,19 @@ async def require_llm_access(
         # DATABASE_URL not configured — keep whatever the token told us.
         log.debug("require_llm_access: DB unavailable, using token tier=%s", tier)
 
-    if byok is not None or _is_paid(tier):
+    # 2) User's own credential wins, whatever the system provider is.
+    if byok is not None:
         return LLMAccess(clerk_user_id=user.subject, byok=byok, tier=tier, is_dev=False)
+
+    # 3) Self-hosted Ollama as the SYSTEM provider has no per-use cost to meter,
+    # so there's nothing to gate: every authenticated user runs on the shared
+    # local model. Ollama Cloud and Claude are metered → they fall through.
+    if resolve_provider(settings) == "ollama":
+        return LLMAccess(clerk_user_id=user.subject, byok=None, tier=tier, is_dev=False)
+
+    # 4) Metered system provider (Claude / Ollama Cloud): a paid tier is required.
+    if _is_paid(tier):
+        return LLMAccess(clerk_user_id=user.subject, byok=None, tier=tier, is_dev=False)
 
     raise HTTPException(
         status_code=status.HTTP_402_PAYMENT_REQUIRED,

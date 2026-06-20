@@ -38,54 +38,16 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-function FooterCol({
-  title,
-  links,
-}: {
-  title: string;
-  links: { href: string; label: string; external?: boolean }[];
-}) {
-  return (
-    <div>
-      <div
-        className="text-uppercase mb-3"
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.12em",
-          color: HEADING_COLOR,
-        }}
-      >
-        {title}
-      </div>
-      <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
-        {links.map((l) => (
-          <li key={l.href + l.label}>
-            {l.external ? (
-              <a
-                href={l.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-decoration-none"
-                style={{ color: LINK_COLOR, fontSize: 14 }}
-              >
-                {l.label}
-              </a>
-            ) : (
-              <Link
-                href={l.href}
-                className="text-decoration-none"
-                style={{ color: LINK_COLOR, fontSize: 14 }}
-              >
-                {l.label}
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// Link secondari del footer (i principali — percorso/come/per chi/sviluppatori —
+// vivono nella navbar in alto, così il footer resta basso).
+const FOOTER_LINKS: { href: string; label: string; external?: boolean }[] = [
+  { href: "/docs", label: "Documentazione" },
+  { href: "/guida-open-data", label: "Guida open data" },
+  { href: "/usecases", label: "Casi d'uso" },
+  { href: "/sostieni", label: "Sostieni" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/note-legali", label: "Note legali" },
+];
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -94,135 +56,78 @@ export function SiteFooter() {
       role="contentinfo"
       style={{ background: "#0A1826", color: LINK_COLOR }}
     >
-      <div className="container" style={{ paddingTop: 40, paddingBottom: 28 }}>
-        <div className="d-flex flex-wrap justify-content-between gap-4">
-          {/* Brand + tagline */}
-          <div style={{ maxWidth: 320 }}>
-            <Link href="/" className="text-decoration-none d-inline-block mb-3">
-              <Logo size={36} theme="dark" />
+      <div className="container" style={{ paddingTop: 22, paddingBottom: 18 }}>
+        {/* Riga 1: logo + link inline (sx) · crediti modelli (dx) */}
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div className="d-flex align-items-center flex-wrap gap-3">
+            <Link href="/" className="text-decoration-none d-inline-flex">
+              <Logo size={28} theme="dark" />
             </Link>
-            <p
-              className="mb-0"
-              style={{ fontSize: 13.5, lineHeight: 1.6, color: "#7E8B97" }}
+            <nav
+              className="d-flex flex-wrap align-items-center gap-3"
+              aria-label="Link footer"
             >
-              Dalla maturità degli open data al valore per il territorio.
-              Progetto open source · licenza MIT.
-            </p>
+              {FOOTER_LINKS.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="text-decoration-none"
+                  style={{ color: LINK_COLOR, fontSize: 13 }}
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
           </div>
 
-          {/* Link columns */}
-          <div className="d-flex flex-wrap" style={{ gap: 56 }}>
-            <FooterCol
-              title="Prodotto"
-              links={[
-                { href: "/#percorso", label: "Il percorso" },
-                { href: "/#come", label: "Come funziona" },
-                { href: "/#perchi", label: "Per chi è" },
-                { href: "/guida-open-data", label: "Guida open data" },
-              ]}
-            />
-            <FooterCol
-              title="Sviluppatori"
-              links={[
-                { href: "/docs", label: "Documentazione" },
-                { href: GITHUB_URL, label: "Repository GitHub", external: true },
-                { href: "/sostieni", label: "Sostieni il progetto" },
-              ]}
-            />
-            <FooterCol
-              title="Legale"
-              links={[
-                { href: "/privacy", label: "Privacy" },
-                { href: "/note-legali", label: "Note legali" },
-                {
-                  href: GITHUB_URL,
-                  label: "Licenza MIT",
-                  external: true,
-                },
-              ]}
-            />
+          <div className="d-flex align-items-center gap-3">
+            <span
+              className="d-inline-flex align-items-center gap-2"
+              style={{ color: LINK_COLOR }}
+              title="Modelli: Anthropic Claude e Ollama (cloud o locale)"
+            >
+              <a href={ANTHROPIC_URL} target="_blank" rel="noopener noreferrer" className="d-inline-flex" style={{ color: LINK_COLOR }} aria-label="Anthropic Claude">
+                <AnthropicMark className="h-4 w-auto" />
+              </a>
+              <a href={OLLAMA_URL} target="_blank" rel="noopener noreferrer" className="d-inline-flex" style={{ color: LINK_COLOR }} aria-label="Ollama">
+                <OllamaMark className="h-4 w-auto" />
+              </a>
+              <span className="d-none d-sm-inline" style={{ fontSize: 12 }}>Claude · Ollama</span>
+            </span>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="d-inline-flex align-items-center gap-1 text-decoration-none"
+              style={{ color: LINK_COLOR }}
+              aria-label="Repository GitHub opendata-ai"
+            >
+              <GitHubIcon className="h-4 w-4" />
+              <span className="d-none d-sm-inline" style={{ fontSize: 12 }}>GitHub</span>
+            </a>
           </div>
         </div>
 
-        {/* Bottom band: sources + credits */}
+        {/* Riga 2: copyright + fonti + credito AES (compatta) */}
         <div
-          className="d-flex flex-wrap align-items-center justify-content-between gap-3"
-          style={{
-            marginTop: 28,
-            paddingTop: 20,
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            fontSize: 12.5,
-            color: HEADING_COLOR,
-          }}
+          className="d-flex flex-wrap align-items-center justify-content-between gap-2"
+          style={{ marginTop: 12, fontSize: 11.5, color: HEADING_COLOR }}
         >
           <span style={{ lineHeight: 1.5 }}>
             © {year} OpenData AI · Dati da fonti ufficiali ISTAT, OpenCoesione,
             OpenStreetMap e portali CKAN.
           </span>
 
-          <div className="d-flex flex-wrap align-items-center gap-3">
-            <span
-              className="d-inline-flex align-items-center gap-2"
-              style={{ color: LINK_COLOR }}
-              title="Modelli: Anthropic Claude e Ollama (cloud o locale)"
-            >
-              <a
-                href={ANTHROPIC_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center text-decoration-none"
-                style={{ color: LINK_COLOR }}
-                aria-label="Anthropic Claude"
-              >
-                <AnthropicMark className="h-4 w-auto" />
-              </a>
-              <a
-                href={OLLAMA_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="d-inline-flex align-items-center text-decoration-none"
-                style={{ color: LINK_COLOR }}
-                aria-label="Ollama"
-              >
-                <OllamaMark className="h-4 w-auto" />
-              </a>
-              <span style={{ fontSize: 12.5 }}>Powered by Claude · Ollama</span>
-            </span>
-            <span
-              aria-hidden="true"
-              style={{ width: 1, height: 14, background: "rgba(255,255,255,0.16)" }}
-            />
-            <a
-              href={AE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="d-inline-flex align-items-center gap-2 text-decoration-none"
-              style={{ color: LINK_COLOR }}
-              title="Designed by Agent Engineering Studio"
-            >
-              <span
-                className="text-uppercase"
-                style={{ fontSize: 10, letterSpacing: "0.12em" }}
-              >
-                Designed by AES
-              </span>
-            </a>
-            <span
-              aria-hidden="true"
-              style={{ width: 1, height: 14, background: "rgba(255,255,255,0.16)" }}
-            />
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="d-inline-flex align-items-center gap-2 text-decoration-none"
-              style={{ color: LINK_COLOR }}
-              aria-label="Repository GitHub opendata-ai"
-            >
-              <GitHubIcon className="h-4 w-4" />
-              <span style={{ fontSize: 12.5 }}>GitHub</span>
-            </a>
-          </div>
+          <a
+            href={AE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="d-inline-flex align-items-center gap-1 text-decoration-none text-uppercase"
+            style={{ color: HEADING_COLOR, fontSize: 10, letterSpacing: "0.12em" }}
+            title="Designed by Agent Engineering Studio"
+          >
+            Designed by AES
+          </a>
         </div>
       </div>
     </footer>

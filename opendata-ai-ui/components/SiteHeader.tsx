@@ -20,6 +20,8 @@ const LANDING_NAV = [
   { href: "/#come", label: "Come funziona" },
   { href: "/#perchi", label: "Per chi" },
   { href: "/#sviluppatori", label: "Sviluppatori" },
+  { href: "/docs", label: "Documentazione" },
+  { href: "/sostieni", label: "Sostieni" },
 ] as const;
 
 // Nav prodotto: mostrata agli utenti autenticati al posto degli anchor.

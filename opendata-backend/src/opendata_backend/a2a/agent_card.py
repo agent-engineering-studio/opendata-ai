@@ -1,8 +1,10 @@
 """A2A AgentCard for the opendata-ai orchestrator.
 
-Three skills published — they all reuse the existing FastAPI machinery
-(`_run_orchestrator` for search, `classify_dataset` for classify), so the
-contract on the A2A side stays a thin descriptor layer.
+Five skills published — they all reuse the existing orchestrator machinery
+(`run_streaming` for search/geo, `classify_dataset` for classify,
+`run_assessment` for maturity, `run_programma` for territory), so the contract
+on the A2A side stays a thin descriptor layer (R13: skills delegate, no
+duplicated logic).
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ from a2a.types import (
 SKILL_SEARCH = "search_open_data"
 SKILL_GEO = "find_geo_resources"
 SKILL_CLASSIFY = "classify_dataset"
+SKILL_MATURITY = "assess_maturity"
+SKILL_TERRITORY = "analyze_territory"
 
 
 def _skills() -> list[AgentSkill]:
@@ -71,6 +75,39 @@ def _skills() -> list[AgentSkill]:
             tags=["classification", "taxonomy"],
             examples=[
                 '{"source":"ckan","dataset_id":"…","dataset_name":"…","taxonomy":["sanità","mobilità"]}',
+            ],
+        ),
+        AgentSkill(
+            id=SKILL_MATURITY,
+            name="Valuta la maturità open data di un ente",
+            description=(
+                "Dato un ente (nome / organizzazione CKAN, opz. codice ISTAT del "
+                "comune) calcola la scorecard di maturità ODM 2025: 4 dimensioni "
+                "(policy, portale, qualità, impatto), livello, raccomandazioni e "
+                "leve di miglioramento. Per gli enti senza dati propone una guida."
+            ),
+            input_modes=["text/plain", "application/json"],
+            output_modes=["application/json"],
+            tags=["maturity", "odm", "scorecard", "italy"],
+            examples=[
+                "Comune di Bari",
+                '{"entity":"Comune di Gioia del Colle","istat_code":"072021"}',
+            ],
+        ),
+        AgentSkill(
+            id=SKILL_TERRITORY,
+            name="Analizza un territorio (SWOT + proposte)",
+            description=(
+                "Dato un comune (codice ISTAT) produce la scheda programmatica "
+                "verificabile: sintesi, SWOT e proposte/idee con citazioni "
+                "risolvibili, dal fan-out multi-fonte (ISTAT, OpenCoesione, OSM, "
+                "ISPRA, …). Modalità: scheda | idee | completa | marketing."
+            ),
+            input_modes=["application/json"],
+            output_modes=["application/json"],
+            tags=["territory", "swot", "opencoesione", "programma", "italy"],
+            examples=[
+                '{"cod_comune":"072021","comune_nome":"Gioia del Colle","modalita":"idee"}',
             ],
         ),
     ]

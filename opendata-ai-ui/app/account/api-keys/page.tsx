@@ -23,8 +23,8 @@ function Inner() {
           La generazione e gestione di API keys dal pannello utente è in
           sviluppo. Per ora puoi usare l&apos;endpoint{" "}
           <code>POST /api-keys/generate</code> via JWT Clerk — vedi{" "}
-          <Link href="/docs/rate-limits">/docs/rate-limits</Link> per i
-          dettagli sulla quota.
+          <Link href="/docs/api-keys">/docs/api-keys</Link> per uso, quota e
+          buone pratiche.
         </p>
       </div>
 

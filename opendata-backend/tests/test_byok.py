@@ -7,11 +7,14 @@ import pytest
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from fastapi import HTTPException
+
 from opendata_backend import byok
+from opendata_backend.auth import ClerkUser
 from opendata_backend.config import Settings
 from opendata_backend.db.models import Base
 from opendata_backend.db.repositories import users as users_repo
-from opendata_backend.llm_access import _is_paid, _resolve_byok
+from opendata_backend.llm_access import _is_paid, _resolve_byok, require_llm_access
 
 
 def _strip_schema(metadata: MetaData) -> None:
@@ -84,6 +87,66 @@ def test_validate_rejects(provider, key) -> None:
 )
 def test_is_paid(tier, paid) -> None:
     assert _is_paid(tier) is paid
+
+
+# ── access gate: free self-hosted Ollama vs paid Claude ──────────────────
+
+
+async def test_gate_open_when_system_provider_is_local_ollama() -> None:
+    """Self-hosted Ollama (make up-host-ollama) → no per-use cost → no 402."""
+    settings = Settings(llm_provider="ollama")  # type: ignore[call-arg]
+    user = ClerkUser(subject="u_local", email=None, claims={})  # free, no BYOK
+    access = await require_llm_access(user=user, settings=settings)
+    assert access.uses_byok is False
+    assert access.is_dev is False
+
+
+@pytest.mark.parametrize("provider", ["claude", "ollama_cloud"])
+async def test_gate_blocks_free_user_on_metered_system_provider(provider) -> None:
+    """Metered system providers (Claude, Ollama Cloud) → free user gets 402."""
+    settings = Settings(llm_provider=provider)  # type: ignore[call-arg]
+    user = ClerkUser(subject="u_free", email=None, claims={})
+    with pytest.raises(HTTPException) as ei:
+        await require_llm_access(user=user, settings=settings)
+    assert ei.value.status_code == 402
+
+
+async def test_gate_paid_tier_allowed_on_metered_provider() -> None:
+    """A paid subscriber is allowed on a metered system provider, no BYOK."""
+    settings = Settings(llm_provider="claude")  # type: ignore[call-arg]
+    user = ClerkUser(subject="u_pro", email=None, claims={"subscription_tier": "pro"})
+    access = await require_llm_access(user=user, settings=settings)
+    assert access.tier == "pro"
+    assert access.uses_byok is False
+
+
+# ── resolve_provider: auto picks the provider from the keys present ───────
+
+
+def test_resolve_provider_auto_prefers_claude_over_ollama_cloud() -> None:
+    from opendata_backend.config import resolve_provider
+
+    s = Settings(  # both keys present → Claude wins
+        llm_provider="auto", anthropic_api_key="sk-ant-x", ollama_cloud_api_key="k",
+        azure_ai_project_endpoint=None, azure_ai_model_deployment_name=None,
+    )  # type: ignore[call-arg]
+    assert resolve_provider(s) == "claude"
+
+
+def test_resolve_provider_auto_falls_back_to_ollama_cloud_then_local() -> None:
+    from opendata_backend.config import resolve_provider
+
+    # Explicit None overrides so ambient env keys don't leak into the assertion.
+    cloud = Settings(
+        llm_provider="auto", anthropic_api_key=None, ollama_cloud_api_key="k",
+        azure_ai_project_endpoint=None, azure_ai_model_deployment_name=None,
+    )  # type: ignore[call-arg]
+    assert resolve_provider(cloud) == "ollama_cloud"
+    local = Settings(
+        llm_provider="auto", anthropic_api_key=None, ollama_cloud_api_key=None,
+        azure_ai_project_endpoint=None, azure_ai_model_deployment_name=None,
+    )  # type: ignore[call-arg]
+    assert resolve_provider(local) == "ollama"
 
 
 # ── repo persistence + decryption ────────────────────────────────────────

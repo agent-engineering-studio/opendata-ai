@@ -1,10 +1,12 @@
 """A2A AgentExecutor that dispatches incoming requests to our orchestrator.
 
-Phase 1 (this file): protocol-level scaffolding only. Each skill returns a
-stub completion so we can verify the A2A round-trip end-to-end (task lifecycle,
-artifact, terminal status).
+Each skill delegates to existing orchestrator code (R13 — no duplicated logic):
+- search_open_data / find_geo_resources → `OrchestratorSession.run_streaming`
+- classify_dataset                       → `classify.classify_dataset`
+- assess_maturity                        → `maturity.service.run_assessment`
+- analyze_territory                      → `OrchestratorSession.run_programma`
 
-Phase 2 will wire the real `_run_orchestrator` / `classify_dataset` paths in.
+The skill id comes from `message.metadata.skill` (default `search_open_data`).
 """
 
 from __future__ import annotations
@@ -30,11 +32,17 @@ from ..orchestrator.parsing import (
 )
 from ..osm_map import attach_maps
 from ..state import session_holder
-from .agent_card import SKILL_CLASSIFY, SKILL_GEO, SKILL_SEARCH
+from .agent_card import (
+    SKILL_CLASSIFY,
+    SKILL_GEO,
+    SKILL_MATURITY,
+    SKILL_SEARCH,
+    SKILL_TERRITORY,
+)
 
 log = logging.getLogger("opendata-backend.a2a")
 
-_KNOWN_SKILLS = {SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY}
+_KNOWN_SKILLS = {SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY, SKILL_MATURITY, SKILL_TERRITORY}
 
 # Geographic format set used to filter resources for the find_geo_resources skill.
 # Mirrors the UI-side conversion in opendata-ai-ui/lib/geoConvert.ts.
@@ -92,6 +100,12 @@ class OpenDataAgentExecutor(AgentExecutor):
 
         if skill == SKILL_CLASSIFY:
             await self._run_classify(context, task_updater, query)
+            return
+        if skill == SKILL_MATURITY:
+            await self._run_maturity(context, task_updater, query)
+            return
+        if skill == SKILL_TERRITORY:
+            await self._run_territory(context, task_updater, query)
             return
 
         # search_open_data / find_geo_resources both go through run_streaming;
@@ -287,6 +301,172 @@ class OpenDataAgentExecutor(AgentExecutor):
         await task_updater.update_status(
             state=TaskState.TASK_STATE_COMPLETED,
             message=new_text_message("Classified."),
+        )
+
+    async def _run_maturity(
+        self,
+        context: RequestContext,
+        task_updater: TaskUpdater,
+        query_text: str,
+    ) -> None:
+        """assess_maturity → maturity.service.run_assessment (delega, no logica nuova)."""
+        meta = getattr(context.message, "metadata", None) or {}
+        payload: dict = {}
+        if isinstance(meta, dict) and meta.get("entity"):
+            payload = dict(meta)
+        else:
+            try:
+                parsed = json.loads(query_text)
+                payload = parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                payload = {}
+        entity = (payload.get("entity") or query_text or "").strip()
+        if not entity:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(
+                    "assess_maturity richiede un ente (testo o {\"entity\":…, \"istat_code\"?})."
+                ),
+            )
+            return
+
+        settings = session_holder.settings
+        if settings is None:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message("Backend session non inizializzata."),
+            )
+            return
+
+        from ..db.session import get_session_factory
+        from ..maturity.service import run_assessment
+
+        try:
+            factory = get_session_factory()
+        except RuntimeError:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message("DATABASE_URL non configurata."),
+            )
+            return
+
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_WORKING,
+            message=new_text_message(f"Valutazione maturità: {entity}"),
+        )
+        try:
+            async with factory() as session:
+                scorecard = await run_assessment(
+                    session,
+                    entity=entity,
+                    base_url=payload.get("base_url"),
+                    settings=settings,
+                    istat_code=payload.get("istat_code"),
+                    comune_nome=payload.get("comune_nome") or entity,
+                )
+        except Exception as exc:
+            log.exception("A2A assess_maturity failed")
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Errore: {exc}"),
+            )
+            return
+
+        await task_updater.add_artifact(
+            parts=[new_text_part(
+                text=json.dumps(scorecard, ensure_ascii=False),
+                media_type="application/json",
+            )],
+        )
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=new_text_message("Assessed."),
+        )
+
+    async def _run_territory(
+        self,
+        context: RequestContext,
+        task_updater: TaskUpdater,
+        query_text: str,
+    ) -> None:
+        """analyze_territory → orchestrator.run_programma (delega, no logica nuova)."""
+        meta = getattr(context.message, "metadata", None) or {}
+        payload: dict = {}
+        if isinstance(meta, dict) and meta.get("cod_comune"):
+            payload = dict(meta)
+        else:
+            try:
+                parsed = json.loads(query_text)
+                payload = parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                payload = {}
+        if not payload.get("cod_comune"):
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(
+                    'analyze_territory richiede un JSON con almeno {"cod_comune":"NNNNNN"} '
+                    '(opz. comune_nome, zona_osm_id, tema, modalita).'
+                ),
+            )
+            return
+
+        sess = session_holder.session
+        settings = session_holder.settings
+        if sess is None or settings is None:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message("Backend session non inizializzata."),
+            )
+            return
+        if not settings.enable_programma:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message("Analisi territorio disabilitata (enable_programma=false)."),
+            )
+            return
+
+        from ..orchestrator.programma import ProgrammaRequest
+
+        try:
+            req = ProgrammaRequest(
+                cod_comune=str(payload["cod_comune"]),
+                comune_nome=payload.get("comune_nome"),
+                zona_osm_id=payload.get("zona_osm_id"),
+                tema=payload.get("tema"),
+                modalita=payload.get("modalita", "scheda"),
+            )
+        except Exception as exc:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Richiesta non valida: {exc}"),
+            )
+            return
+
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_WORKING,
+            message=new_text_message(
+                f"Analisi territorio {req.cod_comune} (modalità {req.modalita})…"
+            ),
+        )
+        try:
+            resp = await sess.run_programma(req)
+        except Exception as exc:
+            log.exception("A2A analyze_territory failed")
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Errore: {exc}"),
+            )
+            return
+
+        await task_updater.add_artifact(
+            parts=[new_text_part(
+                text=json.dumps(resp.model_dump(mode="json"), ensure_ascii=False),
+                media_type="application/json",
+            )],
+        )
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=new_text_message("Analyzed."),
         )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
