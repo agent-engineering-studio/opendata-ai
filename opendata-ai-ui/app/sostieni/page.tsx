@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SostieniButton } from "@/components/SostieniButton";
+
 export const metadata: Metadata = {
   title: "Sostieni il progetto — OpenData AI",
   description:
@@ -182,16 +184,12 @@ export default function Page() {
                       ))}
                     </ul>
                     <p className="small text-muted mt-auto mb-3">{c.copre}</p>
-                    <a
-                      href={c.link || GITHUB_SPONSORS}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`btn ${
-                        c.cardClass ? "btn-primary" : "btn-outline-primary"
-                      } w-100`}
-                    >
-                      Sostieni con {c.prezzo} €/mese
-                    </a>
+                    <SostieniButton
+                      link={c.link}
+                      fallback={GITHUB_SPONSORS}
+                      prezzo={c.prezzo}
+                      primary={!!c.cardClass}
+                    />
                   </div>
                 </div>
               </div>
