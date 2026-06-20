@@ -168,20 +168,6 @@ istat_imprese_comune(cod_comune="072021")   # Gioia del Colle
   (sezione G = commercio) + source_url ISTAT da citare come evidenza
 ```
 
-## 📣 Per i social
-
-> Le statistiche ufficiali di ISTAT, Eurostat e OECD ora parlano la lingua dei
-> tuoi agenti AI. 🇮🇹🇪🇺
->
-> Abbiamo costruito **istat-mcp**, un server MCP che espone le API SDMX 2.1 come
-> strumenti pronti per qualsiasi LLM: scopri i dataflow, ispeziona le strutture,
-> scarichi i dati in CSV — il tutto con citazione della fonte.
->
-> Il bello? **Una sola immagine** interroga ISTAT, Eurostat e OECD: cambia solo
-> l'agenzia. Open source, parte del progetto opendata-ai. 🚀
-
-`#opendata #MCP #SDMX #ISTAT #Eurostat #OECD #AI #DataEngineering`
-
 ## Licenza & note
 
 Distribuito con licenza **MIT** (vedi `pyproject.toml`). Le risposte dei metadati

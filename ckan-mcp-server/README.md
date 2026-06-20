@@ -117,12 +117,6 @@ Risposta (snellita per l'LLM):
 
 Da qui un agente può chiamare `ckan_package_show` per i metadati completi, oppure `ckan_resource_download` sull'URL del CSV per leggerne il contenuto.
 
-## 📣 Per i social
-
-> Un solo server MCP, qualsiasi catalogo open data del mondo. Abbiamo costruito **ckan-mcp-server**: un wrapper FastMCP che espone l'Action API di CKAN a Claude e a qualunque client MCP. La chiave? Ogni chiamata accetta un `base_url` — quindi la stessa identica immagine interroga dati.gov.it, data.gov.uk, data.gov o open.canada.ca senza un solo redeploy. Cerca dataset, leggi metadati, interroga tabelle DataStore in SQL: gli open data civici diventano una conversazione. Open source, fa parte del progetto opendata-ai. 🇮🇹🇪🇺
-
-`#opendata #MCP #CKAN #AI #datigovit #civictech #LLM #ModelContextProtocol`
-
 ## Licenza & note
 
 Il codice del server è rilasciato sotto licenza **MIT** ed è infrastruttura del progetto **opendata-ai** (vedi il [README della root](../README.md) per l'architettura completa). I dataset restituiti restano soggetti alla **licenza del portale di origine**: verifica sempre i termini d'uso del catalogo CKAN che stai interrogando prima di riusare i dati.

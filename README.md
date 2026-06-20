@@ -48,6 +48,25 @@ Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
 call via `base_url` in the chat payload or via `CKAN_DEFAULT_BASE_URL` env.
 
+## MCP servers
+
+Ogni fonte è un server **MCP** componibile (stdio o streamable-HTTP su `/mcp`),
+usabile dal backend e da qualsiasi client MCP (Claude Desktop, Cursor, …). README
+dedicato per ciascuno:
+
+| Server | Cosa espone | README |
+|---|---|---|
+| **ckan-mcp-server** | Action API CKAN, `base_url` per-portale | [`ckan-mcp-server/README.md`](ckan-mcp-server/README.md) |
+| **istat-mcp-server** | SDMX 2.1 — ISTAT · Eurostat · OECD | [`istat-mcp-server/README.md`](istat-mcp-server/README.md) |
+| **osm-mcp** | Geocoding, POI, routing, zone + mappe Leaflet | [`osm-mcp/README.md`](osm-mcp/README.md) |
+| **opencoesione-mcp-server** | Progetti coesione: finanziato vs speso | [`opencoesione-mcp-server/README.md`](opencoesione-mcp-server/README.md) |
+| **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
+| **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
+| **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
+
+> Materiale di comunicazione (descrizioni brevi + bozze post social) per i server
+> MCP: **[`docs/mcp-social-kit.md`](docs/mcp-social-kit.md)**.
+
 ## Infrastructure
 
 ```
