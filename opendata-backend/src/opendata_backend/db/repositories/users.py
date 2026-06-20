@@ -38,6 +38,44 @@ async def get_or_create(
     return user
 
 
+async def get_by_clerk_id(session: AsyncSession, *, clerk_user_id: str) -> User | None:
+    res = await session.execute(
+        select(User).where(User.clerk_user_id == clerk_user_id, User.deleted_at.is_(None))
+    )
+    return res.scalar_one_or_none()
+
+
+async def set_byok(
+    session: AsyncSession,
+    *,
+    clerk_user_id: str,
+    provider: str,
+    key_encrypted: str,
+    model: str | None = None,
+    email: str | None = None,
+) -> User:
+    """Store (or replace) the user's BYOK credential. Creates the user row if
+    absent (a JWT-authenticated user may not have a row yet — webhook lag)."""
+    user = await get_or_create(session, clerk_user_id=clerk_user_id, email=email)
+    user.byok_provider = provider
+    user.byok_key_encrypted = key_encrypted
+    user.byok_model = model
+    user.updated_at = datetime.now(tz=timezone.utc)
+    await session.flush()
+    return user
+
+
+async def clear_byok(session: AsyncSession, *, clerk_user_id: str) -> None:
+    user = await get_by_clerk_id(session, clerk_user_id=clerk_user_id)
+    if user is None:
+        return
+    user.byok_provider = None
+    user.byok_key_encrypted = None
+    user.byok_model = None
+    user.updated_at = datetime.now(tz=timezone.utc)
+    await session.flush()
+
+
 async def soft_delete(session: AsyncSession, *, clerk_user_id: str) -> None:
     res = await session.execute(select(User).where(User.clerk_user_id == clerk_user_id))
     user = res.scalar_one_or_none()

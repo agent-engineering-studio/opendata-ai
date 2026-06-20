@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 const GITHUB_URL = "https://github.com/agent-engineering-studio/opendata-ai";
 const AE_URL = "https://www.agentengineering.it";
 const ANTHROPIC_URL = "https://www.anthropic.com";
+const OLLAMA_URL = "https://ollama.com";
 
 const LINK_COLOR = "#8C9BA8";
 const HEADING_COLOR = "#5B6B7B";
@@ -16,6 +17,15 @@ function AnthropicMark({ className = "h-4 w-auto" }: { className?: string }) {
         d="M32.73 0H27.2l12.8 32h5.53L32.73 0zM12.8 0L0 32h5.67l2.63-6.74h13.41L24.33 32H30L17.2 0h-4.4zm-1.96 20.37L15 10.2l4.16 10.17H10.84z"
         fill="#D4A27F"
       />
+    </svg>
+  );
+}
+
+function OllamaMark({ className = "h-4 w-auto" }: { className?: string }) {
+  // Minimal monochrome llama glyph for the "powered by" credit (footer scale).
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M7.1 2.2c-1 0-1.7.9-1.9 2-.2.9-.1 1.9.2 2.8-1 1-1.6 2.4-1.6 4.1 0 1.3.4 2.4 1 3.4-.5.8-.8 1.8-.8 2.9 0 .9.2 1.7.5 2.4.2.4.6.6 1 .5.4-.1.6-.5.5-.9-.2-.6-.3-1.2-.3-1.9 0-.5.1-1 .2-1.4.5.4 1.1.7 1.7.9-.1.4-.2.9-.2 1.4 0 .6.1 1.2.4 1.7.2.4.6.5 1 .4.4-.2.5-.6.4-1-.1-.3-.2-.6-.2-1 0-.3 0-.5.1-.7.5.1 1.1.1 1.6.1s1.1 0 1.6-.1c.1.2.1.4.1.7 0 .4-.1.7-.2 1-.1.4 0 .8.4 1 .4.1.8 0 1-.4.3-.5.4-1.1.4-1.7 0-.5-.1-1-.2-1.4.6-.2 1.2-.5 1.7-.9.1.4.2.9.2 1.4 0 .7-.1 1.3-.3 1.9-.1.4.1.8.5.9.4.1.8-.1 1-.5.3-.7.5-1.5.5-2.4 0-1.1-.3-2.1-.8-2.9.6-1 1-2.1 1-3.4 0-1.7-.6-3.1-1.6-4.1.3-.9.4-1.9.2-2.8-.2-1.1-.9-2-1.9-2-.9 0-1.6.7-2 1.7-.9-.3-1.8-.3-2.7 0-.4-1-1.1-1.7-2-1.7zm1.4 7.1c.6 0 1 .6 1 1.3s-.4 1.3-1 1.3-1-.6-1-1.3.4-1.3 1-1.3zm7 0c.6 0 1 .6 1 1.3s-.4 1.3-1 1.3-1-.6-1-1.3.4-1.3 1-1.3zM12 13c.8 0 1.5.4 1.5.9 0 .3-.3.6-.7.8.2.1.4.4.4.6 0 .5-.5.8-1.2.8s-1.2-.3-1.2-.8c0-.2.2-.5.4-.6-.4-.2-.7-.5-.7-.8 0-.5.7-.9 1.5-.9z" />
     </svg>
   );
 }
@@ -150,17 +160,33 @@ export function SiteFooter() {
           </span>
 
           <div className="d-flex flex-wrap align-items-center gap-3">
-            <a
-              href={ANTHROPIC_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="d-inline-flex align-items-center gap-2 text-decoration-none"
+            <span
+              className="d-inline-flex align-items-center gap-2"
               style={{ color: LINK_COLOR }}
-              title="Powered by Anthropic Claude"
+              title="Modelli: Anthropic Claude e Ollama (cloud o locale)"
             >
-              <AnthropicMark className="h-4 w-auto" />
-              <span style={{ fontSize: 12.5 }}>Powered by Claude</span>
-            </a>
+              <a
+                href={ANTHROPIC_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="d-inline-flex align-items-center text-decoration-none"
+                style={{ color: LINK_COLOR }}
+                aria-label="Anthropic Claude"
+              >
+                <AnthropicMark className="h-4 w-auto" />
+              </a>
+              <a
+                href={OLLAMA_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="d-inline-flex align-items-center text-decoration-none"
+                style={{ color: LINK_COLOR }}
+                aria-label="Ollama"
+              >
+                <OllamaMark className="h-4 w-auto" />
+              </a>
+              <span style={{ fontSize: 12.5 }}>Powered by Claude · Ollama</span>
+            </span>
             <span
               aria-hidden="true"
               style={{ width: 1, height: 14, background: "rgba(255,255,255,0.16)" }}

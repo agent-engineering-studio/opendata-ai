@@ -30,6 +30,7 @@ from ..classify import classify_dataset
 from ..classify.anthropic_client import Classifier
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
+from ..llm_access import LLMAccess, acquire_orchestrator, require_llm_access
 from ..orchestrator.parsing import (
     Resource,
     fill_missing_content,
@@ -119,10 +120,8 @@ def _wrap_query(query: str, base_url: str | None, prefer_geo: bool | None) -> st
 
 
 async def _run_orchestrator(
-    query: str, base_url: str | None, prefer_geo: bool | None = None
+    sess, settings, query: str, base_url: str | None, prefer_geo: bool | None = None
 ) -> ChatResponse:
-    sess = session_holder.session
-    settings = session_holder.settings
     if sess is None or settings is None:
         raise HTTPException(status_code=503, detail="Backend session not initialised")
     query = _wrap_query(query, base_url, prefer_geo)
@@ -158,26 +157,35 @@ async def _run_orchestrator(
 async def chat(
     req: ChatRequest,
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),
 ) -> ChatResponse:
     """Back-compat alias of /datasets/search — used by the legacy frontend."""
-    log.info("/chat subject=%s", user.subject)
-    return await _run_orchestrator(req.query, req.base_url, req.prefer_geo)
+    log.info("/chat subject=%s byok=%s", user.subject, access.uses_byok)
+    async with acquire_orchestrator(access, session_holder.settings) as sess:
+        return await _run_orchestrator(
+            sess, session_holder.settings, req.query, req.base_url, req.prefer_geo
+        )
 
 
 @router.post("/datasets/search", response_model=ChatResponse)
 async def search(
     req: ChatRequest,
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),
 ) -> ChatResponse:
     """Multi-source fan-out (CKAN + ISTAT [+ Eurostat + OECD if enabled])."""
-    log.info("/datasets/search subject=%s", user.subject)
-    return await _run_orchestrator(req.query, req.base_url, req.prefer_geo)
+    log.info("/datasets/search subject=%s byok=%s", user.subject, access.uses_byok)
+    async with acquire_orchestrator(access, session_holder.settings) as sess:
+        return await _run_orchestrator(
+            sess, session_holder.settings, req.query, req.base_url, req.prefer_geo
+        )
 
 
 @router.post("/datasets/search/stream")
 async def search_stream(
     req: ChatRequest,
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),
 ) -> StreamingResponse:
     """Same as /datasets/search but yields NDJSON progress events while the
     orchestrator runs, then a final `result` line with the parsed payload.
@@ -190,41 +198,43 @@ async def search_stream(
         {"event":"status","source":"synth","phase":"end"}
         {"event":"result","text":"...","resources":[...]}
     """
-    log.info("/datasets/search/stream subject=%s", user.subject)
-    sess = session_holder.session
+    log.info("/datasets/search/stream subject=%s byok=%s", user.subject, access.uses_byok)
     settings = session_holder.settings
-    if sess is None or settings is None:
+    if settings is None:
         raise HTTPException(status_code=503, detail="Backend session not initialised")
 
     query = _wrap_query(req.query, req.base_url, req.prefer_geo)
 
+    async def _one_event(ev):
+        """Map an orchestrator event to its NDJSON line (parsing the final result)."""
+        if ev.get("event") == "result":
+            raw = ev.get("text") or ""
+            text, resources = parse_agent_reply(raw)
+            await fill_missing_content(resources)
+            try:
+                await upgrade_sdmx_resources(resources)
+            except Exception:
+                log.warning("upgrade_sdmx_resources failed", exc_info=True)
+            if settings.enable_osm_maps:
+                try:
+                    await attach_maps(settings.osm_mcp_url, text, resources)
+                except Exception:
+                    log.warning("attach_maps failed", exc_info=True)
+            payload = {
+                "event": "result",
+                "text": text,
+                "resources": [r.model_dump() for r in resources],
+            }
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+        return (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
+
     async def _events():
         t0 = time.perf_counter()
         try:
-            async for ev in sess.run_streaming(query):
-                if ev.get("event") == "result":
-                    raw = ev.get("text") or ""
-                    text, resources = parse_agent_reply(raw)
-                    await fill_missing_content(resources)
-                    try:
-                        await upgrade_sdmx_resources(resources)
-                    except Exception:
-                        log.warning("upgrade_sdmx_resources failed", exc_info=True)
-                    if settings.enable_osm_maps:
-                        try:
-                            await attach_maps(settings.osm_mcp_url, text, resources)
-                        except Exception:
-                            log.warning("attach_maps failed", exc_info=True)
-                    elapsed = (time.perf_counter() - t0) * 1000
-                    log.info("/datasets/search/stream reply in %.0fms", elapsed)
-                    payload = {
-                        "event": "result",
-                        "text": text,
-                        "resources": [r.model_dump() for r in resources],
-                    }
-                    yield (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
-                else:
-                    yield (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
+            async with acquire_orchestrator(access, settings) as sess:
+                async for ev in sess.run_streaming(query):
+                    yield await _one_event(ev)
+            log.info("/datasets/search/stream reply in %.0fms", (time.perf_counter() - t0) * 1000)
         except Exception as exc:
             log.exception("/datasets/search/stream failed")
             err = {"event": "error", "message": str(exc)}
@@ -237,6 +247,7 @@ async def search_stream(
 async def by_category(
     req: ByCategoryRequest,
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),
 ) -> ChatResponse:
     """Search restricted to a category (and optional region). 5-min Redis cache."""
     log.info("/datasets/by-category subject=%s category=%r", user.subject, req.category)
@@ -249,7 +260,8 @@ async def by_category(
         parts.append(f"in the region of {req.region}")
     parts.append("from the available open data portals.")
     query = " ".join(parts)
-    response = await _run_orchestrator(query, req.base_url)
+    async with acquire_orchestrator(access, session_holder.settings) as sess:
+        response = await _run_orchestrator(sess, session_holder.settings, query, req.base_url)
     await by_category_cache.set(
         req.category, req.base_url, req.region, response.model_dump()
     )
@@ -279,6 +291,7 @@ async def classify(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),  # noqa: ARG001 — gate only
 ) -> ClassifyResponse:
     """Score a dataset against a caller-supplied taxonomy with Claude Haiku 4.5.
 

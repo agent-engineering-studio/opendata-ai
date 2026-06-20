@@ -20,9 +20,12 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import httpx
+
+if TYPE_CHECKING:
+    from .byok import BYOKCreds
 from agent_framework import Agent, MCPStreamableHTTPTool
 from opendata_core.osm.client import OverpassError
 from opendata_core.sdmx.client import SdmxError
@@ -112,8 +115,42 @@ async def _lens_cached(parts: tuple[str, ...], producer):  # noqa: ANN001, ANN20
     return result
 
 
-def build_chat_client(settings: Settings) -> Any:
-    """Return a Microsoft Agent Framework chat client for the configured provider."""
+def build_chat_client(settings: Settings, byok: "BYOKCreds | None" = None) -> Any:
+    """Return a Microsoft Agent Framework chat client.
+
+    When `byok` is set, the client uses the USER's own credential (their Claude
+    API key or Ollama Cloud key) instead of the system provider — this is how a
+    BYOK user runs the service without a subscription. Otherwise the configured
+    system provider is resolved as before.
+    """
+    if byok is not None:
+        log.info("Building BYOK chat client (provider=%s)", byok.provider)
+        if byok.provider == "claude":
+            from agent_framework_anthropic import AnthropicClient
+
+            return AnthropicClient(api_key=byok.api_key, model=settings.claude_model)
+        if byok.provider == "ollama_cloud":
+            from agent_framework_ollama import OllamaChatClient
+            from ollama import AsyncClient as OllamaAsyncClient
+
+            cloud_client = OllamaAsyncClient(
+                host=settings.ollama_cloud_base_url,
+                headers={"Authorization": f"Bearer {byok.secret}"},
+            )
+            return OllamaChatClient(
+                client=cloud_client,
+                model=byok.model or settings.ollama_cloud_model,
+            )
+        if byok.provider == "ollama_local":
+            # The user's own Ollama server: `secret` is its base URL, no auth.
+            from agent_framework_ollama import OllamaChatClient
+
+            return OllamaChatClient(
+                host=byok.secret,
+                model=byok.model or settings.ollama_llm_model,
+            )
+        raise RuntimeError(f"Unsupported BYOK provider={byok.provider!r}")
+
     provider = resolve_provider(settings)
     log.info("Building chat client for provider=%s (configured=%s)", provider, settings.llm_provider)
 
@@ -176,8 +213,12 @@ class OrchestratorSession:
             merged_text = await session.run("popolazione Toscana 2023")
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, byok: "BYOKCreds | None" = None) -> None:
         self._settings = settings
+        # When set, every agent in this session runs on the user's own LLM
+        # credential (BYOK) instead of the system provider. A per-user session
+        # is built fresh per request; the shared system session has byok=None.
+        self._byok = byok
         self._stack = AsyncExitStack()
         self._participants: list[Agent] = []
         self._synth_agent: Agent | None = None
@@ -239,9 +280,9 @@ class OrchestratorSession:
             s.llm_provider, ",".join(enabled),
         )
 
-        chat_client = build_chat_client(s)
+        chat_client = build_chat_client(s, self._byok)
         default_options: dict[str, object] = {}
-        if resolve_provider(s) == "ollama":
+        if self._byok is None and resolve_provider(s) == "ollama":
             default_options["num_ctx"] = s.ollama_num_ctx
             default_options["temperature"] = s.ollama_temperature
 
@@ -389,7 +430,10 @@ class OrchestratorSession:
         # diverse). Con provider claude può girare su un modello dedicato.
         if s.enable_programma:
             programma_client = chat_client
-            if s.programma_model and resolve_provider(s) == "claude":
+            # A dedicated programma model only applies to the SYSTEM Claude
+            # provider — a BYOK user runs everything on their own credential, so
+            # we never spin up a second client on the system key for them.
+            if s.programma_model and self._byok is None and resolve_provider(s) == "claude":
                 from agent_framework_anthropic import AnthropicClient
 
                 programma_client = AnthropicClient(

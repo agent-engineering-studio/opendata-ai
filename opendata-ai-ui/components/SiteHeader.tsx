@@ -165,6 +165,11 @@ export function SiteHeader() {
                   <UserButton afterSignOutUrl="/">
                     <UserButton.MenuItems>
                       <UserButton.Action
+                        label="La tua chiave LLM"
+                        labelIcon={<KeyIcon />}
+                        onClick={() => router.push("/account/llm-key")}
+                      />
+                      <UserButton.Action
                         label="API keys (in arrivo)"
                         labelIcon={<KeyIcon />}
                         onClick={() => router.push("/account/api-keys")}
