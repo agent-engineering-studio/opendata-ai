@@ -858,6 +858,70 @@ async def test_welfare_info_social_investments_are_citable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_istruzione_requires_local_anchor() -> None:
+    """istruzione (lente Istruzione): premessa = dotazione scolastica MIUR Open Data
+    (host in _ISTRUZIONE_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    miur_url = (
+        "https://dati.istruzione.it/opendata/opendata/catalogo/elements1/"
+        "SCUANAGRAFESTAT20242520240901.csv"
+    )
+    ev_miur = {"fonte": "miur", "url": miur_url, "dettaglio": "nessuna sec. II grado statale"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("istruzione", [ev_miur]),  # ok (MIUR)
+                _idea("istruzione", [ev_oc]),    # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("ckan", "Scuole.", [
+        {"name": "scuole", "url": miur_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["istruzione"]
+
+
+@pytest.mark.asyncio
+async def test_istruzione_info_injects_citable_miur_anchor() -> None:
+    """L'ancora Istruzione deterministica (MIUR) iniettata dal backend è citabile:
+    una proposta istruzione che la cita sopravvive senza risorsa MIUR dagli specialisti."""
+    miur_url = (
+        "https://dati.istruzione.it/opendata/opendata/catalogo/elements1/"
+        "SCUANAGRAFESTAT20242520240901.csv"
+    )
+    istruzione_info = {
+        "trovato": True, "comune": "Comune X", "anno_scolastico": "2024/25",
+        "scuole_totali": 5, "scuole_statali": 4, "scuole_paritarie": 1,
+        "per_ordine": {"infanzia": 2, "primaria": 1, "secondaria_i": 1, "secondaria_ii": 1},
+        "source_url": miur_url,
+    }
+    ev_miur = {"fonte": "miur", "url": miur_url, "dettaglio": "5 plessi, 1 sec. II grado"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("istruzione", [ev_miur])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, istruzione_info=istruzione_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["istruzione"]
+    # display-clean: MIUR → portale opendata (mai il link CSV in profondità).
+    assert any(r.url == "https://dati.istruzione.it/opendata/" for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

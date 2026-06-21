@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-18c"
+PROMPT_VERSION = "2026-06-21b"
 
 
 class ProgrammaResponse(BaseModel):
@@ -213,6 +213,7 @@ def build_programma_task(
     lavoro_info: dict[str, Any] | None = None,
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
+    istruzione_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -425,6 +426,20 @@ def build_programma_task(
                     "per dimensionare un'idea welfare e citarne il finanziamento (es. risorse "
                     "sull'inclusione sociale basse o spese male = leva di intervento)."
                 )
+        if istruzione_info:
+            ord_ = istruzione_info.get("per_ordine") or {}
+            parts.append(
+                "LENTE ISTRUZIONE — DATI MIUR Open Data GIÀ RACCOLTI (anagrafe scuole, "
+                f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
+                f"plessi ({istruzione_info.get('scuole_statali')} statali, "
+                f"{istruzione_info.get('scuole_paritarie')} paritarie) — "
+                f"infanzia={ord_.get('infanzia')}, primaria={ord_.get('primaria')}, "
+                f"sec. I grado={ord_.get('secondaria_i')}, sec. II grado={ord_.get('secondaria_ii')}. "
+                f"FONTE DA CITARE VERBATIM: {istruzione_info.get('source_url')} . USA questi "
+                "numeri per valutare l'offerta scolastica (assenza di un ordine → pendolarismo "
+                "scolastico; pochi plessi per abitante; offerta sbilanciata); un'idea "
+                "'istruzione' deve ancorarsi a questi numeri e citare questa fonte."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -596,6 +611,7 @@ def build_programma_aggregator(
     lavoro_info: dict[str, Any] | None = None,
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
+    istruzione_info: dict[str, Any] | None = None,
 ) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -832,6 +848,32 @@ def build_programma_aggregator(
                     f"spend ratio {inv.get('spend_ratio')}, {inv.get('progetti_totali')} progetti."
                 )
             sections.append(_bundle_section("welfare", narrative, wel_resources))
+
+        # Ancora ISTRUZIONE deterministica (MIUR Open Data, anagrafe scuole): dotazione
+        # scolastica per ordine come Resource citabile (host dati.istruzione.it) +
+        # sezione evidenza. Un'idea 'istruzione' ancora sui conteggi e cita la fonte.
+        if istruzione_info and istruzione_info.get("source_url"):
+            src = istruzione_info["source_url"].strip()
+            ord_ = istruzione_info.get("per_ordine") or {}
+            ist_res = Resource(
+                name=f"MIUR Open Data — anagrafe scuole del comune (a.s. {istruzione_info.get('anno_scolastico')})",
+                url=src,
+                format="CSV",
+                source="miur",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(ist_res)
+            narrative = (
+                "Dotazione scolastica del comune (MIUR Open Data, anagrafe scuole, "
+                f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
+                f"plessi ({istruzione_info.get('scuole_statali')} statali, "
+                f"{istruzione_info.get('scuole_paritarie')} paritarie). Per ordine — infanzia: "
+                f"{ord_.get('infanzia')}, primaria: {ord_.get('primaria')}, sec. I grado: "
+                f"{ord_.get('secondaria_i')}, sec. II grado: {ord_.get('secondaria_ii')}. Valuta "
+                "l'offerta scolastica (assenza di un ordine = pendolarismo scolastico; pochi plessi "
+                "per abitante); un'idea 'istruzione' ancori su questi numeri e citi questa fonte."
+            )
+            sections.append(_bundle_section("istruzione", narrative, [ist_res]))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

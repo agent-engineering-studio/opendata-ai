@@ -869,9 +869,44 @@ class OrchestratorSession:
                            cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_istruzione(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora ISTRUZIONE con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("istruzione", req.cod_comune, req.comune_nome or ""),
+            lambda: OrchestratorSession._resolve_istruzione_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_istruzione_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora ISTRUZIONE deterministica: dotazione scolastica del comune (plessi
+        per ordine) da MIUR Open Data (anagrafe scuole statali + paritarie). Misura
+        l'offerta scolastica sul territorio (gap di un ordine → pendolarismo, pochi
+        plessi per abitante). Il join MIUR è per NOME comune (i CSV non hanno il
+        codice ISTAT) → serve `comune_nome`. Best-effort: se l'anagrafe non risponde
+        o il comune non compare, la lente si salta (non si inventa). Solo idee/completa.
+        """
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        try:
+            from opendata_core.miur import fetch_scuole_comune
+
+            res = await asyncio.wait_for(
+                fetch_scuole_comune(req.comune_nome), timeout=90.0
+            )
+        except Exception as exc:
+            _log_lens_skip("ancora istruzione MIUR non risolta per %s — lente istruzione assente",
+                           req.cod_comune, exc=exc)
+            return None
+        if not (res and res.get("trovato")):
+            return None
+        return res
+
     async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
-        turismo, lavoro, trasporti, welfare).
+        turismo, lavoro, trasporti, welfare, istruzione).
 
         Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
         dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
@@ -879,7 +914,9 @@ class OrchestratorSession:
         errore); qui isoliamo anche le eccezioni impreviste con return_exceptions,
         così una lente che esplode non affonda le altre.
         """
-        zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare = await asyncio.gather(
+        (
+            zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare, istruzione
+        ) = await asyncio.gather(
             self._resolve_zona(req),
             self._resolve_zone_commerciali(req),
             self._resolve_commercio(req),
@@ -887,6 +924,7 @@ class OrchestratorSession:
             self._resolve_lavoro(req),
             self._resolve_trasporti(req),
             self._resolve_welfare(req),
+            self._resolve_istruzione(req),
             return_exceptions=True,
         )
 
@@ -904,6 +942,7 @@ class OrchestratorSession:
             "lavoro": _ok(lavoro),
             "trasporti": _ok(trasporti),
             "welfare": _ok(welfare),
+            "istruzione": _ok(istruzione),
         }
 
     async def run_programma_streaming(
@@ -963,11 +1002,13 @@ class OrchestratorSession:
                 lavoro_info=lenses["lavoro"],
                 trasporti_info=lenses["trasporti"],
                 welfare_info=lenses["welfare"],
+                istruzione_info=lenses["istruzione"],
             )
             task_text = build_programma_task(
                 req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
                 lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
                 welfare_info=lenses["welfare"],
+                istruzione_info=lenses["istruzione"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -1152,6 +1193,7 @@ class OrchestratorSession:
                 lavoro_info=lenses["lavoro"],
                 trasporti_info=lenses["trasporti"],
                 welfare_info=lenses["welfare"],
+                istruzione_info=lenses["istruzione"],
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
@@ -1159,6 +1201,7 @@ class OrchestratorSession:
                     req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
                     lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
                     welfare_info=lenses["welfare"],
+                    istruzione_info=lenses["istruzione"],
                 )
             )
         outputs = events.get_outputs()
