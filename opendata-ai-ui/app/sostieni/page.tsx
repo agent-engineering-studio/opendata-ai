@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { BuyMeACoffeeButton } from "@/components/BuyMeACoffeeButton";
 import { SostieniButton } from "@/components/SostieniButton";
 
 export const metadata: Metadata = {
@@ -235,7 +236,7 @@ export default function Page() {
             l&apos;infrastruttura e mantengono OpenData AI open source e
             indipendente. Scegli come dare una mano.
           </p>
-          <div className="d-flex flex-wrap justify-content-center gap-3">
+          <div className="d-flex flex-wrap justify-content-center align-items-center gap-3">
             <a
               href={GITHUB_SPONSORS}
               target="_blank"
@@ -247,6 +248,12 @@ export default function Page() {
             <Link href="/docs" className="btn btn-outline-light btn-lg">
               Scopri il progetto
             </Link>
+          </div>
+          <p className="mt-4 mb-2 small" style={{ opacity: 0.9 }}>
+            Preferisci una donazione una-tantum? Offrici un caffè:
+          </p>
+          <div className="d-flex justify-content-center">
+            <BuyMeACoffeeButton />
           </div>
         </div>
       </section>

@@ -1,5 +1,7 @@
 # opendata-ai
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20opendata--ai-FFDD00?logo=buymeacoffee&logoColor=000)](https://www.buymeacoffee.com/f9t3zol)
+
 ![OpenData AI — dal patrimonio di dati al valore per il territorio](docs/assets/hero.png)
 
 Conversational + map-based access to **Italian and European open data
