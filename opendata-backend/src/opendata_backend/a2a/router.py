@@ -2,8 +2,8 @@
 
 We use the SDK's `add_a2a_routes_to_fastapi` helper so the routes show up in
 the OpenAPI schema at /docs alongside the rest of the API. The JSON-RPC
-endpoint lives under `/a2a/`; AgentCard discovery is at the protocol-standard
-`/.well-known/agent.json`.
+endpoint lives under `/a2a/`; AgentCard discovery is at the SDK 1.0
+well-known path `/.well-known/agent-card.json`.
 """
 
 from __future__ import annotations
@@ -38,24 +38,15 @@ def register_a2a(app: FastAPI, settings: Settings) -> None:
         task_store=InMemoryTaskStore(),
         agent_card=agent_card,
     )
-    # `enable_v0_3_compat=True` lets clients use both naming schemes:
-    #   - SDK 1.0:  SendMessage, GetTask, CancelTask (PascalCase)
-    #   - SDK 0.3:  message/send, tasks/get, tasks/cancel  (slash-case)
-    # Many third-party clients and inspectors still default to the v0.3 names.
-    #
-    # Publish the AgentCard at BOTH the v1.0 well-known path (with dash, the
-    # SDK default) and the legacy v0.3 path (without dash). Old discovery
-    # clients hardcoded the latter; the duplication is cheap and harmless.
-    card_routes = [
-        *create_agent_card_routes(agent_card),
-        *create_agent_card_routes(agent_card, card_url="/.well-known/agent.json"),
-    ]
+    # SDK 1.0 only: JSON-RPC methods are PascalCase (SendMessage, GetTask,
+    # CancelTask) and the AgentCard is published at the dash well-known path
+    # `/.well-known/agent-card.json` (the SDK default). The legacy v0.3
+    # surface (slash-case `message/send`, `/.well-known/agent.json`) is no
+    # longer exposed.
     add_a2a_routes_to_fastapi(
         app,
-        agent_card_routes=card_routes,
-        jsonrpc_routes=create_jsonrpc_routes(
-            request_handler, rpc_url="/a2a/", enable_v0_3_compat=True,
-        ),
+        agent_card_routes=create_agent_card_routes(agent_card),
+        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/a2a/"),
     )
     log.info(
         "A2A mounted | public_url=%s skills=%d",

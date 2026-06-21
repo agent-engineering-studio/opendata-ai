@@ -1077,7 +1077,7 @@ class Settings(BaseSettings):
     cors_allow_origins: str = Field(default="http://localhost:3000")
 
     # ── A2A (Agent-to-Agent protocol) ────────────────────────────────
-    # When enabled, the backend publishes /.well-known/agent.json and exposes
+    # When enabled, the backend publishes /.well-known/agent-card.json and exposes
     # JSON-RPC at /a2a/. The public URL is baked into the AgentCard so other
     # agents can call us; defaults to the dev-friendly localhost binding.
     a2a_enabled: bool = Field(default=True)

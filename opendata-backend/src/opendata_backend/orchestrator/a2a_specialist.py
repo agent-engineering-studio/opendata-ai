@@ -53,7 +53,6 @@ class A2ARemoteAgent:
         self._skill = skill
         self._client = None  # populated in __aenter__
         self._http = None
-        self._card_url = f"{self._url}/.well-known/agent.json"
 
     async def __aenter__(self) -> "A2ARemoteAgent":
         import httpx

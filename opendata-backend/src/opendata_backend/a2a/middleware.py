@@ -6,7 +6,7 @@ cannot guard them. This middleware intercepts requests to the JSON-RPC endpoint
 (`/a2a/`) and enforces the same credential rules as `require_user`
 (Clerk JWT or `od_` API key) before the request reaches the executor.
 
-Discovery stays public on purpose: the AgentCard at `/.well-known/agent*.json`
+Discovery stays public on purpose: the AgentCard at `/.well-known/agent-card.json`
 advertises capabilities and must be fetchable by any client deciding whether to
 talk to us. Only the *invocation* endpoint requires a subscriber credential.
 """

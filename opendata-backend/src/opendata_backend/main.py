@@ -163,7 +163,7 @@ app.include_router(showcases.router)
 app.include_router(usecases.router)
 app.include_router(community.router)
 
-# Mount A2A protocol routes: AgentCard discovery at /.well-known/agent.json
+# Mount A2A protocol routes: AgentCard discovery at /.well-known/agent-card.json
 # and JSON-RPC under /a2a/. No-op when settings.a2a_enabled is False.
 # The auth middleware guards /a2a/ (JSON-RPC) with the same Clerk-JWT / API-key
 # rules as the REST surface; AgentCard discovery stays public.
