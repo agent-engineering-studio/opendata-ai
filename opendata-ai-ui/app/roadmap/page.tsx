@@ -9,10 +9,11 @@ export const metadata: Metadata = {
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
 
-type Stato = "now" | "near" | "explore";
+type Stato = "now" | "wip" | "near" | "explore";
 
 const STATO: Record<Stato, { label: string; cls: string }> = {
   now: { label: "già attivo", cls: "bg-success-subtle text-success-emphasis" },
+  wip: { label: "in test", cls: "bg-warning-subtle text-warning-emphasis" },
   near: { label: "a portata", cls: "bg-primary-subtle text-primary-emphasis" },
   explore: { label: "da esplorare", cls: "bg-secondary-subtle text-secondary-emphasis" },
 };
@@ -23,6 +24,7 @@ type Punto = {
   titolo: string;
   perche: string;
   issue: number;
+  wip?: boolean; // funzionalità implementate, in fase di test
   voci: { titolo: string; testo: string; stato?: Stato }[];
 };
 
@@ -34,11 +36,12 @@ const ROADMAP: Punto[] = [
     perche:
       "Carichi un file (un foglio di calcolo, un elenco, una mappa) e ricevi un controllo automatico, la versione già sistemata e la scheda descrittiva pronta. Così il dato diventa più pulito, comprensibile e facile da riusare.",
     issue: 49,
+    wip: true,
     voci: [
-      { titolo: "Controllo automatico", stato: "near", testo: "Trova gli errori più comuni — celle vuote, date scritte in modi diversi, accenti sbagliati, doppioni — e dice quanto è “in salute” il dato, prima e dopo." },
-      { titolo: "Versione corretta da scaricare", testo: "Intestazioni più chiare, formato uniforme, nomi dei comuni allineati: riscarichi il file già sistemato, pronto all'uso." },
-      { titolo: "Dati sulla mappa sempre al posto giusto", testo: "Se le posizioni sono indicate in modo diverso, le rimette a posto perché compaiano correttamente sulla mappa." },
-      { titolo: "Scheda descrittiva pronta", testo: "Titolo, descrizione, licenza, ogni quanto si aggiorna: già compilata, da incollare sul portale dei dati." },
+      { titolo: "Controllo automatico", stato: "wip", testo: "Trova gli errori più comuni — celle vuote, date scritte in modi diversi, accenti sbagliati, doppioni — e dice quanto è “in salute” il dato, prima e dopo. Disponibile nella pagina Qualità, in fase di test." },
+      { titolo: "Versione corretta da scaricare", stato: "wip", testo: "Intestazioni più chiare, formato uniforme, date ISO, separatore standard: riscarichi il file già sistemato, con l'elenco delle modifiche. Disponibile, in fase di test." },
+      { titolo: "Dati sulla mappa sempre al posto giusto", stato: "explore", testo: "Se le posizioni sono indicate in modo diverso, le rimette a posto perché compaiano correttamente sulla mappa." },
+      { titolo: "Scheda descrittiva pronta", stato: "explore", testo: "Titolo, descrizione, licenza, ogni quanto si aggiorna: già compilata, da incollare sul portale dei dati." },
       { titolo: "Suggerimenti per arricchire", stato: "explore", testo: "Collega il dato ad altre informazioni utili (il comune di riferimento, la posizione sulla mappa) per renderlo più completo." },
     ],
   },
@@ -137,6 +140,7 @@ export default function Page() {
       <section className="container py-5">
         <div className="d-flex flex-wrap gap-3 mb-4 small text-muted">
           <span><span className={`badge ${STATO.now.cls} me-1`}>{STATO.now.label}</span> c&apos;è già, va ampliato</span>
+          <span><span className={`badge ${STATO.wip.cls} me-1`}>{STATO.wip.label}</span> implementato, in fase di test</span>
           <span><span className={`badge ${STATO.near.cls} me-1`}>{STATO.near.label}</span> si costruisce su ciò che esiste</span>
           <span><span className={`badge ${STATO.explore.cls} me-1`}>{STATO.explore.label}</span> richiede studio e prove</span>
         </div>
@@ -150,8 +154,13 @@ export default function Page() {
                     {p.icon}
                   </span>
                   <div className="flex-grow-1">
-                    <div className="text-muted small fw-semibold" style={{ letterSpacing: "0.08em" }}>
+                    <div className="text-muted small fw-semibold d-flex align-items-center gap-2" style={{ letterSpacing: "0.08em" }}>
                       PUNTO {p.n}
+                      {p.wip && (
+                        <span className="badge bg-warning-subtle text-warning-emphasis" style={{ letterSpacing: "normal" }}>
+                          ● work in progress
+                        </span>
+                      )}
                     </div>
                     <h2 className="h4 mb-0">{p.titolo}</h2>
                   </div>
