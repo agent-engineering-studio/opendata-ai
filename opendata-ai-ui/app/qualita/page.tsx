@@ -49,6 +49,8 @@ function QualitaInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [fixing, setFixing] = useState(false);
+  const [fixChanges, setFixChanges] = useState<{ codice: string; messaggio: string }[] | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -62,12 +64,54 @@ function QualitaInner() {
     reader.readAsText(f);
   }
 
+  function _body(): { content: string } | { url: string } | null {
+    return text.trim() ? { content: text } : url.trim() ? { url: url.trim() } : null;
+  }
+
+  async function scaricaCorretto() {
+    const body = _body();
+    if (!body) return;
+    setFixing(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/fix", { method: "POST", token, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg;
+        } catch {
+          /* ignore */
+        }
+        setError(msg);
+        return;
+      }
+      const data = (await res.json()) as { content: string; changes: { codice: string; messaggio: string }[] };
+      setFixChanges(data.changes);
+      const blob = new Blob([data.content], { type: "text/csv;charset=utf-8" });
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = "dati-corretti.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(dlUrl);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setFixing(false);
+    }
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
     setReport(null);
+    setFixChanges(null);
     try {
-      const body = text.trim() ? { content: text } : url.trim() ? { url: url.trim() } : null;
+      const body = _body();
       if (!body) {
         setError("Incolla un CSV, carica un file oppure indica un URL.");
         return;
@@ -147,7 +191,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); }}
               >
                 Pulisci
               </button>
@@ -171,8 +215,33 @@ function QualitaInner() {
                 <li>Separatore rilevato: <code>{report.separatore === "\t" ? "\\t (tab)" : report.separatore}</code></li>
                 <li>{report.findings.length} segnalazion{report.findings.length === 1 ? "e" : "i"}</li>
               </ul>
+              <div className="ms-auto text-end">
+                <button type="button" className="btn btn-success" onClick={scaricaCorretto} disabled={fixing}>
+                  {fixing ? "Preparo…" : "⬇ Scarica versione corretta"}
+                </button>
+                <div className="text-muted small mt-1" style={{ maxWidth: 240 }}>
+                  Correzioni sicure: intestazioni, spazi, date ISO, decimali, separatore.
+                </div>
+              </div>
             </div>
           </div>
+
+          {fixChanges && (
+            <div className="alert alert-success">
+              {fixChanges.length === 0 ? (
+                <span>Il file era già pulito: nessuna correzione necessaria. Scaricata una copia standard (UTF-8, separatore virgola).</span>
+              ) : (
+                <>
+                  <strong>Modifiche applicate nel file scaricato:</strong>
+                  <ul className="mb-0 mt-2">
+                    {fixChanges.map((c) => (
+                      <li key={c.codice}>{c.messaggio}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
 
           {findingsOrdinati.length > 0 && (
             <div className="card shadow-sm mb-4">
