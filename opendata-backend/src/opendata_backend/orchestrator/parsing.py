@@ -229,11 +229,20 @@ async def upgrade_sdmx_resources(resources: list[Resource]) -> None:
         await asyncio.gather(*(one(r) for r in targets), return_exceptions=False)
 
 
+# Map-renderable / service formats are fetched fresh client-side (the full file
+# via the proxy) for the Leaflet map. Downloading + truncating them here to
+# _MAX_CONTENT_BYTES only yields invalid/partial inline GeoJSON (a 714 KB file
+# cut at 200 KB is no longer parseable → the map drew a single partial line).
+_GEO_SKIP_FILL = frozenset({"GEOJSON", "KML", "WMS", "WFS", "WCS"})
+
+
 async def fill_missing_content(resources: list[Resource]) -> None:
     """Mutate `resources` in place: download text-format entries with content=None."""
     targets = [
         r for r in resources
-        if r.content is None and r.format.upper() in _DOWNLOADABLE_FORMATS
+        if r.content is None
+        and r.format.upper() in _DOWNLOADABLE_FORMATS
+        and r.format.upper() not in _GEO_SKIP_FILL
     ]
     if not targets:
         return
