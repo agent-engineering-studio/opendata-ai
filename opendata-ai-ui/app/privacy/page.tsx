@@ -8,13 +8,14 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  const LAST_UPDATED = "11 giugno 2026";
+  const LAST_UPDATED = "21 giugno 2026";
+  const ISSUES_URL = "https://github.com/agent-engineering-studio/opendata-ai/issues";
 
   return (
     <article className="container py-5" style={{ maxWidth: 880 }}>
       <h1>Privacy policy</h1>
       <p className="text-muted small">
-        Ultimo aggiornamento: {LAST_UPDATED} · Versione 1.0
+        Ultimo aggiornamento: {LAST_UPDATED} · Versione 1.1
       </p>
       <p className="lead">
         Informativa privacy ai sensi degli articoli 13 e 14 del Regolamento UE
@@ -26,8 +27,19 @@ export default function Page() {
         <strong>Natura sperimentale del servizio.</strong> OpenData AI è un
         progetto di ricerca e prototipazione. Non è destinato a un uso
         produttivo critico né al trattamento di dati personali di terzi. Se
-        intendi usare il servizio professionalmente, contattaci prima
-        all&apos;indirizzo sotto indicato.
+        intendi usare il servizio professionalmente, contattaci prima tramite
+        il repository GitHub del progetto.
+      </div>
+
+      <div className="alert alert-info" role="note">
+        <strong>Trattiamo solo open data pubblici.</strong> Le fonti
+        interrogate dal servizio sono esclusivamente <em>open data già
+        pubblicati</em> da pubbliche amministrazioni ed enti (portali CKAN,
+        statistiche ufficiali SDMX di ISTAT/Eurostat/OCSE, OpenCoesione, ISPRA,
+        OpenStreetMap): dati pubblici e privi di dati personali. Il servizio
+        <strong> non raccoglie né tratta dati personali di terzi</strong> da
+        queste fonti. Gli unici dati personali trattati sono quelli del tuo
+        account e delle tue interazioni, descritti di seguito.
       </div>
 
       <section className="mt-4">
@@ -35,9 +47,10 @@ export default function Page() {
         <p>
           Il Titolare del trattamento è{" "}
           <strong>Agent Engineering Studio</strong>, con sede operativa in
-          Italia. Contatto per questioni privacy:{" "}
-          <a href="mailto:privacy@agentengineering.it">
-            privacy@agentengineering.it
+          Italia. Per qualunque richiesta o segnalazione in materia di privacy
+          apri una issue sul{" "}
+          <a href={ISSUES_URL} target="_blank" rel="noopener noreferrer">
+            repository GitHub del progetto
           </a>
           . Sito web del Titolare:{" "}
           <a
@@ -53,7 +66,7 @@ export default function Page() {
           Non è stato nominato un Responsabile della protezione dei dati (DPO)
           in quanto il trattamento non rientra nei casi obbligatori
           previsti dall&apos;art. 37 GDPR. Per qualunque comunicazione in
-          materia di protezione dati usa l&apos;indirizzo email sopra.
+          materia di protezione dati usa il canale GitHub indicato sopra.
         </p>
       </section>
 
@@ -315,12 +328,12 @@ export default function Page() {
           </li>
         </ul>
         <p>
-          Per esercitare i diritti scrivi a{" "}
-          <a href="mailto:privacy@agentengineering.it">
-            privacy@agentengineering.it
-          </a>{" "}
-          dall&apos;email associata al tuo account. Risponderemo entro 30
-          giorni come previsto dal GDPR.
+          Per esercitare i diritti apri una issue (anche privata) sul{" "}
+          <a href={ISSUES_URL} target="_blank" rel="noopener noreferrer">
+            repository GitHub del progetto
+          </a>
+          , indicando l&apos;account interessato. Risponderemo entro 30 giorni
+          come previsto dal GDPR.
         </p>
       </section>
 
@@ -380,9 +393,9 @@ export default function Page() {
       <section className="mt-4">
         <h2>10. Modifiche all&apos;informativa</h2>
         <p>
-          Eventuali modifiche sostanziali vengono comunicate via email agli
-          utenti registrati e indicate sopra (data di &ldquo;Ultimo
-          aggiornamento&rdquo; e &ldquo;Versione&rdquo;). Continuare a usare
+          Eventuali modifiche sostanziali vengono segnalate su questa pagina
+          (data di &ldquo;Ultimo aggiornamento&rdquo; e &ldquo;Versione&rdquo;)
+          e nel repository del progetto. Continuare a usare
           il servizio dopo le modifiche costituisce accettazione della
           versione aggiornata.
         </p>
@@ -391,9 +404,9 @@ export default function Page() {
       <section className="mt-4">
         <h2>11. Contatti</h2>
         <p>
-          Domande, richieste o segnalazioni privacy:{" "}
-          <a href="mailto:privacy@agentengineering.it">
-            privacy@agentengineering.it
+          Domande, richieste o segnalazioni privacy: apri una issue sul{" "}
+          <a href={ISSUES_URL} target="_blank" rel="noopener noreferrer">
+            repository GitHub del progetto
           </a>
           . Per tematiche non privacy vedi le{" "}
           <Link href="/note-legali">note legali</Link> e la{" "}

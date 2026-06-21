@@ -163,9 +163,13 @@ export default function Page() {
       <section className="mt-4">
         <h2>8. Contatti</h2>
         <p>
-          Per ogni questione legale o segnalazione scrivi a{" "}
-          <a href="mailto:legal@agentengineering.it">
-            legal@agentengineering.it
+          Per ogni questione legale o segnalazione apri una issue sul{" "}
+          <a
+            href="https://github.com/agent-engineering-studio/opendata-ai/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            repository GitHub del progetto
           </a>
           . Per richieste relative al trattamento dei dati personali vedi la{" "}
           <Link href="/privacy">privacy policy</Link>.
