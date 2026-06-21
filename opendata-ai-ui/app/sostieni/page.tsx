@@ -49,24 +49,62 @@ const CONTRIBUTI = [
     cardClass: "border-primary",
     link: "https://buy.stripe.com/dRm28s5Ce6F602O3kU3oA02", // Stripe Payment Link · Pro €19/mese
   },
+];
+
+// Sponsorizzazioni per enti, associazioni e PA — tagli ANNUALI, attivati su
+// accordo/convenzione (fattura all'ente), non self-serve: il contatto è via
+// issue GitHub. Da Silver in su è inclusa l'API key dell'ente (A2A + MCP).
+const SPONSOR_CONTACT =
+  "https://github.com/agent-engineering-studio/opendata-ai/issues";
+
+const SPONSOR = [
   {
-    badge: "Team / PA",
-    badgeClass: "bg-success",
-    nome: "Enti e redazioni",
-    prezzo: "39",
-    periodo: "/mese",
-    pitch:
-      "Per redazioni, associazioni e pubbliche amministrazioni che adottano il dato come bene comune.",
-    copre: "Copre il server e una parte dei costi variabili dei modelli linguistici.",
+    badge: "Bronze",
+    badgeClass: "bg-secondary",
+    prezzo: "300",
+    pitch: "Per associazioni e piccoli enti che vogliono dare un segnale.",
     voci: [
-      "Quota condivisa e più API key",
-      "Supporto prioritario",
-      "Base per convenzioni, deploy dedicati e formazione",
+      "Logo e nome nel README e nei ringraziamenti",
+      "Newsletter sponsor con gli aggiornamenti del progetto",
     ],
     cardClass: "",
-    link: "https://buy.stripe.com/3cIfZi4ya0gI5n85t23oA03", // Stripe Payment Link · Team/PA €39/mese
+  },
+  {
+    badge: "Silver",
+    badgeClass: "bg-primary",
+    prezzo: "1.000",
+    pitch: "Per enti e redazioni che integrano OpenData AI nei propri strumenti.",
+    voci: [
+      "Tutto ciò che offre Bronze + logo sul sito",
+      "API key dell'ente per A2A e server MCP hosted",
+      "Supporto prioritario",
+    ],
+    cardClass: "border-primary",
+  },
+  {
+    badge: "Gold",
+    badgeClass: "bg-warning text-dark",
+    prezzo: "3.000",
+    pitch: "Per PA e organizzazioni che portano il dato sul territorio.",
+    voci: [
+      "Tutto ciò che offre Silver + deploy/convenzione dedicata",
+      "Formazione e affiancamento sulla cultura del dato",
+      "Co-design di lenti e fonti per il tuo territorio",
+    ],
+    cardClass: "",
   },
 ];
+
+// Partner: alternativa a canone MENSILE alla sponsorizzazione annuale, per enti
+// e associazioni che preferiscono il ricorrente. ~ livello Silver, mensile.
+const PARTNER = {
+  prezzo: "99",
+  voci: [
+    "API key dell'ente per A2A e server MCP hosted",
+    "Logo sul sito e nei ringraziamenti",
+    "Supporto prioritario · disdici quando vuoi",
+  ],
+};
 
 export default function Page() {
   return (
@@ -156,11 +194,11 @@ export default function Page() {
         <div className="container py-5">
           <div className="row">
             <div className="col-lg-8 mx-auto text-center mb-5">
-              <h2 className="mb-3">Scegli il contributo giusto per te</h2>
+              <h2 className="mb-3">Abbonamento per privati</h2>
               <p className="lead text-muted">
-                Tre livelli pensati sul costo reale dell&apos;infrastruttura.
-                Scegli quello più vicino al tuo utilizzo: ogni contributo, anche
-                il più piccolo, fa la differenza.
+                Due livelli pensati sul costo reale dell&apos;infrastruttura, per
+                chi usa OpenData AI come persona. Enti, associazioni e PA:{" "}
+                <a href="#sponsor">diventate sponsor o partner</a>.
               </p>
               <div className="alert alert-info text-start mt-4 mb-0" role="note">
                 <strong>Cosa sblocca l&apos;abbonamento.</strong> Con un piano attivo le
@@ -172,7 +210,7 @@ export default function Page() {
               </div>
             </div>
           </div>
-          <div className="row g-4">
+          <div className="row g-4 justify-content-center">
             {CONTRIBUTI.map((c) => (
               <div className="col-lg-4" key={c.nome}>
                 <div className={`card h-100 shadow-sm ${c.cardClass}`}>
@@ -212,19 +250,101 @@ export default function Page() {
         </div>
       </section>
 
-      {/* SPONSOR & CONVENZIONI */}
-      <section className="container py-5">
+      {/* SPONSOR (enti / associazioni / PA) — tagli annuali */}
+      <section id="sponsor" className="container py-5">
         <div className="row">
-          <div className="col-lg-8 mx-auto text-center">
+          <div className="col-lg-8 mx-auto text-center mb-5">
             <h2 className="mb-3">Sei un ente, un&apos;associazione o una PA?</h2>
-            <p className="lead text-muted mb-4">
-              Oltre ai contributi mensili, sosteniamo il progetto con
-              sponsorizzazioni open source, bandi e convenzioni: deploy dedicati,
-              formazione e affiancamento sulla cultura del dato, per portare
-              OpenData AI sul tuo territorio.
+            <p className="lead text-muted">
+              Le organizzazioni sostengono OpenData AI come <strong>sponsor</strong>,
+              con un contributo annuale. Tiene il progetto aperto e indipendente e,
+              dal livello Silver, include un&apos;<strong>API key dell&apos;ente</strong>{" "}
+              per integrare A2A e i server MCP hosted (vedi la{" "}
+              <Link href="/docs">documentazione</Link>).
             </p>
           </div>
         </div>
+        <div className="row g-4 justify-content-center">
+          {SPONSOR.map((s) => (
+            <div className="col-lg-4" key={s.badge}>
+              <div className={`card h-100 shadow-sm ${s.cardClass}`}>
+                <div className="card-body d-flex flex-column">
+                  <span className={`badge ${s.badgeClass} align-self-start mb-2`}>
+                    {s.badge}
+                  </span>
+                  <p className="mb-2">
+                    <span className="display-6 fw-bold">{s.prezzo} €</span>
+                    <span className="text-muted">/anno</span>
+                  </p>
+                  <p className="text-muted small">{s.pitch}</p>
+                  <ul className="small text-muted">
+                    {s.voci.map((v) => (
+                      <li key={v}>{v}</li>
+                    ))}
+                  </ul>
+                  <a
+                    href={SPONSOR_CONTACT}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`btn mt-auto ${s.cardClass ? "btn-primary" : "btn-outline-primary"}`}
+                  >
+                    Diventa sponsor {s.badge}
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* PARTNER — canone mensile per enti/associazioni */}
+        <div className="row mt-4">
+          <div className="col-lg-10 mx-auto">
+            <div className="card border-primary shadow-sm">
+              <div className="card-body">
+                <div className="row align-items-center g-3">
+                  <div className="col-md-8">
+                    <span className="badge bg-primary mb-2">Partner · canone mensile</span>
+                    <h3 className="h5 mb-2">
+                      Preferisci un canone mensile invece dello sponsor annuale?
+                    </h3>
+                    <p className="text-muted small mb-2">
+                      Per enti, associazioni e realtà simili che preferiscono il
+                      ricorrente: stessi vantaggi del livello Silver, mese per mese.
+                    </p>
+                    <ul className="small text-muted mb-0">
+                      {PARTNER.voci.map((v) => (
+                        <li key={v}>{v}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="col-md-4 text-md-end">
+                    <p className="mb-2">
+                      <span className="display-6 fw-bold">{PARTNER.prezzo} €</span>
+                      <span className="text-muted">/mese</span>
+                    </p>
+                    <a
+                      href={SPONSOR_CONTACT}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary"
+                    >
+                      Diventa partner
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center text-muted small mt-4 mb-0">
+          Sponsorizzazioni e partnership sono attivate su accordo/convenzione
+          (fattura all&apos;ente): scrivici aprendo una issue sul{" "}
+          <a href={SPONSOR_CONTACT} target="_blank" rel="noopener noreferrer">
+            repository GitHub
+          </a>{" "}
+          per concordare i dettagli.
+        </p>
       </section>
 
       {/* CTA */}
@@ -237,13 +357,8 @@ export default function Page() {
             indipendente. Scegli come dare una mano.
           </p>
           <div className="d-flex flex-wrap justify-content-center align-items-center gap-3">
-            <a
-              href={GITHUB_SPONSORS}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-light btn-lg"
-            >
-              Diventa sponsor
+            <a href="#sponsor" className="btn btn-light btn-lg">
+              Diventa sponsor o partner
             </a>
             <Link href="/docs" className="btn btn-outline-light btn-lg">
               Scopri il progetto
