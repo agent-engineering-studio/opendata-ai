@@ -25,6 +25,7 @@ from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types.a2a_pb2 import TaskState
 
+from ..factory import DATASET_SOURCES
 from ..orchestrator.parsing import (
     fill_missing_content,
     parse_agent_reply,
@@ -133,7 +134,9 @@ class OpenDataAgentExecutor(AgentExecutor):
 
         wrapped = _wrap_query(query, prefer_geo=prefer_geo)
         try:
-            async for ev in sess.run_streaming(wrapped):
+            # Same dataset-search scoping as /esplora: CKAN + SDMX only, not the
+            # full territorio fan-out (faster, no web/funding/hazard noise).
+            async for ev in sess.run_streaming(wrapped, sources=DATASET_SOURCES):
                 kind = ev.get("event")
                 if kind == "status":
                     src = ev.get("source", "?")

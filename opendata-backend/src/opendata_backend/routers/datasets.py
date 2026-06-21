@@ -30,6 +30,7 @@ from ..classify import classify_dataset
 from ..classify.anthropic_client import Classifier
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
+from ..factory import DATASET_SOURCES as _DATASET_SOURCES
 from ..llm_access import LLMAccess, acquire_orchestrator, require_llm_access
 from ..orchestrator.parsing import (
     Resource,
@@ -92,14 +93,6 @@ class ClassifyResponse(BaseModel):
     scores: dict[str, float]
     model: str
     cached: bool
-
-
-# /esplora is dataset search, not the territorio profile. Scope the fan-out to
-# the dataset/statistics sources (CKAN + SDMX family) and leave funding (OpenCoesione),
-# hazard (ISPRA), OSM profiles and web/searxng to /territorio. Fewer sources =
-# faster, no web noise, and CKAN isn't crowded out / timed out (the regression
-# where the map went empty). eurostat/oecd are opt-in; harmless if disabled.
-_DATASET_SOURCES = {"ckan", "istat", "eurostat", "oecd"}
 
 
 _MAP_MODE_HINT = (

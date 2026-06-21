@@ -61,6 +61,13 @@ from .orchestrator.workflow import build_workflow
 
 log = logging.getLogger("orchestrator.factory")
 
+# Dataset-search source set: CKAN + the SDMX family (ISTAT/Eurostat/OECD). Used to
+# scope the fan-out for "find me the data" entry points (the /esplora route AND
+# the A2A search/geo skills) so they don't drag in OpenCoesione/ISPRA/OSM/web —
+# those belong to the /territorio profile. Single source of truth, passed as
+# `sources=` to run_streaming. eurostat/oecd are opt-in; harmless if disabled.
+DATASET_SOURCES = frozenset({"ckan", "istat", "eurostat", "oecd"})
+
 # Upstream sources for the best-effort lenses (Overpass, Nominatim, ISTAT SDMX) are
 # routinely unreachable, throttled or slow — that is an expected operating
 # condition, not a bug. We log those at WARNING as a single line (the lens is just
