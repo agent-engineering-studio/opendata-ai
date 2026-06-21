@@ -58,13 +58,21 @@ del contenuto la stessa risorsa si può visualizzare in tre modi:
 
 ## Supported open data sources
 
-| Source | Endpoint | What we fetch | Tool |
-|---|---|---|---|
-| **CKAN** (any portal) | `<portal>/api/3/action/*` | datasets, resources, file content (CSV/JSON/GeoJSON/TXT) | `ckan-mcp-server` (11 tools) |
-| **ISTAT** | `esploradati.istat.it/SDMXWS/rest` | dataflows, DSDs, codelists, observations (SDMX-CSV) | `istat-mcp-server` (9 tools, agency `IT1`) |
-| **Eurostat** *(opt-in)* | `ec.europa.eu/eurostat/api/dissemination/sdmx/2.1` | same as ISTAT | `istat-mcp-server` (agency `ESTAT`) |
-| **OECD** *(opt-in)* | `sdmx.oecd.org/public/rest` | same as ISTAT | `istat-mcp-server` (agency `all`) |
-| **OpenStreetMap** *(render-only)* | `nominatim/overpass/osrm` | renders GeoJSON layers into Leaflet HTML | `osm-mcp` |
+- **CKAN** (any portal) — `ckan-mcp-server` (11 tools)
+  - Endpoint: `<portal>/api/3/action/*`
+  - Fetch: datasets, resources, file content (CSV/JSON/GeoJSON/TXT)
+- **ISTAT** — `istat-mcp-server` (9 tools, agency `IT1`)
+  - Endpoint: `esploradati.istat.it/SDMXWS/rest`
+  - Fetch: dataflows, DSDs, codelists, observations (SDMX-CSV)
+- **Eurostat** *(opt-in)* — `istat-mcp-server` (agency `ESTAT`)
+  - Endpoint: `ec.europa.eu/eurostat/api/dissemination/sdmx/2.1`
+  - Fetch: same as ISTAT (SDMX 2.1)
+- **OECD** *(opt-in)* — `istat-mcp-server` (agency `all`)
+  - Endpoint: `sdmx.oecd.org/public/rest`
+  - Fetch: same as ISTAT (SDMX 2.1)
+- **OpenStreetMap** *(render-only)* — `osm-mcp`
+  - Endpoint: `nominatim` / `overpass` / `osrm`
+  - Fetch: renders GeoJSON layers into Leaflet HTML
 
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
