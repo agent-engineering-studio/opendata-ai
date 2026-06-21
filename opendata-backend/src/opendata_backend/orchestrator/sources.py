@@ -19,8 +19,13 @@ import re
 from urllib.parse import urlparse
 
 # Fonti note → pagina-portale riconoscibile (mai un file/API in profondità).
+# Sotto-domini ISTAT PRIMA del generico istat.it: sono prodotti distinti (la lista
+# Fonti li deduplica per href, quindi un href comune li collasserebbe in uno solo —
+# 8milaCensus sparirebbe sotto "ISTAT"). L'ordine conta: il match è first-win.
 _PORTALS: tuple[tuple[str, str, str], ...] = (
     ("isprambiente.it", "https://idrogeo.isprambiente.it/", "ISPRA IdroGEO"),
+    ("ottomilacensus.istat.it", "https://ottomilacensus.istat.it/", "ISTAT 8milaCensus"),
+    ("esploradati.istat.it", "https://esploradati.istat.it/", "ISTAT — esploradati (SDMX)"),
     ("istat.it", "https://www.istat.it/", "ISTAT"),
     ("dati.gov.it", "https://www.dati.gov.it/", "dati.gov.it"),
     ("ec.europa.eu", "https://ec.europa.eu/eurostat", "Eurostat"),

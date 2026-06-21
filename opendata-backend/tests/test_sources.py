@@ -25,10 +25,10 @@ def test_file_and_api_collapse_to_origin() -> None:
 def test_known_portals_map_to_landing() -> None:
     assert resolve_source_url(
         "https://esploradati.istat.it/SDMXWS/rest/data/22_289/all"
-    ) == ("https://www.istat.it/", "ISTAT")
+    ) == ("https://esploradati.istat.it/", "ISTAT — esploradati (SDMX)")
     assert resolve_source_url(
         "https://ottomilacensus.istat.it/fileadmin/download/x.csv"
-    ) == ("https://www.istat.it/", "ISTAT")
+    ) == ("https://ottomilacensus.istat.it/", "ISTAT 8milaCensus")
 
 
 def test_opencoesione_project_page_is_kept() -> None:

@@ -165,7 +165,7 @@ async def test_happy_path_builds_validated_response() -> None:
     assert resp.proposte[0].fattibilita.livello == "da_verificare"
     # citazioni display-clean: file/API → sito di origine (mai il link profondo).
     assert {r.url for r in resp.citazioni} == {
-        "https://opencoesione.gov.it/", "https://www.istat.it/"
+        "https://opencoesione.gov.it/", "https://esploradati.istat.it/"
     }
     assert resp.disclaimer
     # Il wrapper espone anche il JSON serializzato per events.get_outputs().
@@ -531,8 +531,8 @@ async def test_commercio_info_injects_citable_istat_anchor() -> None:
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["commercio_duc"]
     # la fonte ISTAT ASIA è citabile (validata sull'URL grezzo) e in display
-    # compare come sito di origine ISTAT (mai il link SDMX profondo).
-    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
+    # compare come portale esploradati SDMX (mai il link SDMX profondo).
+    assert any(r.url == "https://esploradati.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -631,8 +631,8 @@ async def test_turismo_info_injects_citable_istat_ricettivita_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["turismo_cultura"]
-    # ricettività ISTAT in display = sito di origine ISTAT (mai il link SDMX).
-    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
+    # ricettività ISTAT in display = portale esploradati SDMX (mai il link SDMX).
+    assert any(r.url == "https://esploradati.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -690,8 +690,8 @@ async def test_lavoro_info_injects_citable_census_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["lavoro"]
-    # 8milaCensus in display = sito di origine ISTAT (mai il CSV profondo).
-    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
+    # 8milaCensus in display = portale 8milaCensus (mai il CSV profondo).
+    assert any(r.url == "https://ottomilacensus.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -814,8 +814,8 @@ async def test_welfare_info_injects_citable_istat_anchor() -> None:
     resp = (await aggregate(parts)).response
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["welfare"]
-    # display-clean: la fonte ISTAT compare come sito di origine (mai il link SDMX).
-    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)
+    # display-clean: la fonte ISTAT compare come portale esploradati (mai il link SDMX).
+    assert any(r.url == "https://esploradati.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio
@@ -852,8 +852,8 @@ async def test_welfare_info_social_investments_are_citable() -> None:
     )
     resp = (await aggregate(parts)).response
     assert resp is not None
-    # display-clean: ISTAT → sito di origine; OpenCoesione aggregati → homepage.
-    assert any(r.url == "https://www.istat.it/" for r in resp.citazioni)       # ancora ISTAT
+    # display-clean: ISTAT → portale esploradati; OpenCoesione aggregati → homepage.
+    assert any(r.url == "https://esploradati.istat.it/" for r in resp.citazioni)  # ancora ISTAT
     assert any(r.url == "https://opencoesione.gov.it/" for r in resp.citazioni)  # OpenCoesione
 
 
