@@ -115,6 +115,13 @@ esportabili come **sito civico** statico e autoconsistente, con accountability d
 valore⇄maturità**: i gap di dato emersi dai report penalizzano la dimensione
 *Impatto* dell'ente e si traducono in "domanda di riuso non soddisfatta".
 
+**Export.** Ogni analisi generata può essere esportata in tre formati: **PDF**
+(documento da condividere o stampare), **Markdown** (testo riusabile in altri
+strumenti) e **sito** (sito civico statico e autoconsistente). L'export riporta
+il comune (ISTAT) e la data/ora di generazione, così la versione resta tracciabile.
+
+![Territorio — intestazione dell'analisi con i pulsanti Esporta PDF / Markdown / sito](docs/assets/territorio-export.png)
+
 **A cosa serve / per chi.** Trasforma il patrimonio open data in materiale
 decisionale: amministratori e uffici tecnici che pianificano interventi,
 associazioni e comitati che vogliono un quadro neutro e citabile, giornalisti che
