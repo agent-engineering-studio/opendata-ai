@@ -193,43 +193,11 @@ dedicato per ciascuno:
 | **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
 | **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
 
-> Materiale di comunicazione (descrizioni brevi + bozze post social) per i server
-> MCP: **[`docs/mcp-social-kit.md`](docs/mcp-social-kit.md)**.
-
 ## Infrastructure
 
-```
-┌─────────────────────────┐                    ┌──────────────────────────────┐
-│ GitHub Pages            │                    │ Aruba VPS — Caddy 2 (TLS)    │
-│ opendata.<domain>       │  HTTPS+Clerk JWT   │                              │
-│ Next.js 15 static export│ ─────────────────▶ │ opendata-backend (FastAPI)   │
-└─────────────────────────┘                    │   • /datasets/{search,…}     │
-                                               │   • /me/{favorites,history}  │
-       │ login: Clerk app                      │   • /api-keys/generate       │
-       │ app_3EMALiLi0UTULl89JPMKtaLENoy       │   • /datasets/classify       │
-       │                                       │   • /webhooks/clerk (svix)   │
-       ▼                                       │                              │
-┌──────────────┐                               └──────────────┬───────────────┘
-│ Clerk.com    │ ◀── webhooks ────────────────────────────────┘   │
-└──────────────┘                                                  │ fan-out
-                                                                  ▼
-                                  ┌─────────────┬────────────┬────────────┐
-                                  │ ckan-mcp    │ istat-mcp  │ osm-mcp    │
-                                  │ (HTTP/MCP)  │ (HTTP/MCP) │ (HTTP/MCP) │
-                                  └──────┬──────┴────────────┴────────────┘
-                                         │
-                       ┌─────────────────┴─────────────────┐
-                       ▼                                   ▼
-              ┌────────────────┐                  ┌────────────────┐
-              │ Postgres 16    │                  │ Redis 7        │
-              │ opendata.*     │                  │ db=1 cache+RL  │
-              └────────────────┘                  └────────────────┘
-
-                                ┌──────────────┐
-                                │ Anthropic    │  Sonnet 4.6 (synth)
-                                │ Claude API   │  Haiku 4.5 (classify)
-                                └──────────────┘
-```
+<p align="center">
+  <img src="docs/infrastructure.svg" alt="OpenData AI — architettura runtime: frontend statico su GitHub Pages, backend FastAPI su VPS Aruba, auth Clerk, fan-out sui server MCP, storage Postgres + Redis e Claude per synth/classify" width="900">
+</p>
 
 | Component | Stack |
 |---|---|
