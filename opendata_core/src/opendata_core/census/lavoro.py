@@ -116,7 +116,12 @@ async def _load_region_index(
     hdr = [h.strip() for h in rows[0]]
     i_anno = hdr.index("AnnoCP")
     i_com = hdr.index("Codice comune 2011")
-    l_idx = {h: i for i, h in enumerate(hdr) if h.startswith("L") and h[1:].isdigit()}
+    # Tieni TUTTI i codici indicatore (P=popolazione, L=lavoro, …): l'indice è
+    # condiviso tra le lenti census (lavoro legge i suoi L, welfare i suoi P).
+    l_idx = {
+        h: i for i, h in enumerate(hdr)
+        if len(h) >= 2 and h[0].isalpha() and h[1:].isdigit()
+    }
     index: dict[int, dict[str, str]] = {}
     for r in rows[1:]:
         if len(r) <= i_com or r[i_anno].strip() != _CENSUS_YEAR:

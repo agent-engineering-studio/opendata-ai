@@ -618,3 +618,23 @@ async def test_aggregator_streams_synth_tokens_via_emit() -> None:
     assert all(e["source"] == "synth" for e in thinking)
     # The assembled narrative still lands in the final text.
     assert "CKAN" in out.text
+
+
+def test_is_placeholder_url_rejects_hallucinated_uuid() -> None:
+    from opendata_backend.orchestrator.synth import _is_placeholder_url
+
+    # fabricated: UUID-shaped but non-hex (the model invented it) → would 404
+    assert _is_placeholder_url(
+        "https://www.dati.gov.it/dataset/x/resource/12345678-90ab-cdef-ghij-klmnopqrstuv"
+    )
+    # sequential 12345678-… giveaway, even if otherwise hex
+    assert _is_placeholder_url("https://x/resource/12345678-0000-0000-0000-000000000000")
+    # real hex UUIDs (dataset + resource) → kept
+    assert not _is_placeholder_url(
+        "https://dati.emilia-romagna.it/dataset/88e68bfb-ccf1-4252-8b73-376370523329/"
+        "resource/7db57d38-dd50-4669-a4b1-cde16218b831/download/x.zip"
+    )
+    # plain resolvable url → kept
+    assert not _is_placeholder_url(
+        "http://dati.cittametropolitana.bo.it/Engine/SIT_PMC_ARCHI.zip"
+    )

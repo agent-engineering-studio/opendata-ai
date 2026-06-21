@@ -43,7 +43,6 @@ function GitHubIcon({ className = "h-4 w-4" }: { className?: string }) {
 const FOOTER_LINKS: { href: string; label: string; external?: boolean }[] = [
   { href: "/docs", label: "Documentazione" },
   { href: "/guida-open-data", label: "Guida open data" },
-  { href: "/usecases", label: "Casi d'uso" },
   { href: "/sostieni", label: "Sostieni" },
   { href: "/privacy", label: "Privacy" },
   { href: "/note-legali", label: "Note legali" },

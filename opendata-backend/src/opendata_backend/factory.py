@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator
@@ -447,6 +448,15 @@ class OrchestratorSession:
             "temperature": 0.0,
             "max_tokens": s.synth_max_tokens,
         }
+        # Le IDEE (e il marketing) vogliono VARIETÀ: a temperature 0 il modello
+        # emette ogni volta l'intervento più ovvio per ogni lente (turismo→posti
+        # letto, lavoro→NEET, commercio→DUC) → idee tutte uguali. Una temperatura
+        # moderata sblocca originalità restando ancorata alle evidenze; il
+        # programma (SWOT/JSON) resta a 0 per il determinismo della sintassi.
+        idee_options: dict[str, object] = {
+            **synth_options,
+            "temperature": float(os.getenv("IDEE_TEMPERATURE", "0.5")),
+        }
 
         synth_agent = await self._enter_agent(
             chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, synth_options,
@@ -473,12 +483,12 @@ class OrchestratorSession:
             # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
             self._idee_agent = await self._enter_agent(
                 programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
-                None, synth_options,
+                None, idee_options,
             )
             # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
             self._marketing_agent = await self._enter_agent(
                 programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
-                None, synth_options,
+                None, idee_options,
             )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
@@ -804,17 +814,19 @@ class OrchestratorSession:
     @staticmethod
     async def _resolve_welfare_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora WELFARE/COESIONE SOCIALE deterministica: indici demografici di
-        fragilità del comune da ISTAT DCIS_POPRES1 (popolazione residente per età).
-        Indice di vecchiaia, dipendenza anziani/strutturale, % over-65/under-15 —
-        misurano il carico sui servizi socio-assistenziali. Arricchita (best-effort)
-        con gli investimenti OpenCoesione del tema 'inclusione-sociale' del comune,
-        così un'idea welfare ha anche il lato finanziamento citabile. L'ancora PRIMARIA
-        resta ISTAT: se manca, la lente si salta (non si inventa). Solo idee/completa.
+        fragilità del comune da ISTAT 8milaCensus (struttura della popolazione,
+        Censimento 2011) — l'unica fonte realmente COMUNALE (DCIS_POPRES1 copre solo
+        Italia/regioni/province). Indice di vecchiaia, dipendenza anziani/giovanile/
+        strutturale, % 75+ — misurano il carico sui servizi socio-assistenziali.
+        Arricchita (best-effort) con gli investimenti OpenCoesione del tema
+        'inclusione-sociale' del comune, così un'idea welfare ha anche il lato
+        finanziamento citabile. Se l'ancora manca, la lente si salta (non si
+        inventa). Solo idee/completa.
         """
         if req.modalita not in ("idee", "completa"):
             return None
         try:
-            from opendata_core.sdmx import fetch_welfare_comune
+            from opendata_core.census import fetch_welfare_comune
 
             res = await asyncio.wait_for(
                 fetch_welfare_comune(req.cod_comune), timeout=30.0

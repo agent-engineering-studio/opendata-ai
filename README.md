@@ -26,45 +26,152 @@ accountability di community, e un **anello valore⇄maturità** (i gap di dato
 penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
 modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
 
-### Maturità open data (modello ODM 2025)
+## Le tre modalità: Esplora · Territorio · Maturità
 
-![Maturità open data — scorecard ODM 2025 con radar delle 4 dimensioni e leve di miglioramento](docs/assets/maturita.png)
+La navbar dell'applicazione corrisponde a tre modalità d'uso, costruite l'una
+sull'altra: si **esplora** il dato grezzo, lo si trasforma in uno **studio del
+territorio** azionabile, e si misura quanto bene un ente **pubblica e mantiene**
+quel dato. Esplora è l'accesso conversazionale alle fonti; Territorio e Maturità
+sono le due lenti del *capability layer* che danno valore e accountability al
+patrimonio informativo.
 
-Scorecard 0–100 di un ente su quattro dimensioni — **Policy, Portale, Qualità,
-Impatto** — con livello (Beginner → Follower → Fast-tracker → Trend-setter),
-radar delle dimensioni e leve di miglioramento ordinate per impatto sul
-punteggio. Sotto la soglia minima di dati dichiara *"dato insufficiente"*
-invece di assegnare punteggi fuorvianti.
+---
 
-## Esplora — tabelle, grafici e mappa
-
-La modalità **Esplora** fa il fan-out della domanda su CKAN + SDMX, sintetizza
-una risposta e mostra ogni risorsa trovata con un'anteprima dei dati. A seconda
-del contenuto la stessa risorsa si può visualizzare in tre modi:
+### 1. Esplora — esplorazione conversazionale dei dati
 
 ![Esplora — anteprima tabellare e risorse trovate](docs/assets/esplora-tabella.png)
 
+**Cos'è.** Una chat che traduce una domanda in linguaggio naturale (es.
+*"piste ciclabili a Bologna"*, *"tasso di disoccupazione 2018–2023"*) in
+interrogazioni concrete sui portali open data, e restituisce sia una sintesi
+testuale sia le **risorse effettivamente trovate**, ciascuna con un'anteprima
+navigabile.
+
+**Come funziona.** La domanda viene fatta **fan-out** in parallelo su più fonti
+— portali **CKAN** (`dati.gov.it`, regionali/comunali, e portali esteri) e
+provider statistici **SDMX** (ISTAT, opzionalmente Eurostat/OECD). Le risposte
+parziali e la sintesi finale arrivano **in streaming**. La sintesi è protetta da
+*guardrail anti-allucinazione*: niente segnaposto inventati, e gli URL delle
+risorse vengono verificati invece di essere fabbricati, con una rete di sicurezza
+deterministica che fa sempre emergere i dati pubblici realmente esistenti. Ogni
+risorsa può inoltre riportare una **value card** (valore del dato secondo
+l'art. 14 della Dir. UE 2019/1024).
+
+La stessa risorsa si visualizza in tre modi, a seconda del contenuto:
+
 - **Tabella** — dati tabellari (CSV/JSON da CKAN, osservazioni SDMX-CSV da
   ISTAT/Eurostat/OECD) con righe, colonne e tipi rilevati automaticamente. Sopra
-  l'anteprima compaiono il numero di righe/colonne e quali colonne sono numeriche.
+  l'anteprima compaiono numero di righe/colonne e quali colonne sono numeriche.
 
-![Esplora — grafico a barre raggruppato per dimensione, con misure selezionabili](docs/assets/esplora-grafico.png)
+  ![Esplora — grafico a barre raggruppato per dimensione, con misure selezionabili](docs/assets/esplora-grafico.png)
 
 - **Grafico** — le colonne numeriche diventano serie selezionabili, raggruppate
   per una dimensione a scelta (es. *PROVINCE*); per i dataset grandi mostra le
-  prime 30 categorie per somma decrescente.
-- **Mappa** — le risorse geografiche (GeoJSON) vengono rese su una mappa
-  Leaflet+OSM; le risorse non geografiche restano disponibili come tabella/grafico.
+  prime 30 categorie per somma decrescente. Utile per leggere subito un trend o
+  un confronto senza scaricare il file.
+- **Mappa** — le risorse geografiche (**GeoJSON, KML, SHP, ZIP**) vengono rese
+  come **layer distinti** su una mappa Leaflet+OSM, attivabili/disattivabili dal
+  selettore in alto a destra; le risorse non geografiche restano disponibili come
+  tabella/grafico.
+
+  ![Esplora — più layer geografici (GeoJSON/KML/SHP) sovrapposti sulla mappa, con selettore dei layer](docs/assets/esplora-mappa-geo.png)
+
+**A cosa serve / per chi.** È il punto d'ingresso per chiunque debba *trovare e
+capire* un dato senza conoscere API, formati o portali: giornalisti e data
+analyst che cercano una fonte ufficiale citabile, sviluppatori che vogliono
+individuare in fretta il dataset giusto da integrare, funzionari e cittadini che
+vogliono una risposta documentata. Sostituisce ore di ricerca manuale su decine
+di cataloghi eterogenei con un'unica domanda.
+
+---
+
+### 2. Territorio — studio evidence-based di un comune
+
+![Territorio — studio del comune con confine amministrativo su mappa](docs/assets/territorio-studio.png)
+
+**Cos'è.** Un'**analisi completa di un comune** generata a partire dai soli dati
+pubblici. Si seleziona il comune (risolto via ISTAT — es. *Gioia del Colle,
+ISTAT 072021* — con il confine amministrativo mostrato sulla mappa) e,
+opzionalmente, un **tema** (es. energia, trasporti) che mira l'analisi nelle
+città grandi; senza tema l'analisi si concentra sugli ambiti a maggiore dotazione
+di dati.
+
+**Cosa produce.** Un report strutturato e azionabile: **quadro di sintesi**,
+analisi **SWOT**, **proposte concrete**, e **idee nuove** ricavate dal
+**confronto con territori simili**. L'analisi tematica passa per **lenti**
+dedicate — *Commercio, Turismo, Lavoro, Trasporti, Welfare* — ciascuna ancorata a
+fonti specifiche (es. ISTAT ASIA per il commercio, indicatori di inclusione e
+**investimenti OpenCoesione** per il welfare). Le zone interne sono individuate
+via tag OpenStreetMap.
+
+**Affidabilità e accountability.** Ogni affermazione è **evidence-based**,
+ancorata a fonti pubbliche verificabili — *non è materiale elettorale*. Sotto la
+soglia minima di dati l'analisi dichiara *"dato insufficiente"* invece di
+produrre numeri fuorvianti, e tutto ciò che usa fonti live è **fail-safe**. I
+report sono **versionati** (snapshot non sovrascritti, con diff tra versioni) ed
+esportabili come **sito civico** statico e autoconsistente, con accountability di
+**community** (check-in). Un avviso segnala che i dati pubblici possono essere
+**disallineati** per ritardi burocratici. Vale infine l'**anello
+valore⇄maturità**: i gap di dato emersi dai report penalizzano la dimensione
+*Impatto* dell'ente e si traducono in "domanda di riuso non soddisfatta".
+
+**Export.** Ogni analisi generata può essere esportata in tre formati: **PDF**
+(documento da condividere o stampare), **Markdown** (testo riusabile in altri
+strumenti) e **sito** (sito civico statico e autoconsistente). L'export riporta
+il comune (ISTAT) e la data/ora di generazione, così la versione resta tracciabile.
+
+![Territorio — intestazione dell'analisi con i pulsanti Esporta PDF / Markdown / sito](docs/assets/territorio-export.png)
+
+**A cosa serve / per chi.** Trasforma il patrimonio open data in materiale
+decisionale: amministratori e uffici tecnici che pianificano interventi,
+associazioni e comitati che vogliono un quadro neutro e citabile, giornalisti che
+documentano un territorio, consulenti e ricercatori che confrontano comuni
+simili. È il ponte tra "il dato esiste" e "il dato serve a decidere".
+
+---
+
+### 3. Maturità — scorecard open data dell'ente (ODM 2025)
+
+![Maturità open data — scorecard ODM 2025 con radar delle 4 dimensioni e leve di miglioramento](docs/assets/maturita.png)
+
+**Cos'è.** Una **scorecard 0–100** che misura quanto bene un ente *pubblica e
+mantiene* i propri dati aperti, secondo il modello **Open Data Maturity (ODM)
+2025**.
+
+**Cosa misura.** Il punteggio si compone su quattro dimensioni — **Policy,
+Portale, Qualità, Impatto** — alimentate da standard riconosciuti (modello
+**5-star** di Berners-Lee, principi **FAIR**, **DCAT-AP_IT**, **ISO 25012**,
+**High-Value Datasets**). All'ente è assegnato un **livello** (Beginner →
+Follower → Fast-tracker → Trend-setter) ed è mostrato un **radar** delle quattro
+dimensioni con le **leve di miglioramento** ordinate per impatto sul punteggio —
+così l'ente sa *cosa cambiare per primo* per salire di livello. Sotto la soglia
+minima di dati dichiara *"dato insufficiente"* invece di assegnare punteggi
+fuorvianti. La scorecard è **esportabile** (CSV, e PNG/PDF della scheda).
+
+**A cosa serve / per chi.** È lo strumento del **Responsabile per la Transizione
+Digitale (RTD)** e dell'open data manager: dà una fotografia oggettiva e
+comparabile dello stato di pubblicazione, evidenzia le priorità d'azione, e
+permette **benchmarking** tra enti e nel tempo. Per chi riusa i dati è un segnale
+di affidabilità della fonte; per chi li pubblica, una roadmap concreta di
+miglioramento.
 
 ## Supported open data sources
 
-| Source | Endpoint | What we fetch | Tool |
-|---|---|---|---|
-| **CKAN** (any portal) | `<portal>/api/3/action/*` | datasets, resources, file content (CSV/JSON/GeoJSON/TXT) | `ckan-mcp-server` (11 tools) |
-| **ISTAT** | `esploradati.istat.it/SDMXWS/rest` | dataflows, DSDs, codelists, observations (SDMX-CSV) | `istat-mcp-server` (9 tools, agency `IT1`) |
-| **Eurostat** *(opt-in)* | `ec.europa.eu/eurostat/api/dissemination/sdmx/2.1` | same as ISTAT | `istat-mcp-server` (agency `ESTAT`) |
-| **OECD** *(opt-in)* | `sdmx.oecd.org/public/rest` | same as ISTAT | `istat-mcp-server` (agency `all`) |
-| **OpenStreetMap** *(render-only)* | `nominatim/overpass/osrm` | renders GeoJSON layers into Leaflet HTML | `osm-mcp` |
+- **CKAN** (any portal) — `ckan-mcp-server` (11 tools)
+  - Endpoint: `<portal>/api/3/action/*`
+  - Fetch: datasets, resources, file content (CSV/JSON/GeoJSON/TXT)
+- **ISTAT** — `istat-mcp-server` (9 tools, agency `IT1`)
+  - Endpoint: `esploradati.istat.it/SDMXWS/rest`
+  - Fetch: dataflows, DSDs, codelists, observations (SDMX-CSV)
+- **Eurostat** *(opt-in)* — `istat-mcp-server` (agency `ESTAT`)
+  - Endpoint: `ec.europa.eu/eurostat/api/dissemination/sdmx/2.1`
+  - Fetch: same as ISTAT (SDMX 2.1)
+- **OECD** *(opt-in)* — `istat-mcp-server` (agency `all`)
+  - Endpoint: `sdmx.oecd.org/public/rest`
+  - Fetch: same as ISTAT (SDMX 2.1)
+- **OpenStreetMap** *(render-only)* — `osm-mcp`
+  - Endpoint: `nominatim` / `overpass` / `osrm`
+  - Fetch: renders GeoJSON layers into Leaflet HTML
 
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
