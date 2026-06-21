@@ -10,16 +10,17 @@ deterministica, iniettata server-side nell'aggregatore (l'LLM non inventa numeri
 Dataflow: 22_289_DF_DCIS_POPRES1_1 "Popolazione residente per età, sesso, comune"
 (forma breve `22_289`, come ASIA usa `183_285`).
 
-Key (6 dimensioni, TIME fuori dalla key):
-    FREQ.ITTER107.TIPO_DATO15.ETA1.SEXISTAT1.STATCIV2
-→ singolo comune, popolazione al 1° gennaio, tutte le età, totale sesso/stato
-civile: "A.{cod}.JAN..9.99" (ETA1 vuota = tutte le classi).
+Key (6 dimensioni, TIME fuori dalla key) — VERIFICATA LIVE (esploradati IT1):
+    FREQ.REF_AREA.DATA_TYPE.SEX.AGE.MARITAL_STATUS
+→ popolazione al 1° gennaio, tutte le età, totale sesso/stato civile:
+"A.{area}.JAN.9..99" (AGE vuota = tutte le classi). Colonne CSV: AGE / TIME_PERIOD
+/ OBS_VALUE. Codici confermati: DATA_TYPE=JAN, SEX=9 (totale), MARITAL_STATUS=99.
 
-NOTA: la struttura NON è stata verificata live (endpoint ISTAT non raggiungibile
-dalla rete di sviluppo). I codici puntuali (TIPO_DATO15, totali sesso/stato civile)
-sono override-abili via env e il parsing è per NOME COLONNA, non per posizione: se
-un codice è errato la query torna vuota → `trovato=False` ("dato insufficiente"),
-mai numeri falsi. Verifica live in coda su rete con egress verso esploradati.istat.it.
+NOTA: la variante `_1` copre Italia/regioni/province, NON i comuni (REF_AREA
+comunale assente). Per il dato comunale va agganciata via env `POPRES_FLOW_ID` la
+variante comunale di DCIS_POPRES1. Il parsing è per NOME COLONNA, non per
+posizione: se un codice/area non esiste la query torna vuota → `trovato=False`
+("dato insufficiente"), mai numeri falsi.
 """
 
 from __future__ import annotations
@@ -35,9 +36,11 @@ from cachetools import TTLCache
 
 from .client import SdmxClient, data_path
 
-_POPRES_FLOW_ID = os.getenv("POPRES_FLOW_ID", "22_289")
-# Codici CL_* (override-abili dopo verifica live). TIPO_DATO15 "JAN" = popolazione
-# al 1° gennaio; SEXISTAT1 9 = totale; STATCIV2 99 = totale.
+# La forma corta "22_289" 404a: serve l'id pieno della variante. `_1` risolve
+# (Italia/regioni/province); la variante comunale va impostata via env.
+_POPRES_FLOW_ID = os.getenv("POPRES_FLOW_ID", "22_289_DF_DCIS_POPRES1_1")
+# Codici CL_* VERIFICATI LIVE. DATA_TYPE "JAN" = popolazione al 1° gennaio;
+# SEX 9 = totale; MARITAL_STATUS 99 = totale.
 _POPRES_TIPO_DATO = os.getenv("POPRES_TIPO_DATO", "JAN")
 _POPRES_SEX_TOTAL = os.getenv("POPRES_SEX_TOTAL", "9")
 _POPRES_STATCIV_TOTAL = os.getenv("POPRES_STATCIV_TOTAL", "99")
@@ -92,7 +95,9 @@ def _parse_popres_csv(text: str) -> dict[str, Any]:
     def col(name: str) -> int | None:
         return header.index(name) if name in header else None
 
-    i_eta, i_time, i_obs = col("ETA1"), col("TIME_PERIOD"), col("OBS_VALUE")
+    # Colonna età = "AGE" (DSD reale), non "ETA1"; con fallback per robustezza.
+    i_eta = col("AGE") if col("AGE") is not None else col("ETA1")
+    i_time, i_obs = col("TIME_PERIOD"), col("OBS_VALUE")
     if i_eta is None or i_time is None or i_obs is None:
         return {"anno": None, "per_eta": {}}
 
@@ -172,7 +177,8 @@ async def fetch_welfare_comune(
         return _cache[ck]
 
     start = anno or str(datetime.now(timezone.utc).year - _POPRES_YEARS_BACK)
-    key = f"A.{cod}.{_POPRES_TIPO_DATO}..{_POPRES_SEX_TOTAL}.{_POPRES_STATCIV_TOTAL}"
+    # Ordine reale: FREQ.REF_AREA.DATA_TYPE.SEX.AGE.MARITAL_STATUS → AGE vuota.
+    key = f"A.{cod}.{_POPRES_TIPO_DATO}.{_POPRES_SEX_TOTAL}..{_POPRES_STATCIV_TOTAL}"
     path = data_path(_POPRES_FLOW_ID, key)
     params: dict[str, Any] = {"startPeriod": start, "detail": "dataonly"}
     source_url = f"{base}/{path}?startPeriod={start}"

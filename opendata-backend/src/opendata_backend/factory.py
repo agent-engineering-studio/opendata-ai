@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator
@@ -447,6 +448,15 @@ class OrchestratorSession:
             "temperature": 0.0,
             "max_tokens": s.synth_max_tokens,
         }
+        # Le IDEE (e il marketing) vogliono VARIETÀ: a temperature 0 il modello
+        # emette ogni volta l'intervento più ovvio per ogni lente (turismo→posti
+        # letto, lavoro→NEET, commercio→DUC) → idee tutte uguali. Una temperatura
+        # moderata sblocca originalità restando ancorata alle evidenze; il
+        # programma (SWOT/JSON) resta a 0 per il determinismo della sintassi.
+        idee_options: dict[str, object] = {
+            **synth_options,
+            "temperature": float(os.getenv("IDEE_TEMPERATURE", "0.5")),
+        }
 
         synth_agent = await self._enter_agent(
             chat_client, SYNTH_INSTRUCTIONS, s.synth_agent_name, None, synth_options,
@@ -473,12 +483,12 @@ class OrchestratorSession:
             # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
             self._idee_agent = await self._enter_agent(
                 programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
-                None, synth_options,
+                None, idee_options,
             )
             # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
             self._marketing_agent = await self._enter_agent(
                 programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
-                None, synth_options,
+                None, idee_options,
             )
 
         # Store the building blocks; a FRESH workflow + aggregator are built
