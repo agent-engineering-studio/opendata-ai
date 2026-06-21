@@ -47,3 +47,17 @@ def test_profile_requires_input() -> None:
 def test_profile_unsupported_format() -> None:
     res = _client().post("/quality/profile", json={"content": "x", "format": "xlsx"})
     assert res.status_code == 415
+
+
+def test_fix_content_ok() -> None:
+    client = _client()
+    res = client.post("/quality/fix", json={"content": "a;b\n1.234,5;01/02/2023\n"})
+    assert res.status_code == 200
+    rep = res.json()
+    assert "content" in rep and "changes" in rep
+    assert "1234.5" in rep["content"]      # decimale IT → punto
+    assert "2023-02-01" in rep["content"]  # data gg/mm → ISO
+
+
+def test_fix_requires_input() -> None:
+    assert _client().post("/quality/fix", json={}).status_code == 400

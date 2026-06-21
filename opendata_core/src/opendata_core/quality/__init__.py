@@ -5,6 +5,7 @@ un CSV e restituisce un report (profilo colonne, problemi, punteggio) riusabile
 dal backend (endpoint), da una skill A2A e dalla UI.
 """
 
+from .fix import fix_csv
 from .profile import profile_csv
 
-__all__ = ["profile_csv"]
+__all__ = ["profile_csv", "fix_csv"]

@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from opendata_core.quality import profile_csv
+from opendata_core.quality import fix_csv, profile_csv
 
 from ..auth import ClerkUser
 from ..shared.ratelimit import enforce_rate_limit
@@ -55,16 +55,8 @@ async def _fetch_text(url: str) -> str:
         return raw.decode("utf-8", errors="replace")
 
 
-@router.post("/quality/profile")
-async def quality_profile(
-    body: ProfileIn,
-    user: ClerkUser = Depends(enforce_rate_limit),
-) -> dict:
-    """Profila/diagnostica un CSV: passa `content` (testo) oppure `url`.
-
-    Ritorna il report di `profile_csv` (separatore, profilo colonne, findings,
-    punteggio). Nessun numero inventato: solo ciò che si misura sul file.
-    """
+async def _resolve_input(body: ProfileIn) -> str:
+    """Valida il formato e risolve il testo CSV da `content` o `url`. Solleva 400/415."""
     fmt = (body.format or "csv").lower()
     if fmt not in _CSV_FORMATS:
         raise HTTPException(
@@ -76,9 +68,40 @@ async def quality_profile(
         text = await _fetch_text(body.url)
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Fornisci `content` (CSV) oppure un `url` valido.")
+    return text
 
+
+@router.post("/quality/profile")
+async def quality_profile(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Profila/diagnostica un CSV: passa `content` (testo) oppure `url`.
+
+    Ritorna il report di `profile_csv` (separatore, profilo colonne, findings,
+    punteggio). Nessun numero inventato: solo ciò che si misura sul file.
+    """
+    text = await _resolve_input(body)
     log.info(
         "/quality/profile subject=%s source=%s chars=%d",
         user.subject, "url" if body.url else "content", len(text),
     )
     return profile_csv(text)
+
+
+@router.post("/quality/fix")
+async def quality_fix(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Restituisce la versione CORRETTA del CSV + l'elenco delle modifiche.
+
+    Solo correzioni sicure e deterministiche (BOM, intestazioni, spazi, date ISO,
+    decimali con virgola → punto, separatore → virgola). Vedi `fix_csv`.
+    """
+    text = await _resolve_input(body)
+    log.info(
+        "/quality/fix subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return fix_csv(text)
