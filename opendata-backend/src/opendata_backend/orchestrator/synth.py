@@ -461,6 +461,13 @@ def _citation_resource_from_payload(payload: dict[str, Any], source: str) -> Res
 
 _PLACEHOLDER_SEGMENTS = ("uuid", "example", "your-", "path", "<", "{", "...")
 
+# A UUID-shaped path segment (8-4-4-4-12) …
+_UUID_SHAPE_RE = re.compile(r"^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$")
+# … that is actually valid hex. Real CKAN resource ids are hex UUIDs; a model
+# that invents an id writes non-hex junk (e.g. ...-ghij-klmnopqrstuv) or a
+# sequential 12345678-... — both are hallucinations that 404.
+_HEX_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
 
 def _is_placeholder_url(url: str) -> bool:
     """Detect templated/hallucinated URLs (e.g. .../dataset/uuid/resource/uuid/x)."""
@@ -469,7 +476,16 @@ def _is_placeholder_url(url: str) -> bool:
         return True
     # The literal path segment "uuid" is a placeholder (real CKAN ids are 36-char hex).
     segs = low.split("/")
-    return "uuid" in segs
+    if "uuid" in segs:
+        return True
+    # Fabricated resource id: UUID-shaped but not valid hex, or the giveaway
+    # sequential 12345678-… that weak models love to emit.
+    for seg in segs:
+        if _UUID_SHAPE_RE.match(seg) and (
+            not _HEX_UUID_RE.match(seg) or seg.startswith("12345678-")
+        ):
+            return True
+    return False
 
 
 # Fill-in template placeholders a weak local model leaks INSTEAD of real numbers,
