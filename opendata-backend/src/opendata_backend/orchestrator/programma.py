@@ -792,7 +792,7 @@ def build_programma_aggregator(
         if welfare_info and welfare_info.get("source_url"):
             src = welfare_info["source_url"].strip()
             wel_res = Resource(
-                name=f"ISTAT — Popolazione residente per età del comune (anno {welfare_info.get('anno')})",
+                name=f"ISTAT 8milaCensus — struttura demografica del comune (Censimento {welfare_info.get('anno')})",
                 url=src,
                 format="CSV",
                 source="istat",
@@ -800,12 +800,13 @@ def build_programma_aggregator(
             if src not in {r.url.strip() for r in all_resources}:
                 all_resources.append(wel_res)
             narrative = (
-                "Struttura demografica e fragilità sociale del comune (ISTAT, popolazione "
-                f"residente per età, anno {welfare_info.get('anno')}). Indice di vecchiaia: "
-                f"{welfare_info.get('indice_vecchiaia')} (over-65/under-15 ×100; Italia ~190), "
+                "Struttura demografica e fragilità sociale del comune (ISTAT 8milaCensus, "
+                f"Censimento {welfare_info.get('anno')}). Indice di vecchiaia: "
+                f"{welfare_info.get('indice_vecchiaia')} (over-65/under-15 ×100; Italia 2011 ~148), "
                 f"dipendenza anziani: {welfare_info.get('indice_dipendenza_anziani')}, "
+                f"dipendenza giovanile: {welfare_info.get('indice_dipendenza_giovanile')}, "
                 f"dipendenza strutturale: {welfare_info.get('indice_dipendenza_strutturale')}, "
-                f"over-65: {welfare_info.get('pct_over_65')}%, under-15: {welfare_info.get('pct_under_15')}%, "
+                f"grandi anziani 75+: {welfare_info.get('pct_over_75')}%, "
                 f"popolazione: {welfare_info.get('popolazione')}. Valuta il carico sui servizi "
                 "socio-assistenziali (vecchiaia alta vs servizi per anziani); un'idea 'welfare' "
                 "ancori su questi numeri e citi questa fonte."

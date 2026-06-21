@@ -814,17 +814,19 @@ class OrchestratorSession:
     @staticmethod
     async def _resolve_welfare_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora WELFARE/COESIONE SOCIALE deterministica: indici demografici di
-        fragilità del comune da ISTAT DCIS_POPRES1 (popolazione residente per età).
-        Indice di vecchiaia, dipendenza anziani/strutturale, % over-65/under-15 —
-        misurano il carico sui servizi socio-assistenziali. Arricchita (best-effort)
-        con gli investimenti OpenCoesione del tema 'inclusione-sociale' del comune,
-        così un'idea welfare ha anche il lato finanziamento citabile. L'ancora PRIMARIA
-        resta ISTAT: se manca, la lente si salta (non si inventa). Solo idee/completa.
+        fragilità del comune da ISTAT 8milaCensus (struttura della popolazione,
+        Censimento 2011) — l'unica fonte realmente COMUNALE (DCIS_POPRES1 copre solo
+        Italia/regioni/province). Indice di vecchiaia, dipendenza anziani/giovanile/
+        strutturale, % 75+ — misurano il carico sui servizi socio-assistenziali.
+        Arricchita (best-effort) con gli investimenti OpenCoesione del tema
+        'inclusione-sociale' del comune, così un'idea welfare ha anche il lato
+        finanziamento citabile. Se l'ancora manca, la lente si salta (non si
+        inventa). Solo idee/completa.
         """
         if req.modalita not in ("idee", "completa"):
             return None
         try:
-            from opendata_core.sdmx import fetch_welfare_comune
+            from opendata_core.census import fetch_welfare_comune
 
             res = await asyncio.wait_for(
                 fetch_welfare_comune(req.cod_comune), timeout=30.0
