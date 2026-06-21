@@ -30,6 +30,7 @@ const APP_NAV = [
   { href: "/esplora", label: "Esplora" },
   { href: "/territorio", label: "Territorio" },
   { href: "/maturita", label: "Maturità" },
+  { href: "/qualita", label: "Qualità" },
 ] as const;
 
 function KeyIcon() {
