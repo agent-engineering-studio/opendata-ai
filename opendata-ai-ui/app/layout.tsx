@@ -19,28 +19,31 @@ export default function RootLayout({
 }) {
   return (
     <html lang="it">
-      <body className="min-h-screen flex flex-col antialiased">
+      <body className="h-screen flex flex-col antialiased">
         <AuthShell>
           <a href="#main-content" className="visually-hidden-focusable">
             Vai al contenuto principale
           </a>
           <SiteHeader />
           {/*
-            Sticky-footer layout, IDENTICAL on every page. `main` is the scroll
-            container; inside it `children` sit in a `flex-1` wrapper that GROWS
-            to fill the viewport, so the footer is pushed to the bottom on short
-            pages and flows after the content (scroll) on long ones — never
-            pinned/floating mid-page. Full-bleed pages (chat/mappa) fill the
-            wrapper via their own `h-100` roots, and the footer sits just below
-            their chrome — same footer everywhere.
+            Footer is a SIBLING of `main` (not inside it). The body is a
+            100vh flex column: header (auto) + main (flex-1, its OWN scroll via
+            overflow-y-auto) + footer (auto). So the footer is anchored just
+            below `main` — at the viewport bottom on every page — while `main`
+            scrolls its content ABOVE it. Full-bleed pages (esplora chat, mappa)
+            fill `main` exactly via their `h-100` roots, so the footer sits
+            below their chrome without overlapping it; long pages (territorio,
+            maturità, landing) scroll inside `main`, never over the footer.
+            Identical footer everywhere. (Putting the footer inside `main`
+            broke this — the chat input and page bodies overlapped it.)
           */}
           <main
             id="main-content"
             className="flex flex-1 min-h-0 flex-col overflow-y-auto"
           >
-            <div className="flex flex-1 min-h-0 flex-col">{children}</div>
-            <SiteFooter />
+            {children}
           </main>
+          <SiteFooter />
         </AuthShell>
       </body>
     </html>

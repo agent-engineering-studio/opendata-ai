@@ -30,7 +30,9 @@ from ..classify import classify_dataset
 from ..classify.anthropic_client import Classifier
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
+from ..factory import DATASET_SOURCES as _DATASET_SOURCES
 from ..llm_access import LLMAccess, acquire_orchestrator, require_llm_access
+from ..orchestrator.ckan_fallback import ckan_geo_fallback, has_geo
 from ..orchestrator.parsing import (
     Resource,
     fill_missing_content,
@@ -131,6 +133,12 @@ async def _run_orchestrator(
     elapsed = (time.perf_counter() - t0) * 1000
     log.info("orchestrator reply ready in %.0fms, length=%d chars", elapsed, len(raw))
     text, resources = parse_agent_reply(raw)
+    if not resources or (prefer_geo and not has_geo(resources)):
+        extra = await ckan_geo_fallback(
+            query, base_url or settings.ckan_default_base_url, prefer_geo=bool(prefer_geo)
+        )
+        seen = {r.url for r in resources}
+        resources.extend(r for r in extra if r.url not in seen)
     await fill_missing_content(resources)
     try:
         await upgrade_sdmx_resources(resources)
@@ -210,6 +218,19 @@ async def search_stream(
         if ev.get("event") == "result":
             raw = ev.get("text") or ""
             text, resources = parse_agent_reply(raw)
+            # Safety net: the Ollama CKAN specialist is unreliable (times out /
+            # malformed JSON / no tool call), so a query whose data IS public can
+            # come back empty. Run a deterministic CKAN search when nothing (or no
+            # geographic resource in map mode) surfaced — the data exists; don't
+            # let the flaky agent hide it.
+            if not resources or (req.prefer_geo and not has_geo(resources)):
+                extra = await ckan_geo_fallback(
+                    req.query,
+                    req.base_url or settings.ckan_default_base_url,
+                    prefer_geo=bool(req.prefer_geo),
+                )
+                seen = {r.url for r in resources}
+                resources.extend(r for r in extra if r.url not in seen)
             await fill_missing_content(resources)
             try:
                 await upgrade_sdmx_resources(resources)
@@ -232,7 +253,7 @@ async def search_stream(
         t0 = time.perf_counter()
         try:
             async with acquire_orchestrator(access, settings) as sess:
-                async for ev in sess.run_streaming(query):
+                async for ev in sess.run_streaming(query, sources=_DATASET_SOURCES):
                     yield await _one_event(ev)
             log.info("/datasets/search/stream reply in %.0fms", (time.perf_counter() - t0) * 1000)
         except Exception as exc:
@@ -340,9 +361,13 @@ async def classify(
 # Sane defaults — opendata files are sometimes large (shapefile zips, KML).
 _PROXY_MAX_BYTES = 64 * 1024 * 1024  # 64 MB
 _PROXY_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
+# NB: we deliberately do NOT forward `content-length` (nor `content-encoding`).
+# httpx with stream=True transparently decompresses gzip/br/deflate bodies, so
+# the bytes we re-stream are longer than the upstream `content-length` →
+# uvicorn raises "Response content longer than Content-Length" (500). Letting
+# StreamingResponse use chunked transfer encoding avoids the mismatch.
 _PROXY_FORWARD_HEADERS = {
     "content-type",
-    "content-length",
     "content-disposition",
     "etag",
     "last-modified",

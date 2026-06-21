@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -471,6 +472,30 @@ def _is_placeholder_url(url: str) -> bool:
     return "uuid" in segs
 
 
+# Fill-in template placeholders a weak local model leaks INSTEAD of real numbers,
+# e.g. "un tasso di spesa del [Spend Ratio]% con [Numero di Progetti Completati]
+# progetti … per [Importo Totale €]". A bracketed span carrying a letter never
+# appears in a legitimate narrative here (citations live in the RESOURCES_JSON
+# block, not inline), so we treat it as template leakage and drop the sentence —
+# presenting blanks as if they were facts is worse than omitting the claim.
+_PLACEHOLDER_TOKEN_RE = re.compile(r"\[[^\]\n]*[A-Za-z][^\]\n]*\]")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _strip_placeholder_sentences(text: str) -> str:
+    """Drop sentences that carry an unfilled `[...]` template placeholder.
+
+    Returns the text unchanged when no placeholder is present. When stripping
+    removes everything, returns "" so the caller's empty-narrative fallback
+    produces an honest message rather than echoing the blanks.
+    """
+    if not text or not _PLACEHOLDER_TOKEN_RE.search(text):
+        return text
+    sentences = _SENTENCE_SPLIT_RE.split(text)
+    kept = [s for s in sentences if not _PLACEHOLDER_TOKEN_RE.search(s)]
+    return " ".join(s.strip() for s in kept).strip()
+
+
 def _normalise_source_tag(executor_id: str) -> str | None:
     """Map the participant's executor_id to a clean source tag.
 
@@ -548,7 +573,10 @@ def build_aggregator(
     the filter entirely (tests, callers without a query in hand).
     """
 
-    async def aggregate(results: list[Any]) -> _SynthOutput:
+    async def aggregate(
+        results: list[Any],
+        emit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> _SynthOutput:
         log.info("Aggregator received %d participant results", len(results))
         parts: list[tuple[str | None, list[Resource]]] = []
         narratives_by_source: dict[str, str] = {}
@@ -568,6 +596,12 @@ def build_aggregator(
                     narratives_by_source.setdefault(exec_id, "")
                 continue
             narrative, resources = parse_agent_reply(raw_text)
+            # Drop sentences with unfilled `[...]` template placeholders (a weak
+            # model leaks "[Spend Ratio]%" etc. instead of real numbers).
+            stripped = _strip_placeholder_sentences(narrative)
+            if stripped != narrative:
+                log.warning("aggregator: stripped template placeholders from %s narrative", exec_id)
+                narrative = stripped
             # Drop hallucinated placeholder URLs (small models emit .../uuid/... links).
             resources = [r for r in resources if not _is_placeholder_url(r.url)]
             # Deterministically capture tool outputs (real CKAN resource URLs, CSV
@@ -588,18 +622,36 @@ def build_aggregator(
         if user_query:
             merged_resources = filter_resources(merged_resources, user_query)
 
-        # Ask the synth agent to merge the narratives.
+        # Ask the synth agent to merge the narratives. With `emit`, stream the
+        # tokens as `thinking` events so the client sees the answer being
+        # written instead of a frozen wait (mirrors run_programma_streaming).
         synth_prompt = _build_synth_prompt(narratives_by_source)
         try:
-            synth_result = await synth_agent.run(synth_prompt)
-            unified_narrative = (
-                getattr(synth_result, "text", None) or str(synth_result)
-            ).strip()
+            if emit is not None:
+                chunks: list[str] = []
+                async for update in synth_agent.run(synth_prompt, stream=True):
+                    delta = getattr(update, "text", None)
+                    if delta:
+                        chunks.append(delta)
+                        emit({"event": "thinking", "source": "synth", "delta": delta})
+                unified_narrative = "".join(chunks).strip()
+            else:
+                synth_result = await synth_agent.run(synth_prompt)
+                unified_narrative = (
+                    getattr(synth_result, "text", None) or str(synth_result)
+                ).strip()
         except Exception:
             log.exception("synth agent failed; falling back to concatenated narratives")
             unified_narrative = "\n\n".join(
                 n for n in narratives_by_source.values() if n
             ).strip()
+
+        # Final safety net: even with cleaned inputs the synth model can emit its
+        # own fill-in template — never let "[Spend Ratio]%" reach the user.
+        deplaceheld = _strip_placeholder_sentences(unified_narrative)
+        if deplaceheld != unified_narrative:
+            log.warning("aggregator: stripped template placeholders from synth output")
+            unified_narrative = deplaceheld
 
         if not unified_narrative:
             unified_narrative = (

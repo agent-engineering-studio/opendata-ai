@@ -1,5 +1,7 @@
 # opendata-ai
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20opendata--ai-FFDD00?logo=buymeacoffee&logoColor=000)](https://www.buymeacoffee.com/f9t3zol)
+
 ![OpenData AI — dal patrimonio di dati al valore per il territorio](docs/assets/hero.png)
 
 Conversational + map-based access to **Italian and European open data
@@ -24,6 +26,36 @@ accountability di community, e un **anello valore⇄maturità** (i gap di dato
 penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
 modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
 
+### Maturità open data (modello ODM 2025)
+
+![Maturità open data — scorecard ODM 2025 con radar delle 4 dimensioni e leve di miglioramento](docs/assets/maturita.png)
+
+Scorecard 0–100 di un ente su quattro dimensioni — **Policy, Portale, Qualità,
+Impatto** — con livello (Beginner → Follower → Fast-tracker → Trend-setter),
+radar delle dimensioni e leve di miglioramento ordinate per impatto sul
+punteggio. Sotto la soglia minima di dati dichiara *"dato insufficiente"*
+invece di assegnare punteggi fuorvianti.
+
+## Esplora — tabelle, grafici e mappa
+
+La modalità **Esplora** fa il fan-out della domanda su CKAN + SDMX, sintetizza
+una risposta e mostra ogni risorsa trovata con un'anteprima dei dati. A seconda
+del contenuto la stessa risorsa si può visualizzare in tre modi:
+
+![Esplora — anteprima tabellare e risorse trovate](docs/assets/esplora-tabella.png)
+
+- **Tabella** — dati tabellari (CSV/JSON da CKAN, osservazioni SDMX-CSV da
+  ISTAT/Eurostat/OECD) con righe, colonne e tipi rilevati automaticamente. Sopra
+  l'anteprima compaiono il numero di righe/colonne e quali colonne sono numeriche.
+
+![Esplora — grafico a barre raggruppato per dimensione, con misure selezionabili](docs/assets/esplora-grafico.png)
+
+- **Grafico** — le colonne numeriche diventano serie selezionabili, raggruppate
+  per una dimensione a scelta (es. *PROVINCE*); per i dataset grandi mostra le
+  prime 30 categorie per somma decrescente.
+- **Mappa** — le risorse geografiche (GeoJSON) vengono rese su una mappa
+  Leaflet+OSM; le risorse non geografiche restano disponibili come tabella/grafico.
+
 ## Supported open data sources
 
 | Source | Endpoint | What we fetch | Tool |
@@ -37,6 +69,25 @@ modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
 call via `base_url` in the chat payload or via `CKAN_DEFAULT_BASE_URL` env.
+
+## MCP servers
+
+Ogni fonte è un server **MCP** componibile (stdio o streamable-HTTP su `/mcp`),
+usabile dal backend e da qualsiasi client MCP (Claude Desktop, Cursor, …). README
+dedicato per ciascuno:
+
+| Server | Cosa espone | README |
+|---|---|---|
+| **ckan-mcp-server** | Action API CKAN, `base_url` per-portale | [`ckan-mcp-server/README.md`](ckan-mcp-server/README.md) |
+| **istat-mcp-server** | SDMX 2.1 — ISTAT · Eurostat · OECD | [`istat-mcp-server/README.md`](istat-mcp-server/README.md) |
+| **osm-mcp** | Geocoding, POI, routing, zone + mappe Leaflet | [`osm-mcp/README.md`](osm-mcp/README.md) |
+| **opencoesione-mcp-server** | Progetti coesione: finanziato vs speso | [`opencoesione-mcp-server/README.md`](opencoesione-mcp-server/README.md) |
+| **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
+| **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
+| **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
+
+> Materiale di comunicazione (descrizioni brevi + bozze post social) per i server
+> MCP: **[`docs/mcp-social-kit.md`](docs/mcp-social-kit.md)**.
 
 ## Infrastructure
 

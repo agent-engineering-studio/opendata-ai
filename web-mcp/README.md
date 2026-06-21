@@ -106,18 +106,6 @@ web_fetch(url='https://www.comune.esempio.gov.it/cammini')
   }
 ```
 
-## 📣 Per i social
-
-> 🔎 Abbiamo trasformato la **ricerca sul web in un tool MCP**.
->
-> In **opendata-ai** l'agente non si limita ai dataset: per la sorgente *marketing territoriale* deve sapere *cosa fanno gli altri enti*. Così abbiamo costruito **web-mcp**: un wrapper FastMCP che espone due strumenti — `web_search` e `web_fetch` — appoggiati a un'istanza **SearXNG self-hosted**.
->
-> 👉 Niente API key proprietarie, niente query che escono verso terzi: la **web search è self-hosted via SearXNG** e arriva all'LLM come un normale tool MCP. Stdio per Claude Desktop, streamable-HTTP per la produzione. Stessa immagine.
->
-> Risultato: l'agente trova un precedente in un altro comune, ne apre la pagina e la cita — in autonomia. 🌐
->
-> #MCP #SearXNG #websearch #selfhosted #privacy #AI #opendata #FastMCP
-
 ## Licenza & note
 
 Licenza **MIT** (vedi `pyproject.toml`). Fa parte del monorepo **opendata-ai** — il build context delle immagini è la **root del repo** (copia `opendata_core/` accanto ai sorgenti del servizio); vedi il `Dockerfile` e `docker-publish.yml`. La logica di ricerca/fetch vive in `opendata_core.web`: questo server cabla solo il transport e registra i due tool.

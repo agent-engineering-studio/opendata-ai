@@ -497,7 +497,18 @@ export async function resourceToGeo(
     }
 
     if (fmt === "KML" || fmt === "GPX") {
-      const text = inline && !isTruncated(inline) ? inline : url ? await proxyText(url, opts) : "";
+      // Prefer the FULL file from the URL: inline content is capped server-side
+      // (~200 KB), so it's usually a truncated sample that would draw only part
+      // of the geometry. Fall back to inline only when there's no URL.
+      let text = "";
+      if (url) {
+        try {
+          text = await proxyText(url, opts);
+        } catch {
+          text = "";
+        }
+      }
+      if (!text && inline) text = inline;
       if (!text) return { status: "error", reason: "nessun contenuto da convertire" };
       const tj = await import("@tmcw/togeojson");
       const dom = new DOMParser().parseFromString(text, "text/xml");
@@ -505,10 +516,19 @@ export async function resourceToGeo(
       return { status: "ok", geojson: toWgs84(gj as unknown as GeoJsonObject) };
     }
 
-    // GEOJSON (and JSON sniffed as GeoJSON)
-    let obj = inline && !isTruncated(inline) ? parseJsonGeo(inline) : null;
-    if (!obj && url) obj = parseJsonGeo(await proxyText(url, opts));
-    if (!obj && inline) obj = parseJsonGeo(inline); // last resort: try the (maybe truncated) inline
+    // GEOJSON (and JSON sniffed as GeoJSON). Prefer the FULL file from the URL —
+    // the inline `content` is capped at ~200 KB server-side, so a large dataset
+    // (e.g. 1128 bike-path features ≈ 714 KB) arrives truncated and would render
+    // as a single partial line. Inline is only the fallback when there's no URL.
+    let obj: GeoJsonObject | null = null;
+    if (url) {
+      try {
+        obj = parseJsonGeo(await proxyText(url, opts));
+      } catch {
+        obj = null;
+      }
+    }
+    if (!obj && inline) obj = parseJsonGeo(inline);
     if (!obj) return { status: "error", reason: "GeoJSON non valido o vuoto" };
     return { status: "ok", geojson: toWgs84(obj) };
   } catch (e) {

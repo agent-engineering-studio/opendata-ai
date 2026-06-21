@@ -539,3 +539,82 @@ async def test_geo_filter_keeps_matching_opencoesione_resources() -> None:
     urls = {r.url for r in kept}
     assert barletta.url in urls
     assert taranto.url not in urls
+
+
+# ───────── template-placeholder guardrail (weak-model "[Spend Ratio]%" leak) ─────────
+
+
+def test_strip_placeholder_sentences_unit() -> None:
+    from opendata_backend.orchestrator.synth import _strip_placeholder_sentences
+
+    txt = (
+        "Sui portali CKAN ci sono dataset pertinenti. "
+        "Il territorio ha un tasso di spesa del [Spend Ratio]% con "
+        "[Numero di Progetti Completati] progetti."
+    )
+    out = _strip_placeholder_sentences(txt)
+    assert "[Spend Ratio]" not in out
+    assert "[Numero" not in out
+    assert "CKAN ci sono dataset" in out
+
+    # no placeholder → unchanged
+    assert _strip_placeholder_sentences("Tutto regolare, 7% nel 2023.") == (
+        "Tutto regolare, 7% nel 2023."
+    )
+    # all placeholders → empty (caller's fallback produces an honest message)
+    assert _strip_placeholder_sentences("Importo [Totale €] su [Numero].") == ""
+
+
+@pytest.mark.asyncio
+async def test_aggregator_strips_synth_template_placeholders() -> None:
+    agent = _StubAgent(
+        canned=(
+            "Sui portali CKAN ci sono dataset pertinenti. "
+            "Il tasso di spesa è del [Spend Ratio]% con [Numero di Progetti]."
+        )
+    )
+    aggregate = build_aggregator(agent)
+    out = await aggregate([_result("ckan-agent", _ckan_reply([]))])
+    assert "[Spend Ratio]" not in out.text
+    assert "[Numero" not in out.text
+    assert "CKAN ci sono dataset" in out.text
+
+
+# ───────────── synth-token streaming via emit (R2: live answer, no freeze) ─────────────
+
+
+@dataclass
+class _Update:
+    text: str
+
+
+class _StreamingStubAgent:
+    """Stub agent supporting both `run(prompt)` and streaming `run(prompt, stream=True)`."""
+
+    def __init__(self, canned: str = "Sui portali CKAN ci sono dataset pertinenti.") -> None:
+        self.canned = canned
+
+    def run(self, prompt: str, stream: bool = False):
+        if stream:
+            async def _gen():
+                for tok in self.canned.split(" "):
+                    yield _Update(text=tok + " ")
+            return _gen()
+
+        async def _coro():
+            return _StubAgentResponse(text=self.canned)
+        return _coro()
+
+
+@pytest.mark.asyncio
+async def test_aggregator_streams_synth_tokens_via_emit() -> None:
+    agent = _StreamingStubAgent(canned="Sui portali CKAN ci sono dataset pertinenti.")
+    aggregate = build_aggregator(agent)
+    events: list[dict[str, Any]] = []
+    out = await aggregate([_result("ckan-agent", _ckan_reply([]))], emit=events.append)
+
+    thinking = [e for e in events if e.get("event") == "thinking"]
+    assert thinking, "expected streamed 'thinking' events from emit path"
+    assert all(e["source"] == "synth" for e in thinking)
+    # The assembled narrative still lands in the final text.
+    assert "CKAN" in out.text

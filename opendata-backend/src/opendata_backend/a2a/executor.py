@@ -25,6 +25,8 @@ from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types.a2a_pb2 import TaskState
 
+from ..factory import DATASET_SOURCES
+from ..orchestrator.ckan_fallback import ckan_geo_fallback, has_geo
 from ..orchestrator.parsing import (
     fill_missing_content,
     parse_agent_reply,
@@ -133,7 +135,9 @@ class OpenDataAgentExecutor(AgentExecutor):
 
         wrapped = _wrap_query(query, prefer_geo=prefer_geo)
         try:
-            async for ev in sess.run_streaming(wrapped):
+            # Same dataset-search scoping as /esplora: CKAN + SDMX only, not the
+            # full territorio fan-out (faster, no web/funding/hazard noise).
+            async for ev in sess.run_streaming(wrapped, sources=DATASET_SOURCES):
                 kind = ev.get("event")
                 if kind == "status":
                     src = ev.get("source", "?")
@@ -154,6 +158,15 @@ class OpenDataAgentExecutor(AgentExecutor):
                     )
                 elif kind == "result":
                     text, resources = parse_agent_reply(ev.get("text", ""))
+                    # Same deterministic safety net as /esplora: if the flaky
+                    # CKAN agent surfaced nothing (or no geo in geo mode), search
+                    # CKAN directly so public datasets still reach the A2A client.
+                    if not resources or (prefer_geo and not has_geo(resources)):
+                        extra = await ckan_geo_fallback(
+                            query, settings.ckan_default_base_url, prefer_geo=prefer_geo
+                        )
+                        seen = {r.url for r in resources}
+                        resources.extend(r for r in extra if r.url not in seen)
                     await fill_missing_content(resources)
                     try:
                         await upgrade_sdmx_resources(resources)

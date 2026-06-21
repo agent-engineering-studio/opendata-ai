@@ -169,20 +169,6 @@ maturity_compare_entities(entities=["comune-a", "comune-b", "comune-c"])
 → { "ranking": [ … ordinati per overall … ], "errors": [ … enti non risolvibili … ] }
 ```
 
-## 📣 Per i social
-
-> 🇮🇹 Quanto sono *davvero* aperti e riusabili gli open data del tuo Comune?
->
-> Abbiamo messo **una scorecard di maturità open-data ODM 2025 dentro un tool MCP**: fa
-> harvest dei dataset da CKAN, li valuta su 5-star, FAIR, DCAT-AP_IT, ISO 25012 e HVD, e
-> restituisce 4 dimensioni + livello (Beginner → Trend-setter) + raccomandazioni azionabili.
->
-> Lo colleghi a Claude Desktop e chiedi, in linguaggio naturale: *"valuta la maturità open
-> data di questo ente"*. Scoring 100% deterministico, fail-safe, multi-portale. Parte di
-> **opendata-ai**. 🚀
->
-> \#opendata #ODM #maturity #MCP #PA #AI #dataquality #DCAT
-
 ## Licenza & note
 
 - Licenza **MIT** (vedi `pyproject.toml`).

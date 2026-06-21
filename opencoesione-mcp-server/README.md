@@ -168,14 +168,3 @@ Dati: i risultati dell'**API OpenCoesione** sono rilasciati con licenza
 l'URL di origine e la licenza nel blocco `sources`: **mantieni l'attribuzione**
 e cita la fonte (OpenCoesione, <https://opencoesione.gov.it>) negli output a
 valle.
-
-## 📣 Per i social
-
-> 💶 Quanto è stato finanziato e quanto davvero **speso** dalle politiche di
-> coesione nel tuo Comune? Ora la trasparenza sui fondi di coesione è
-> **interrogabile da un agente AI**: abbiamo aperto OpenCoesione come server
-> #MCP dentro opendata-ai. Risolvi un territorio, leggi la capacità di spesa
-> storica, scava nei singoli progetti — con fonte e licenza citate ad ogni
-> risposta. Soldi pubblici, numeri verificabili. 🇮🇹
->
-> #OpenCoesione #opendata #MCP #trasparenza #PA #AI #coesione #civictech

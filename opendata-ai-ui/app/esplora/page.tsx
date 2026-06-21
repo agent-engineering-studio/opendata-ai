@@ -38,6 +38,8 @@ const SOURCE_LABEL: Record<string, string> = {
 type StreamEvent =
   | { event: "status"; source: string; phase: "start" | "end"; error?: string }
   | { event: "heartbeat"; in_flight: string[]; elapsed_ms: number }
+  | { event: "partial"; source: string; narrative: string }
+  | { event: "thinking"; source: string; delta: string }
   | { event: "result"; text: string; resources: Resource[] }
   | { event: "error"; message: string };
 
@@ -112,6 +114,7 @@ function EsploraInner() {
     let buffer = "";
     let final: { text: string; resources: Resource[] } | undefined;
     let streamError: string | undefined;
+    let synthBuf = ""; // accumulated synth tokens (live answer preview)
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -129,7 +132,13 @@ function EsploraInner() {
         }
         if (ev.event === "status") setStatus(statusLabel(ev));
         else if (ev.event === "heartbeat") setStatus(heartbeatLabel(ev));
-        else if (ev.event === "result") final = { text: ev.text, resources: ev.resources ?? [] };
+        else if (ev.event === "partial")
+          setStatus(`${SOURCE_LABEL[ev.source] ?? ev.source} ha risposto`);
+        else if (ev.event === "thinking") {
+          // Live preview of the synthesis being written (kills the final freeze).
+          synthBuf += ev.delta;
+          setStatus(`✍️ ${synthBuf.slice(-180)}`);
+        } else if (ev.event === "result") final = { text: ev.text, resources: ev.resources ?? [] };
         else if (ev.event === "error") streamError = ev.message;
       }
     }
@@ -261,7 +270,7 @@ function EsploraInner() {
 
   // Chat pane (reused on desktop side-by-side AND on mobile when "chat" tab).
   const chatPane = (
-    <div className="d-flex flex-column h-100 min-h-0">
+    <div className="d-flex flex-column h-100 min-h-0 min-w-0">
       <ChatHeader
         onReset={resetChat}
         canReset={messages.length > 0 && !loading}
@@ -284,7 +293,10 @@ function EsploraInner() {
         }
       />
       {messages.length > 0 ? (
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-2">
+        <div
+          className="border-t border-slate-200 bg-slate-50 px-3 py-1.5 overflow-y-auto"
+          style={{ maxHeight: "4.5rem", flexShrink: 0 }}
+        >
           <ExampleQueries onPick={pickExample} disabled={loading} />
         </div>
       ) : null}
@@ -431,15 +443,19 @@ function EsploraInner() {
       </div>
 
       {/* Desktop split (50/50) + mobile single-pane via tab. */}
-      <div className="flex-grow-1 d-flex flex-column flex-lg-row min-h-0">
+      {/* `min-w-0` on both columns is essential: without it a wide child (a
+          many-column table preview) refuses to shrink below its content width
+          and steals the other column's 50% — the map collapses. With min-w-0
+          the column keeps its basis and the table scrolls inside its own box. */}
+      <div className="flex-grow-1 d-flex flex-column flex-lg-row min-h-0 min-w-0">
         <div
-          className={`${mobilePane === "chat" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0`}
+          className={`${mobilePane === "chat" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0 min-w-0`}
           style={{ flex: "1 1 50%", borderRight: "1px solid var(--color-border)" }}
         >
           {chatPane}
         </div>
         <div
-          className={`${mobilePane === "mappa" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0`}
+          className={`${mobilePane === "mappa" ? "d-flex" : "d-none"} d-lg-flex flex-column min-h-0 min-w-0`}
           style={{ flex: "1 1 50%" }}
         >
           {mapPane}

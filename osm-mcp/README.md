@@ -166,16 +166,6 @@ Per il territorio: `osm_lookup_comune(nome="Gioia del Colle")` → `ref_istat
 072021`, poi `osm_transport_profile(...)` / `osm_commercial_profile(...)` per i
 conteggi citabili, e `osm_get_zone(...)` per la geometria da disegnare.
 
-## 📣 Per i social
-
-> Geocoding, POI, routing e zone territoriali di #OpenStreetMap, ora come
-> strumenti #MCP. Un agente AI parte da un indirizzo, scopre cosa c'è intorno,
-> calcola il percorso e restituisce una **mappa Leaflet interattiva
-> self-contained** — dai dati geografici a una mappa navigabile, senza scrivere
-> JavaScript. Open source, dati OSM sotto ODbL, parte del progetto opendata-ai.
->
-> #GIS #geospatial #AI #opendata #LLM #OSM
-
 ## Licenza & note
 
 I dati geografici provengono da **OpenStreetMap** e sono distribuiti sotto

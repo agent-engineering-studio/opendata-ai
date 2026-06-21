@@ -153,20 +153,6 @@ esposizione**, non un giudizio sul comune. Servono a fondare la fattibilità
 ambientale di una proposta territoriale (dove si può espandere, dove no), non a
 classificare un territorio come "buono" o "cattivo".
 
-## 📣 Per i social
-
-> 🏔️🌊 Il **rischio idrogeologico dei comuni italiani** ora è interrogabile da
-> un agente AI. Abbiamo incapsulato la piattaforma **ISPRA IdroGEO** in un
-> server **MCP**: passi un codice ISTAT e ottieni in una chiamata quanta
-> superficie comunale è a pericolosità da frana (P3+P4) o alluvione (P3/P2/P1) e
-> quante persone sono esposte — con la fonte già citata.
->
-> Frane e alluvioni diventano così **vincoli di pianificazione** che un'analisi
-> territoriale automatica può considerare al volo. Open data + MCP = decisioni
-> più informate, in chiaro. Parte del progetto open-source **opendata-ai**. 🇮🇹
->
-> #ISPRA #IdroGEO #rischioidrogeologico #opendata #MCP #AI #PA #frane
-
 ## Licenza & note
 
 - **Codice**: MIT.
