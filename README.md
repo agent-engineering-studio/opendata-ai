@@ -34,6 +34,26 @@ radar delle dimensioni e leve di miglioramento ordinate per impatto sul
 punteggio. Sotto la soglia minima di dati dichiara *"dato insufficiente"*
 invece di assegnare punteggi fuorvianti.
 
+## Esplora — tabelle, grafici e mappa
+
+La modalità **Esplora** fa il fan-out della domanda su CKAN + SDMX, sintetizza
+una risposta e mostra ogni risorsa trovata con un'anteprima dei dati. A seconda
+del contenuto la stessa risorsa si può visualizzare in tre modi:
+
+![Esplora — anteprima tabellare e risorse trovate](docs/assets/esplora-tabella.png)
+
+- **Tabella** — dati tabellari (CSV/JSON da CKAN, osservazioni SDMX-CSV da
+  ISTAT/Eurostat/OECD) con righe, colonne e tipi rilevati automaticamente. Sopra
+  l'anteprima compaiono il numero di righe/colonne e quali colonne sono numeriche.
+
+![Esplora — grafico a barre raggruppato per dimensione, con misure selezionabili](docs/assets/esplora-grafico.png)
+
+- **Grafico** — le colonne numeriche diventano serie selezionabili, raggruppate
+  per una dimensione a scelta (es. *PROVINCE*); per i dataset grandi mostra le
+  prime 30 categorie per somma decrescente.
+- **Mappa** — le risorse geografiche (GeoJSON) vengono rese su una mappa
+  Leaflet+OSM; le risorse non geografiche restano disponibili come tabella/grafico.
+
 ## Supported open data sources
 
 | Source | Endpoint | What we fetch | Tool |
