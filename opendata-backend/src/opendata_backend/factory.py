@@ -969,9 +969,45 @@ class OrchestratorSession:
             "trovato": True,
         }
 
+    @staticmethod
+    async def _resolve_sanita(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora SANITÀ con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("sanita", req.cod_comune),
+            lambda: OrchestratorSession._resolve_sanita_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_sanita_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora SANITÀ deterministica: dotazione di farmacie del comune (presidio
+        sanitario di prossimità) dall'anagrafe del Ministero della Salute (NSIS).
+        Le farmacie sono l'UNICA fonte sanitaria comunale con il codice ISTAT →
+        join deterministico (ospedali = solo nome; territoriali STS11 = non
+        pubblicate per comune → follow-up). Misura l'accessibilità ai servizi
+        sanitari di base. Best-effort: se l'anagrafe non risponde o il comune non
+        ha farmacie, la lente si salta (non si inventa). Solo idee/completa.
+        """
+        if req.modalita not in ("idee", "completa"):
+            return None
+        try:
+            from opendata_core.salute import fetch_farmacie_comune
+
+            res = await asyncio.wait_for(
+                fetch_farmacie_comune(req.cod_comune), timeout=90.0
+            )
+        except Exception as exc:
+            _log_lens_skip("ancora sanità Min. Salute non risolta per %s — lente sanità assente",
+                           req.cod_comune, exc=exc)
+            return None
+        if not (res and res.get("trovato")):
+            return None
+        return res
+
     async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
-        turismo, lavoro, trasporti, welfare, istruzione, ambiente).
+        turismo, lavoro, trasporti, welfare, istruzione, ambiente, sanita).
 
         Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
         dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
@@ -981,7 +1017,7 @@ class OrchestratorSession:
         """
         (
             zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare,
-            istruzione, ambiente,
+            istruzione, ambiente, sanita,
         ) = await asyncio.gather(
             self._resolve_zona(req),
             self._resolve_zone_commerciali(req),
@@ -992,6 +1028,7 @@ class OrchestratorSession:
             self._resolve_welfare(req),
             self._resolve_istruzione(req),
             self._resolve_ambiente(req),
+            self._resolve_sanita(req),
             return_exceptions=True,
         )
 
@@ -1011,6 +1048,7 @@ class OrchestratorSession:
             "welfare": _ok(welfare),
             "istruzione": _ok(istruzione),
             "ambiente": _ok(ambiente),
+            "sanita": _ok(sanita),
         }
 
     async def run_programma_streaming(
@@ -1072,6 +1110,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
+                sanita_info=lenses["sanita"],
             )
             task_text = build_programma_task(
                 req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
@@ -1079,6 +1118,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
+                sanita_info=lenses["sanita"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -1265,6 +1305,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
+                sanita_info=lenses["sanita"],
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
@@ -1274,6 +1315,7 @@ class OrchestratorSession:
                     welfare_info=lenses["welfare"],
                     istruzione_info=lenses["istruzione"],
                     ambiente_info=lenses["ambiente"],
+                    sanita_info=lenses["sanita"],
                 )
             )
         outputs = events.get_outputs()
