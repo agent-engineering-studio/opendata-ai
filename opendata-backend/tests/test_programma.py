@@ -983,6 +983,62 @@ async def test_ambiente_info_injects_citable_ispra_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sanita_requires_local_anchor() -> None:
+    """sanita (lente Sanità): premessa = dotazione farmacie Ministero della Salute
+    (host in _SANITA_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    salute_url = "https://www.dati.salute.gov.it/it/dataset/farmacie/"
+    ev_sal = {"fonte": "salute", "url": salute_url, "dettaglio": "8 farmacie attive"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("sanita", [ev_sal]),  # ok (Min. Salute)
+                _idea("sanita", [ev_oc]),   # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("ckan", "Farmacie.", [
+        {"name": "farmacie", "url": salute_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["sanita"]
+
+
+@pytest.mark.asyncio
+async def test_sanita_info_injects_citable_salute_anchor() -> None:
+    """L'ancora Sanità deterministica (Min. Salute) iniettata dal backend è citabile:
+    una proposta sanita che la cita sopravvive senza risorsa Salute dagli specialisti."""
+    salute_url = "https://www.dati.salute.gov.it/it/dataset/farmacie/"
+    sanita_info = {
+        "trovato": True, "comune": "072021", "farmacie_totali": 8,
+        "per_tipologia": {"Ordinaria": 7, "Dispensario": 1}, "source_url": salute_url,
+    }
+    ev_sal = {"fonte": "salute", "url": salute_url, "dettaglio": "8 farmacie attive"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("sanita", [ev_sal])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, sanita_info=sanita_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["sanita"]
+    # display-clean: Min. Salute → portale open data.
+    assert any(r.url == "https://www.dati.salute.gov.it/" for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

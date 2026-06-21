@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 _PORTALS: tuple[tuple[str, str, str], ...] = (
     ("isprambiente.it", "https://idrogeo.isprambiente.it/", "ISPRA IdroGEO"),
     ("dati.istruzione.it", "https://dati.istruzione.it/opendata/", "MIUR Open Data"),
+    ("dati.salute.gov.it", "https://www.dati.salute.gov.it/", "Ministero della Salute — Open Data"),
     ("ottomilacensus.istat.it", "https://ottomilacensus.istat.it/", "ISTAT 8milaCensus"),
     ("esploradati.istat.it", "https://esploradati.istat.it/", "ISTAT — esploradati (SDMX)"),
     ("istat.it", "https://www.istat.it/", "ISTAT"),
