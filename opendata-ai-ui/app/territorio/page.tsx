@@ -8,6 +8,7 @@ import { downloadSiteZip } from "@/lib/territorioSite";
 import type { ModalitaProgramma, ProgrammaRequest, ProgrammaResponse } from "@/lib/types";
 import { DashboardGate } from "@/components/DashboardGate";
 import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
+import { LentiAnalitiche } from "@/components/territorio/LentiAnalitiche";
 import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
@@ -289,6 +290,8 @@ function TerritorioInner() {
           simili — ogni affermazione ancorata a fonti pubbliche verificabili.
           Non è materiale elettorale.
         </p>
+
+        <LentiAnalitiche />
 
         <form className="card shadow-sm mb-4" onSubmit={genera} aria-busy={stato.fase === "loading"}>
           <div className="card-body">
