@@ -21,6 +21,7 @@ const LANDING_NAV = [
   { href: "/#perchi", label: "Per chi" },
   { href: "/#sviluppatori", label: "Sviluppatori" },
   { href: "/docs", label: "Documentazione" },
+  { href: "/roadmap", label: "Roadmap" },
   { href: "/sostieni", label: "Sostieni" },
 ] as const;
 

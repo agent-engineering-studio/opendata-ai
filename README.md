@@ -196,7 +196,7 @@ dedicato per ciascuno:
 ## Infrastructure
 
 <p align="center">
-  <img src="docs/infrastructure.svg" alt="OpenData AI — architettura runtime: frontend statico su GitHub Pages, backend FastAPI su VPS Aruba, auth Clerk, fan-out sui server MCP, storage Postgres + Redis e Claude per synth/classify" width="900">
+  <img src="docs/infrastructure.svg" alt="OpenData AI — architettura runtime: frontend Next.js, backend FastAPI, auth Clerk, fan-out sui server MCP, storage Neon Postgres + Redis e LLM Claude / Ollama Cloud per synth e classify" width="900">
 </p>
 
 | Component | Stack |
@@ -205,7 +205,7 @@ dedicato per ciascuno:
 | Auth | **Clerk** on every endpoint except `/health`; svix-signed webhook on `/webhooks/clerk` |
 | Backend | FastAPI on Aruba VPS, dockerised, exposed at `https://api.opendata.<domain>` via Caddy + Let's Encrypt |
 | MCP servers | `ckan-mcp-server`, `istat-mcp-server`, `osm-mcp` — same image speaks **stdio** (Claude Desktop) or **streamable-HTTP** (backend) |
-| Database | Postgres 16 self-hosted, schema `opendata.*` (users / favorites / history / api_keys / classifications). Migrations owned by [agent-stack](vendor/agent-stack); local stub in `opendata-backend/migrations/` |
+| Database | **Neon** serverless Postgres, schema `opendata.*` (users / favorites / history / api_keys / classifications). Migrations owned by [agent-stack](vendor/agent-stack); local stub in `opendata-backend/migrations/` |
 | Cache | Redis 7 logical db 1 — `od:fetch:*` 6h, `od:classify:*` 24h, `od:by-category:*` 5min, `od:ratelimit:*` 60s window |
 | AI | Anthropic Claude. **Sonnet 4.6** for the synth aggregator; **Haiku 4.5** for the classify endpoint — cheaper task, smaller model |
 | CI/CD | GitHub Actions — `ci.yml` (ruff + pytest + buildx), `docker-publish.yml` (multi-arch GHCR), `deploy-pages.yml` (frontend), `deploy-aruba.yml` (backend, tag-driven SSH) |
