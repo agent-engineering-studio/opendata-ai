@@ -7,10 +7,37 @@ import { SostieniButton } from "@/components/SostieniButton";
 export const metadata: Metadata = {
   title: "Sostieni il progetto — OpenData AI",
   description:
-    "OpenData AI è gratuito da esplorare e open source. Sostienilo con un contributo mensile a misura delle tue esigenze: ogni piano è calibrato sul costo reale dell'infrastruttura (server, banca dati, modelli linguistici) e tiene il progetto aperto e indipendente.",
+    "OpenData AI è gratuito da esplorare e open source. Con il tuo sostegno aiuti a tenere il servizio aperto, indipendente e a disposizione di tutti.",
 };
 
 const GITHUB_SPONSORS = "https://github.com/agent-engineering-studio";
+const OLLAMA_URL = "https://ollama.com";
+const SPONSOR_EMAIL = "gzileni@agentengineering.it";
+
+// Logo Ollama (monocromatico, eredita currentColor) per il credito "powered by".
+function OllamaMark({ size = 18 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M7.1 2.2c-1 0-1.7.9-1.9 2-.2.9-.1 1.9.2 2.8-1 1-1.6 2.4-1.6 4.1 0 1.3.4 2.4 1 3.4-.5.8-.8 1.8-.8 2.9 0 .9.2 1.7.5 2.4.2.4.6.6 1 .5.4-.1.6-.5.5-.9-.2-.6-.3-1.2-.3-1.9 0-.5.1-1 .2-1.4.5.4 1.1.7 1.7.9-.1.4-.2.9-.2 1.4 0 .6.1 1.2.4 1.7.2.4.6.5 1 .4.4-.2.5-.6.4-1-.1-.3-.2-.6-.2-1 0-.3 0-.5.1-.7.5.1 1.1.1 1.6.1s1.1 0 1.6-.1c.1.2.1.4.1.7 0 .4-.1.7-.2 1-.1.4 0 .8.4 1 .4.1.8 0 1-.4.3-.5.4-1.1.4-1.7 0-.5-.1-1-.2-1.4.6-.2 1.2-.5 1.7-.9.1.4.2.9.2 1.4 0 .7-.1 1.3-.3 1.9-.1.4.1.8.5.9.4.1.8-.1 1-.5.3-.7.5-1.5.5-2.4 0-1.1-.3-2.1-.8-2.9.6-1 1-2.1 1-3.4 0-1.7-.6-3.1-1.6-4.1.3-.9.4-1.9.2-2.8-.2-1.1-.9-2-1.9-2-.9 0-1.6.7-2 1.7-.9-.3-1.8-.3-2.7 0-.4-1-1.1-1.7-2-1.7zm1.4 7.1c.6 0 1 .6 1 1.3s-.4 1.3-1 1.3-1-.6-1-1.3.4-1.3 1-1.3zm7 0c.6 0 1 .6 1 1.3s-.4 1.3-1 1.3-1-.6-1-1.3.4-1.3 1-1.3zM12 13c.8 0 1.5.4 1.5.9 0 .3-.3.6-.7.8.2.1.4.4.4.6 0 .5-.5.8-1.2.8s-1.2-.3-1.2-.8c0-.2.2-.5.4-.6-.4-.2-.7-.5-.7-.8 0-.5.7-.9 1.5-.9z" />
+    </svg>
+  );
+}
+
+// Medaglia colorata (immagine dei livelli sponsor): nastro + disco + stella.
+function Medal({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 64 64" width={72} height={72} aria-hidden="true">
+      <path d="M22 4 L30 30 L24 32 L16 8 Z" fill="#9aa7b4" />
+      <path d="M42 4 L34 30 L40 32 L48 8 Z" fill="#7d8a98" />
+      <circle cx="32" cy="42" r="18" fill={color} stroke="rgba(0,0,0,0.18)" strokeWidth="2" />
+      <circle cx="32" cy="42" r="12" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
+      <path
+        d="M32 33 l2.6 5.3 5.8 .8 -4.2 4.1 1 5.8 -5.2 -2.7 -5.2 2.7 1 -5.8 -4.2 -4.1 5.8 -.8 Z"
+        fill="rgba(255,255,255,0.9)"
+      />
+    </svg>
+  );
+}
 
 // Stripe Payment Links — account "agentengineering", modalità LIVE (EUR/mese).
 // Prodotti/prezzi annotati in docs/sostieni.md. Se un link è vuoto il pulsante
@@ -51,17 +78,13 @@ const CONTRIBUTI = [
   },
 ];
 
-// Sponsorizzazioni per enti, associazioni e PA — tagli ANNUALI, attivati su
-// accordo/convenzione (fattura all'ente), non self-serve: il contatto è via
-// issue GitHub. Da Silver in su è inclusa l'API key dell'ente (A2A + MCP).
-const SPONSOR_CONTACT =
-  "https://github.com/agent-engineering-studio/opendata-ai/issues";
-
+// Sponsorizzazioni per enti, associazioni e PA. Livelli "Coming Soon": il
+// contatto è via email, senza quote pubblicate (si concordano sull'accordo).
 const SPONSOR = [
   {
     badge: "Bronze",
     badgeClass: "bg-secondary",
-    prezzo: "300",
+    medal: "#CD7F32",
     pitch: "Per associazioni e piccoli enti che vogliono dare un segnale.",
     voci: [
       "Logo e nome nel README e nei ringraziamenti",
@@ -72,7 +95,7 @@ const SPONSOR = [
   {
     badge: "Silver",
     badgeClass: "bg-primary",
-    prezzo: "1.000",
+    medal: "#9CA3AF",
     pitch: "Per enti e redazioni che integrano OpenData AI nei propri strumenti.",
     voci: [
       "Tutto ciò che offre Bronze + logo sul sito",
@@ -84,7 +107,7 @@ const SPONSOR = [
   {
     badge: "Gold",
     badgeClass: "bg-warning text-dark",
-    prezzo: "3.000",
+    medal: "#FFC107",
     pitch: "Per PA e organizzazioni che portano il dato sul territorio.",
     voci: [
       "Tutto ciò che offre Silver + deploy/convenzione dedicata",
@@ -94,17 +117,6 @@ const SPONSOR = [
     cardClass: "",
   },
 ];
-
-// Partner: alternativa a canone MENSILE alla sponsorizzazione annuale, per enti
-// e associazioni che preferiscono il ricorrente. ~ livello Silver, mensile.
-const PARTNER = {
-  prezzo: "99",
-  voci: [
-    "API key dell'ente per A2A e server MCP hosted",
-    "Logo sul sito e nei ringraziamenti",
-    "Supporto prioritario · disdici quando vuoi",
-  ],
-};
 
 export default function Page() {
   return (
@@ -120,93 +132,61 @@ export default function Page() {
               >
                 Sostieni · bene comune · open source
               </p>
-              <h1 className="display-5 fw-bold mb-3">
-                Tieni vivo OpenData AI con un contributo mensile
-              </h1>
+              <h1 className="display-5 fw-bold mb-3">Sostieni OpenData AI</h1>
               <p className="lead mb-0" style={{ opacity: 0.95 }}>
-                Esplorare OpenData AI è e resta gratuito. Ma ogni analisi usa
-                modelli linguistici a pagamento e gira su un server mantenuto a
-                spese di chi sviluppa il progetto. Con un contributo mensile —
-                grande o piccolo, a misura delle tue esigenze — copri una parte
-                concreta dei costi e aiuti a tenere il servizio aperto,
-                indipendente e open source.
+                OpenData AI è gratuito da esplorare e open source. Mantenerlo
+                attivo e aggiornato ha dei costi: con il tuo sostegno aiuti a
+                tenere il servizio aperto, indipendente e a disposizione di tutti.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* DOVE VANNO LE RISORSE */}
+      {/* DOVE VA IL CONTRIBUTO — messaggio unico e generico */}
       <section className="container py-5">
-        <div className="row g-4">
-          <div className="col-lg-8 mx-auto text-center mb-2">
+        <div className="row">
+          <div className="col-lg-8 mx-auto text-center">
             <h2 className="mb-3">Dove va il tuo contributo</h2>
-            <p className="lead text-muted">
-              Trasparenza totale: i contributi non generano profitto, coprono i
-              costi reali del servizio. L&apos;infrastruttura di base costa circa{" "}
-              <strong>24 €/mese</strong> (VPS Aruba), a cui si somma il costo
-              variabile dei modelli linguistici che cresce con l&apos;uso.
+            <p className="lead text-muted mb-0">
+              Trasparenza totale: i contributi non generano profitto. Il tuo
+              sostegno copre i costi del servizio — i{" "}
+              <strong>modelli linguistici</strong> che elaborano le analisi,
+              l&apos;<strong>infrastruttura</strong> che lo fa girare e lo{" "}
+              <strong>sviluppo open source</strong> rilasciato per la comunità.
             </p>
-          </div>
-        </div>
-        <div className="row g-4">
-          <div className="col-md-4">
-            <div className="card h-100 shadow-sm">
-              <div className="card-body">
-                <h5 className="card-title">Modelli linguistici</h5>
-                <p className="card-text small text-muted mb-0">
-                  Ogni analisi del territorio richiede più chiamate a modelli LLM.
-                  Per gli abbonati gireranno su <strong>Ollama Cloud</strong> (modello
-                  in via di definizione); chi preferisce può usare una propria chiave
-                  Claude o Ollama. È la voce di costo che cresce con l&apos;uso.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-4">
-            <div className="card h-100 shadow-sm">
-              <div className="card-body">
-                <h5 className="card-title">Infrastruttura</h5>
-                <p className="card-text small text-muted mb-0">
-                  Server, banca dati e cache su cui gira il servizio: circa
-                  24 €/mese di VPS, oggi a carico personale di chi mantiene il
-                  progetto.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-4">
-            <div className="card h-100 shadow-sm">
-              <div className="card-body">
-                <h5 className="card-title">Sviluppo open source</h5>
-                <p className="card-text small text-muted mb-0">
-                  Nuove fonti dati, lenti analitiche e miglioramenti, rilasciati
-                  pubblicamente per la comunità.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* CONTRIBUTI MENSILI */}
+      {/* ABBONAMENTO PRIVATI */}
       <section className="bg-white border-top border-bottom">
         <div className="container py-5">
           <div className="row">
             <div className="col-lg-8 mx-auto text-center mb-5">
               <h2 className="mb-3">Abbonamento per privati</h2>
               <p className="lead text-muted">
-                Due livelli pensati sul costo reale dell&apos;infrastruttura, per
-                chi usa OpenData AI come persona. Enti, associazioni e PA:{" "}
-                <a href="#sponsor">diventate sponsor o partner</a>.
+                Due livelli per chi usa OpenData AI come persona. Sei un ente,
+                un&apos;associazione o una PA? <a href="#sponsor">Diventa sponsor</a>.
               </p>
               <div className="alert alert-info text-start mt-4 mb-0" role="note">
-                <strong>Cosa sblocca l&apos;abbonamento.</strong> Con un piano attivo le
-                analisi useranno <strong>modelli ospitati su Ollama Cloud</strong> (il modello
-                preciso lo definiremo a breve), senza che tu debba gestire una chiave. In
-                alternativa, puoi usare gratuitamente una <strong>tua chiave</strong> (Claude
-                API, Ollama Cloud o un Ollama locale) dal{" "}
-                <a href="/account/llm-key">tuo profilo</a>.
+                <strong>Cosa sblocca l&apos;abbonamento.</strong> Con un piano
+                attivo le analisi useranno{" "}
+                <a
+                  href={OLLAMA_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="d-inline-flex align-items-center gap-1 fw-semibold text-decoration-none"
+                >
+                  <OllamaMark size={16} />
+                  Ollama Cloud
+                </a>
+                , senza che tu debba gestire una chiave. In alternativa, puoi usare
+                gratuitamente una <strong>tua chiave</strong> (Claude API,{" "}
+                <a href={OLLAMA_URL} target="_blank" rel="noopener noreferrer">
+                  Ollama Cloud
+                </a>{" "}
+                o un Ollama locale) dal <a href="/account/llm-key">tuo profilo</a>.
               </div>
             </div>
           </div>
@@ -250,45 +230,49 @@ export default function Page() {
         </div>
       </section>
 
-      {/* SPONSOR (enti / associazioni / PA) — tagli annuali */}
+      {/* SPONSOR (enti / associazioni / PA) — Coming Soon */}
       <section id="sponsor" className="container py-5">
         <div className="row">
           <div className="col-lg-8 mx-auto text-center mb-5">
             <h2 className="mb-3">Sei un ente, un&apos;associazione o una PA?</h2>
             <p className="lead text-muted">
-              Le organizzazioni sostengono OpenData AI come <strong>sponsor</strong>,
-              con un contributo annuale. Tiene il progetto aperto e indipendente e,
-              dal livello Silver, include un&apos;<strong>API key dell&apos;ente</strong>{" "}
-              per integrare A2A e i server MCP hosted (vedi la{" "}
-              <Link href="/docs">documentazione</Link>).
+              Le organizzazioni potranno sostenere OpenData AI come{" "}
+              <strong>sponsor</strong>, su tre livelli. I programmi sono in
+              arrivo: scrivici per ulteriori informazioni e per concordare i
+              dettagli.
             </p>
           </div>
         </div>
         <div className="row g-4 justify-content-center">
           {SPONSOR.map((s) => (
             <div className="col-lg-4" key={s.badge}>
-              <div className={`card h-100 shadow-sm ${s.cardClass}`}>
-                <div className="card-body d-flex flex-column">
-                  <span className={`badge ${s.badgeClass} align-self-start mb-2`}>
+              <div className={`card h-100 shadow-sm text-center ${s.cardClass}`}>
+                <div className="card-body d-flex flex-column align-items-center">
+                  <Medal color={s.medal} />
+                  <span className={`badge ${s.badgeClass} mt-2 mb-2`}>
                     {s.badge}
                   </span>
-                  <p className="mb-2">
-                    <span className="display-6 fw-bold">{s.prezzo} €</span>
-                    <span className="text-muted">/anno</span>
+                  <p
+                    className="fw-bold text-uppercase mb-3"
+                    style={{ letterSpacing: "0.08em", color: "#6c757d" }}
+                  >
+                    Coming Soon
                   </p>
                   <p className="text-muted small">{s.pitch}</p>
-                  <ul className="small text-muted">
+                  <ul className="small text-muted text-start">
                     {s.voci.map((v) => (
                       <li key={v}>{v}</li>
                     ))}
                   </ul>
                   <a
-                    href={SPONSOR_CONTACT}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`btn mt-auto ${s.cardClass ? "btn-primary" : "btn-outline-primary"}`}
+                    href={`mailto:${SPONSOR_EMAIL}?subject=${encodeURIComponent(
+                      `Sponsor ${s.badge} — OpenData AI`,
+                    )}`}
+                    className={`btn mt-auto ${
+                      s.cardClass ? "btn-primary" : "btn-outline-primary"
+                    }`}
                   >
-                    Diventa sponsor {s.badge}
+                    Richiedi informazioni
                   </a>
                 </div>
               </div>
@@ -296,54 +280,9 @@ export default function Page() {
           ))}
         </div>
 
-        {/* PARTNER — canone mensile per enti/associazioni */}
-        <div className="row mt-4">
-          <div className="col-lg-10 mx-auto">
-            <div className="card border-primary shadow-sm">
-              <div className="card-body">
-                <div className="row align-items-center g-3">
-                  <div className="col-md-8">
-                    <span className="badge bg-primary mb-2">Partner · canone mensile</span>
-                    <h3 className="h5 mb-2">
-                      Preferisci un canone mensile invece dello sponsor annuale?
-                    </h3>
-                    <p className="text-muted small mb-2">
-                      Per enti, associazioni e realtà simili che preferiscono il
-                      ricorrente: stessi vantaggi del livello Silver, mese per mese.
-                    </p>
-                    <ul className="small text-muted mb-0">
-                      {PARTNER.voci.map((v) => (
-                        <li key={v}>{v}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="col-md-4 text-md-end">
-                    <p className="mb-2">
-                      <span className="display-6 fw-bold">{PARTNER.prezzo} €</span>
-                      <span className="text-muted">/mese</span>
-                    </p>
-                    <a
-                      href={SPONSOR_CONTACT}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-primary"
-                    >
-                      Diventa partner
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <p className="text-center text-muted small mt-4 mb-0">
-          Sponsorizzazioni e partnership sono attivate su accordo/convenzione
-          (fattura all&apos;ente): scrivici aprendo una issue sul{" "}
-          <a href={SPONSOR_CONTACT} target="_blank" rel="noopener noreferrer">
-            repository GitHub
-          </a>{" "}
-          per concordare i dettagli.
+          Per ulteriori informazioni scrivici a{" "}
+          <a href={`mailto:${SPONSOR_EMAIL}`}>{SPONSOR_EMAIL}</a>.
         </p>
       </section>
 
@@ -352,13 +291,12 @@ export default function Page() {
         <div className="container py-5 text-center">
           <h2 className="mb-3">Ogni contributo tiene il progetto in vita</h2>
           <p className="lead mb-4" style={{ opacity: 0.9 }}>
-            Contributi mensili, sponsorizzazioni e convenzioni coprono
-            l&apos;infrastruttura e mantengono OpenData AI open source e
+            Contributi e sponsorizzazioni mantengono OpenData AI open source e
             indipendente. Scegli come dare una mano.
           </p>
           <div className="d-flex flex-wrap justify-content-center align-items-center gap-3">
             <a href="#sponsor" className="btn btn-light btn-lg">
-              Diventa sponsor o partner
+              Diventa sponsor
             </a>
             <Link href="/docs" className="btn btn-outline-light btn-lg">
               Scopri il progetto
