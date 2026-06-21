@@ -18,7 +18,7 @@ _REQ = ProgrammaRequest(cod_comune="072021")
 _LENSES = (
     "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
     "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti", "_resolve_welfare",
-    "_resolve_istruzione",
+    "_resolve_istruzione", "_resolve_ambiente",
 )
 
 
@@ -40,11 +40,11 @@ async def test_resolve_all_lenses_runs_in_parallel() -> None:
     out = await s._resolve_all_lenses(_REQ)
     elapsed = time.perf_counter() - t0
 
-    # 8 × 0.05s in serie ≈ 0.40s; in parallelo ≈ 0.05s. Soglia generosa.
+    # 9 × 0.05s in serie ≈ 0.45s; in parallelo ≈ 0.05s. Soglia generosa.
     assert elapsed < 0.2, f"lenti non parallele: {elapsed:.3f}s"
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-        "welfare", "istruzione",
+        "welfare", "istruzione", "ambiente",
     }
     assert out["commercio"] == {"tag": "_resolve_commercio"}
 
@@ -66,9 +66,11 @@ async def test_resolve_all_lenses_isolates_exceptions() -> None:
         _resolve_trasporti=lambda req: ok(),
         _resolve_welfare=lambda req: ok(),
         _resolve_istruzione=lambda req: ok(),
+        _resolve_ambiente=lambda req: ok(),
     )
     out = await s._resolve_all_lenses(_REQ)
 
     assert out["commercio"] is None         # eccezione isolata → None
     assert out["turismo"] == {"ok": True}   # le altre sopravvivono
     assert out["istruzione"] == {"ok": True}
+    assert out["ambiente"] == {"ok": True}

@@ -904,9 +904,74 @@ class OrchestratorSession:
             return None
         return res
 
+    @staticmethod
+    async def _resolve_ambiente(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora AMBIENTE con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("ambiente", req.cod_comune),
+            lambda: OrchestratorSession._resolve_ambiente_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_ambiente_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica: pericolosità da
+        frana (elevata/molto elevata, P3+P4) e idraulica/alluvioni (scenari P3/P2)
+        del comune da ISPRA IdroGEO — quota di territorio e popolazione esposte.
+        È l'unica fonte ambientale realmente COMUNALE con API REST (il consumo di
+        suolo ISPRA non ha API e l'ambiente urbano ISTAT copre solo i capoluoghi).
+        Vincolo di pianificazione: un'idea su aree a rischio elevato va localizzata
+        altrove o prevede mitigazione; quote ~0 = assenza di vincolo (anch'essa
+        evidenza). Best-effort: se IdroGEO non risponde la lente si salta (non si
+        inventa). Solo idee/completa.
+        """
+        if req.modalita not in ("idee", "completa"):
+            return None
+        try:
+            from opendata_core.ispra import IspraClient
+
+            async def _work() -> Any:
+                async with IspraClient() as c:
+                    return await c.risk_indicators(req.cod_comune)
+
+            ind = await asyncio.wait_for(_work(), timeout=30.0)
+        except Exception as exc:
+            _log_lens_skip("ancora ambiente ISPRA IdroGEO non risolta per %s — lente ambiente assente",
+                           req.cod_comune, exc=exc)
+            return None
+        if not ind:
+            return None
+
+        def _slice(slices: list[Any], classe: str) -> Any | None:
+            return next((s for s in slices if s.classe == classe), None)
+
+        fr = ind.frane_p3p4
+        idr_p3 = _slice(ind.idraulica, "p3")
+        idr_p2 = _slice(ind.idraulica, "p2")
+        return {
+            "comune": req.cod_comune,
+            "nome": ind.nome,
+            "popolazione_residente": ind.popolazione_residente,
+            "area_kmq": ind.area_kmq,
+            # frane: aggregato pericolosità elevata + molto elevata (P3+P4)
+            "frane_area_pct": fr.area_pct if fr else None,
+            "frane_pop": fr.popolazione if fr else None,
+            "frane_pop_pct": fr.popolazione_pct if fr else None,
+            # idraulica/alluvioni: scenario elevato (P3) e medio (P2)
+            "alluvioni_p3_area_pct": idr_p3.area_pct if idr_p3 else None,
+            "alluvioni_p3_pop_pct": idr_p3.popolazione_pct if idr_p3 else None,
+            "alluvioni_p2_area_pct": idr_p2.area_pct if idr_p2 else None,
+            "alluvioni_p2_pop": idr_p2.popolazione if idr_p2 else None,
+            "alluvioni_p2_pop_pct": idr_p2.popolazione_pct if idr_p2 else None,
+            "livello": "comunale",
+            "source_url": ind.source_url,
+            "trovato": True,
+        }
+
     async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
-        turismo, lavoro, trasporti, welfare, istruzione).
+        turismo, lavoro, trasporti, welfare, istruzione, ambiente).
 
         Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
         dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
@@ -915,7 +980,8 @@ class OrchestratorSession:
         così una lente che esplode non affonda le altre.
         """
         (
-            zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare, istruzione
+            zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare,
+            istruzione, ambiente,
         ) = await asyncio.gather(
             self._resolve_zona(req),
             self._resolve_zone_commerciali(req),
@@ -925,6 +991,7 @@ class OrchestratorSession:
             self._resolve_trasporti(req),
             self._resolve_welfare(req),
             self._resolve_istruzione(req),
+            self._resolve_ambiente(req),
             return_exceptions=True,
         )
 
@@ -943,6 +1010,7 @@ class OrchestratorSession:
             "trasporti": _ok(trasporti),
             "welfare": _ok(welfare),
             "istruzione": _ok(istruzione),
+            "ambiente": _ok(ambiente),
         }
 
     async def run_programma_streaming(
@@ -1003,12 +1071,14 @@ class OrchestratorSession:
                 trasporti_info=lenses["trasporti"],
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
+                ambiente_info=lenses["ambiente"],
             )
             task_text = build_programma_task(
                 req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
                 lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
+                ambiente_info=lenses["ambiente"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -1194,6 +1264,7 @@ class OrchestratorSession:
                 trasporti_info=lenses["trasporti"],
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
+                ambiente_info=lenses["ambiente"],
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(
@@ -1202,6 +1273,7 @@ class OrchestratorSession:
                     lenses["turismo"], lenses["lavoro"], lenses["trasporti"],
                     welfare_info=lenses["welfare"],
                     istruzione_info=lenses["istruzione"],
+                    ambiente_info=lenses["ambiente"],
                 )
             )
         outputs = events.get_outputs()

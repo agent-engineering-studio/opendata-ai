@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-21b"
+PROMPT_VERSION = "2026-06-21c"
 
 
 class ProgrammaResponse(BaseModel):
@@ -214,6 +214,7 @@ def build_programma_task(
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
+    ambiente_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -440,6 +441,23 @@ def build_programma_task(
                 "scolastico; pochi plessi per abitante; offerta sbilanciata); un'idea "
                 "'istruzione' deve ancorarsi a questi numeri e citare questa fonte."
             )
+        if ambiente_info:
+            parts.append(
+                "LENTE AMBIENTE / RISCHIO IDROGEOLOGICO — DATI ISPRA IdroGEO GIÀ "
+                "RACCOLTI (livello comunale): pericolosità da FRANA elevata/molto "
+                f"elevata (P3+P4) sul {ambiente_info.get('frane_area_pct')}% del "
+                f"territorio (popolazione esposta {ambiente_info.get('frane_pop')}, "
+                f"{ambiente_info.get('frane_pop_pct')}%); pericolosità IDRAULICA "
+                f"(alluvioni) scenario elevato P3 sul {ambiente_info.get('alluvioni_p3_area_pct')}% "
+                f"del territorio, scenario medio P2 sul {ambiente_info.get('alluvioni_p2_area_pct')}% "
+                f"(popolazione esposta P2 {ambiente_info.get('alluvioni_p2_pop')}, "
+                f"{ambiente_info.get('alluvioni_p2_pop_pct')}%). "
+                f"FONTE DA CITARE VERBATIM: {ambiente_info.get('source_url')} . USA questi "
+                "numeri come VINCOLO di pianificazione: un'idea che insiste su aree a "
+                "pericolosità elevata va localizzata altrove o deve includere mitigazione "
+                "del rischio. Se le quote sono ~0 dillo (l'assenza di vincolo è essa stessa "
+                "evidenza); un'idea 'ambiente' deve ancorarsi a questi numeri e citare questa fonte."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -612,6 +630,7 @@ def build_programma_aggregator(
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
+    ambiente_info: dict[str, Any] | None = None,
 ) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -874,6 +893,35 @@ def build_programma_aggregator(
                 "per abitante); un'idea 'istruzione' ancori su questi numeri e citi questa fonte."
             )
             sections.append(_bundle_section("istruzione", narrative, [ist_res]))
+
+        # Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica (ISPRA IdroGEO):
+        # pericolosità frane (P3+P4) e idraulica (alluvioni P3/P2) come Resource
+        # citabile (host isprambiente.it) + sezione evidenza. Un'idea 'ambiente'
+        # ancora su questi numeri come vincolo di pianificazione e cita la fonte.
+        if ambiente_info and ambiente_info.get("source_url"):
+            src = ambiente_info["source_url"].strip()
+            amb_res = Resource(
+                name=f"ISPRA IdroGEO — pericolosità idrogeologica del comune ({ambiente_info.get('nome')})",
+                url=src,
+                format="JSON",
+                source="ispra",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(amb_res)
+            narrative = (
+                "Rischio idrogeologico del comune (ISPRA IdroGEO, livello comunale). "
+                f"Pericolosità da frana elevata/molto elevata (P3+P4): "
+                f"{ambiente_info.get('frane_area_pct')}% del territorio, popolazione "
+                f"esposta {ambiente_info.get('frane_pop')} ({ambiente_info.get('frane_pop_pct')}%). "
+                f"Pericolosità idraulica (alluvioni): scenario elevato P3 su "
+                f"{ambiente_info.get('alluvioni_p3_area_pct')}% del territorio, scenario medio "
+                f"P2 su {ambiente_info.get('alluvioni_p2_area_pct')}% (popolazione esposta P2 "
+                f"{ambiente_info.get('alluvioni_p2_pop')}, {ambiente_info.get('alluvioni_p2_pop_pct')}%). "
+                "Vincolo di pianificazione: un'idea su aree a pericolosità elevata va "
+                "localizzata altrove o include mitigazione; quote ~0 = assenza di vincolo "
+                "(anch'essa evidenza). Un'idea 'ambiente' ancori su questi numeri e citi questa fonte."
+            )
+            sections.append(_bundle_section("ambiente", narrative, [amb_res]))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

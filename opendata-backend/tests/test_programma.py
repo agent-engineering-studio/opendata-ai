@@ -922,6 +922,67 @@ async def test_istruzione_info_injects_citable_miur_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ambiente_requires_local_anchor() -> None:
+    """ambiente (lente Ambiente): premessa = pericolosità idrogeologica ISPRA IdroGEO
+    (host in _AMBIENTE_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    idro_url = "https://idrogeo.isprambiente.it/api/pir/comuni/110002"
+    ev_ispra = {"fonte": "ispra", "url": idro_url, "dettaglio": "2,1% area a frana P3+P4"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("ambiente", [ev_ispra]),  # ok (ISPRA IdroGEO)
+                _idea("ambiente", [ev_oc]),     # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("ispra", "Rischio idrogeologico.", [
+        {"name": "rischio", "url": idro_url, "format": "JSON", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["ambiente"]
+
+
+@pytest.mark.asyncio
+async def test_ambiente_info_injects_citable_ispra_anchor() -> None:
+    """L'ancora Ambiente deterministica (ISPRA IdroGEO) iniettata dal backend è
+    citabile: una proposta ambiente che la cita sopravvive senza risorsa ISPRA
+    dagli specialisti."""
+    idro_url = "https://idrogeo.isprambiente.it/api/pir/comuni/110002"
+    ambiente_info = {
+        "comune": "110002", "nome": "Comune X",
+        "popolazione_residente": 27000, "area_kmq": 200.0,
+        "frane_area_pct": 0.07, "frane_pop": 2, "frane_pop_pct": 0.007,
+        "alluvioni_p3_area_pct": 2.06, "alluvioni_p3_pop_pct": 1.45,
+        "alluvioni_p2_area_pct": 3.81, "alluvioni_p2_pop": 671, "alluvioni_p2_pop_pct": 2.41,
+        "livello": "comunale", "source_url": idro_url, "trovato": True,
+    }
+    ev_ispra = {"fonte": "ispra", "url": idro_url, "dettaglio": "2,4% pop a rischio alluvioni P2"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("ambiente", [ev_ispra])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, ambiente_info=ambiente_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["ambiente"]
+    # display-clean: ISPRA → portale IdroGEO (mai il link API in profondità).
+    assert any(r.url == "https://idrogeo.isprambiente.it/" for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore

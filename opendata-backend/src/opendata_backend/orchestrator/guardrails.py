@@ -69,7 +69,7 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
               "commercio_duc", "turismo_cultura", "lavoro", "trasporti", "welfare",
-              "istruzione")
+              "istruzione", "ambiente")
 
 # Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
 # differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
@@ -95,6 +95,9 @@ _TRASPORTI_HOSTS = ("openstreetmap.org", "overpass-api.de")
 _WELFARE_HOSTS = ("istat.it",)
 # Host valido come premessa di ISTRUZIONE: anagrafe scuole MIUR Open Data.
 _ISTRUZIONE_HOSTS = ("dati.istruzione.it",)
+# Host valido come premessa di AMBIENTE: pericolosità idrogeologica ISPRA IdroGEO
+# (host idrogeo.isprambiente.it ⊃ isprambiente.it).
+_AMBIENTE_HOSTS = ("isprambiente.it",)
 
 
 def _evidence_hosts(evidenze: list) -> list[str]:
@@ -157,6 +160,10 @@ def _generatore_ok(prop) -> bool:
         # Lente Istruzione: premessa LOCALE = dotazione scolastica MIUR Open Data.
         # Nessun requisito web.
         return any(any(d in h for d in _ISTRUZIONE_HOSTS) for h in hosts)
+    if prop.generatore == "ambiente":
+        # Lente Ambiente/Rischio idrogeologico: premessa LOCALE = pericolosità
+        # frane/alluvioni ISPRA IdroGEO. Nessun requisito web.
+        return any(any(d in h for d in _AMBIENTE_HOSTS) for h in hosts)
     return False  # generatore mancante o sconosciuto
 
 
