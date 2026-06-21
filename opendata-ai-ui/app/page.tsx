@@ -394,7 +394,7 @@ export default function Page() {
               </p>
               <div className="d-flex flex-column gap-2">
                 <SurfaceRow title="MCP — Model Context Protocol" sub="3 server (CKAN, ISTAT, OSM) per ogni client MCP" badge="stdio · http" />
-                <SurfaceRow title="A2A — Agent-to-Agent" sub="AgentCard pubblica + JSON-RPC SendMessage" badge="SDK 1.0 + 0.3" />
+                <SurfaceRow title="A2A — Agent-to-Agent" sub="AgentCard pubblica + JSON-RPC SendMessage" badge="SDK 1.0" />
                 <SurfaceRow title="REST diretto" sub="/datasets/search/stream NDJSON · classify con cache 24h" badge="JWT" />
               </div>
             </div>

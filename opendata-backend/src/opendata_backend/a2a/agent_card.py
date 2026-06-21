@@ -114,7 +114,7 @@ def _skills() -> list[AgentSkill]:
 
 
 def build_agent_card(public_url: str, version: str = "0.1.0") -> AgentCard:
-    """Construct the AgentCard published at /.well-known/agent.json.
+    """Construct the AgentCard published at /.well-known/agent-card.json.
 
     `public_url` must be the externally reachable URL of this backend (e.g.
     `https://api.opendata.example.com` in prod, `http://localhost:18000` in dev).

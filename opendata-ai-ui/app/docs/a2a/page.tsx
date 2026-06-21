@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { NextStepsCards } from "@/components/NextStepsCards";
 
 export const metadata: Metadata = {
   title: "A2A — Agent-to-Agent — OpenData AI",
   description:
-    "Come parlare con il backend OpenData AI da un altro agente via protocollo A2A: AgentCard, SDK 1.0 (SendMessage), SDK 0.3 (message/send), esempi Python e curl.",
+    "Come parlare con il backend OpenData AI da un altro agente via protocollo A2A: AgentCard, SDK 1.0 (SendMessage), esempi Python e curl. L'API key è la credenziale per le chiamate headless.",
 };
+
+const GITHUB_URL = "https://github.com/agent-engineering-studio/opendata-ai";
 
 export default function Page() {
   return (
@@ -18,28 +21,77 @@ export default function Page() {
         Il backend OpenData AI è un <strong>server A2A</strong>: pubblica una{" "}
         <em>AgentCard</em> e accetta chiamate JSON-RPC da qualunque agente
         che parla il protocollo Agent-to-Agent. È il modo giusto per
-        delegare task &ldquo;cerca questi dataset&rdquo; o &ldquo;classifica
-        questo dataset&rdquo; da un orchestratore esterno.
+        delegare a un orchestratore esterno task come &ldquo;cerca questi
+        dataset&rdquo; o &ldquo;classifica questo dataset&rdquo;.
       </p>
 
       <div className="alert alert-info">
         <strong>A2A è la superficie pubblica dell&apos;abbonamento.</strong> La
         discovery della AgentCard è pubblica; le invocazioni JSON-RPC su{" "}
-        <code>/a2a/</code> richiedono una credenziale. Per gli agenti
-        server-to-server usa un&apos;<strong>API key</strong> (
-        <code>Authorization: Bearer od_…</code> o <code>X-API-Key</code>) — vedi{" "}
-        <Link href="/docs/api-keys">/docs/api-keys</Link>. Gli esempi qui sotto
-        mostrano un JWT Clerk (la credenziale della UI), ma la chiave{" "}
-        <code>od_…</code> è interscambiabile ed è quella consigliata per le
-        integrazioni headless.
+        <code>/a2a/</code> richiedono la tua <strong>API key</strong> (
+        <code>Authorization: Bearer od_…</code> oppure <code>X-API-Key</code>).
+        Come generarla, ruotarla e revocarla è spiegato in{" "}
+        <Link href="/docs/api-keys">/docs/api-keys</Link>.
       </div>
+
+      <section className="mt-4">
+        <h2>Cosa puoi fare con l&apos;API key</h2>
+        <p>
+          La stessa chiave <code>od_…</code> autentica due superfici diverse, a
+          seconda di come usi la piattaforma:
+        </p>
+        <div className="table-responsive">
+          <table className="table table-bordered align-middle">
+            <thead className="table-light">
+              <tr>
+                <th>Superficie</th>
+                <th>Cosa ti dà</th>
+                <th>Dove</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <strong>A2A</strong> (abbonamento)
+                </td>
+                <td>
+                  Deleghi l&apos;intera domanda all&apos;orchestratore hosted e
+                  ricevi la sintesi pre-fatta. È l&apos;unica superficie
+                  pubblica dell&apos;offerta in abbonamento.
+                </td>
+                <td>Questa pagina.</td>
+              </tr>
+              <tr>
+                <td>
+                  <strong>MCP</strong> (self-host)
+                </td>
+                <td>
+                  In self-host la stessa chiave, messa dietro il gateway del
+                  backend, autentica i tre server MCP (CKAN / ISTAT / OSM): chiami
+                  i singoli <em>tool</em> dal tuo agente. In abbonamento gli MCP{" "}
+                  <strong>non</strong> sono esposti.
+                </td>
+                <td>
+                  <Link href="/docs/mcp">/docs/mcp</Link>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="small text-muted mb-0">
+          In breve: <strong>A2A</strong> espone <em>l&apos;intero agente</em>{" "}
+          OpenData AI (deleghi la domanda, ricevi la risposta); <strong>MCP</strong>{" "}
+          espone <em>tool</em> a un LLM che orchestri tu (utile solo in
+          self-host). Non sono alternative concorrenti: scegli A2A per l&apos;uso
+          hosted, gli MCP se ti monti lo stack in casa.
+        </p>
+      </section>
 
       <section className="mt-4">
         <h2>Discovery — AgentCard</h2>
         <p>
           La AgentCard è esposta su <code>/.well-known/agent-card.json</code>{" "}
-          (SDK 1.0) e su <code>/.well-known/agent.json</code> come alias
-          legacy 0.3. Contiene metadata, skill esposte e supported versions.{" "}
+          (path standard SDK 1.0). Contiene metadata, skill esposte e versione.{" "}
           Questo endpoint <strong>non</strong> richiede autenticazione.
         </p>
         <pre
@@ -138,9 +190,10 @@ export default function Page() {
       </section>
 
       <section className="mt-4">
-        <h2>SDK 1.0 — <code>SendMessage</code> (raccomandato)</h2>
+        <h2>Invocazione — <code>SendMessage</code></h2>
         <p className="text-muted small mb-2">
-          PascalCase, <code>role</code> come enum protobuf:
+          JSON-RPC su <code>/a2a/</code>, metodo PascalCase{" "}
+          <code>SendMessage</code> (SDK 1.0), autenticato con la tua API key:
         </p>
         <pre
           className="bg-light border rounded p-3 small font-monospace"
@@ -148,40 +201,13 @@ export default function Page() {
         >
 {`curl -sX POST https://api.opendata-ai.it/a2a/ \\
   -H 'Content-Type: application/json' \\
-  -H 'Authorization: Bearer <clerk_jwt>' \\
-  -H 'A2A-Version: 1.0' \\
+  -H 'Authorization: Bearer od_…' \\
   -d '{
     "jsonrpc":"2.0","id":"1","method":"SendMessage",
     "params":{"message":{
       "messageId":"m-1",
       "role":"ROLE_USER",
       "parts":[{"text":"qualità aria a Milano"}],
-      "metadata":{"skill":"search_open_data"}
-    }}
-  }'`}
-        </pre>
-      </section>
-
-      <section className="mt-4">
-        <h2>SDK 0.3 (compat) — <code>message/send</code></h2>
-        <p className="text-muted small mb-2">
-          slash-case, <code>role</code> lowercase, <code>kind: text</code>{" "}
-          esplicito nei parts:
-        </p>
-        <pre
-          className="bg-light border rounded p-3 small font-monospace"
-          style={{ overflowX: "auto", whiteSpace: "pre" }}
-        >
-{`curl -sX POST https://api.opendata-ai.it/a2a/ \\
-  -H 'Content-Type: application/json' \\
-  -H 'Authorization: Bearer <clerk_jwt>' \\
-  -H 'A2A-Version: 0.3' \\
-  -d '{
-    "jsonrpc":"2.0","id":"1","method":"message/send",
-    "params":{"message":{
-      "messageId":"m-2",
-      "role":"user",
-      "parts":[{"kind":"text","text":"qualità aria a Milano"}],
       "metadata":{"skill":"search_open_data"}
     }}
   }'`}
@@ -202,7 +228,7 @@ from a2a.client import A2AClient
 
 client = A2AClient(
     "https://api.opendata-ai.it/a2a/",
-    headers={"Authorization": f"Bearer {os.environ['OPENDATA_JWT']}"},
+    headers={"Authorization": f"Bearer {os.environ['OPENDATA_API_KEY']}"},
 )
 
 reply = client.send_message(
@@ -231,11 +257,10 @@ for r in data["resources"]:
             — il SDK valida con pydantic strict.
           </li>
           <li>
-            <strong>Header <code>A2A-Version</code></strong> deve coincidere col
-            metodo (<code>1.0</code> ↔ <code>SendMessage</code>,{" "}
-            <code>0.3</code> ↔ <code>message/send</code>). In alternativa
-            puoi omettere l&apos;header: il server lo deduce dal nome del
-            metodo.
+            <strong>Solo SDK 1.0</strong> — i metodi sono PascalCase
+            (<code>SendMessage</code>, <code>GetTask</code>,{" "}
+            <code>CancelTask</code>). La vecchia compat v0.3 (slash-case{" "}
+            <code>message/send</code>) non è più esposta.
           </li>
           <li>
             <strong>Skill</strong> si seleziona via{" "}
@@ -243,11 +268,9 @@ for r in data["resources"]:
             <code>search_open_data</code>).
           </li>
           <li>
-            <strong>Auth</strong>: in produzione le chiamate <code>/a2a/</code>{" "}
-            vogliono un JWT Clerk o un&apos;API key <code>od_…</code> (header{" "}
-            <code>Authorization: Bearer</code> o <code>X-API-Key</code>); la sola
-            AgentCard resta pubblica. In dev locale con{" "}
-            <code>AUTH_ENABLED=false</code> l&apos;header diventa opzionale.
+            <strong>Auth</strong>: le invocazioni <code>/a2a/</code> richiedono
+            la tua API key <code>od_…</code> — dettagli su credenziali, quota e
+            revoca in <Link href="/docs/api-keys">/docs/api-keys</Link>.
           </li>
         </ul>
       </section>
@@ -255,7 +278,7 @@ for r in data["resources"]:
       <section className="mt-4">
         <h2>Shape della risposta</h2>
         <p>
-          <code>result.task.status.state</code> = <code>completed</code> /{" "}
+          <code>result.task.status.state</code> ={" "}
           <code>TASK_STATE_COMPLETED</code>, più una lista di{" "}
           <code>artifacts</code>:
         </p>
@@ -272,20 +295,29 @@ for r in data["resources"]:
       </section>
 
       <section className="mt-4">
-        <h2>Quando usare A2A vs MCP</h2>
-        <ul>
-          <li>
-            <strong>MCP</strong> espone <em>tool</em> a un singolo LLM. Sceglilo
-            se vuoi costruire il tuo agente che chiama i nostri server CKAN /
-            ISTAT / OSM uno per volta.
-          </li>
-          <li>
-            <strong>A2A</strong> espone <em>l&apos;intero agente</em> OpenData
-            AI a un altro agente. Sceglilo se vuoi delegare l&apos;intera
-            domanda &ldquo;cerca tra gli open data&rdquo; al nostro
-            orchestratore, ricevendo la sintesi pre-fatta.
-          </li>
-        </ul>
+        <NextStepsCards
+          heading="Vai oltre"
+          items={[
+            {
+              href: "/docs/api-keys",
+              title: "API key",
+              blurb: "Genera, usa e revoca la credenziale per le chiamate A2A.",
+              badge: "Autenticazione",
+            },
+            {
+              href: "/docs/mcp",
+              title: "Server MCP",
+              blurb: "I tre server FastMCP CKAN / ISTAT / OSM per progetti self-host.",
+              badge: "Self-host",
+            },
+            {
+              href: GITHUB_URL,
+              title: "Repository GitHub",
+              blurb: "Setup, API REST completa e codice sorgente (licenza MIT).",
+              badge: "Open source",
+            },
+          ]}
+        />
       </section>
     </article>
   );

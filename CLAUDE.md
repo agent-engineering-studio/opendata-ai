@@ -287,8 +287,9 @@ a **How to apply** (when it kicks in).
   agent** to another agent. The opendata-ai backend is an MCP client (CKAN
   / SDMX / OSM) AND an A2A server (publishes AgentCard at
   `/.well-known/agent-card.json` — SDK 1.0 path with dash — JSON-RPC at
-  `/a2a/`, accepting both PascalCase `SendMessage` and slash-case
-  `message/send` thanks to v0.3 compat). Mixing them — e.g. exposing SDMX
+  `/a2a/`, SDK 1.0 only: PascalCase `SendMessage`/`GetTask`/`CancelTask`.
+  The legacy v0.3 surface (slash-case `message/send`, `/.well-known/agent.json`)
+  is no longer exposed). Mixing them — e.g. exposing SDMX
   tools over A2A or vice versa — defeats both protocols.
 - **How to apply:**
   - Adding a new external **tool** for the LLM → write an MCP server,
@@ -298,7 +299,7 @@ a **How to apply** (when it kicks in).
     `opendata_backend/a2a/executor.py`. Skills delegate to existing
     orchestrator code; don't duplicate logic.
   - Recursion safety: setting `A2A_SPECIALIST_URL` to point at the same
-    backend's `/.well-known/agent.json` works for the round-trip demo
+    backend's `/.well-known/agent-card.json` works for the round-trip demo
     but creates infinite delegation under load. Use a separate process
     or a different agent in production.
 
