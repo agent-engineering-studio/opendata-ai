@@ -10,10 +10,11 @@ from .fix import fix_csv
 from .geo import profile_geojson
 from .geoconvert import csv_to_geojson, json_to_geojson
 from .profile import profile_csv
+from .scale import advise_scale
 from .schema import infer_schema
 from .summarize import summarize_csv
 
 __all__ = [
     "profile_csv", "fix_csv", "profile_geojson", "generate_dcat", "infer_schema",
-    "csv_to_geojson", "json_to_geojson", "summarize_csv",
+    "csv_to_geojson", "json_to_geojson", "summarize_csv", "advise_scale",
 ]

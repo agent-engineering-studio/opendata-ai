@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from opendata_core.quality import (
+    advise_scale,
     csv_to_geojson,
     fix_csv,
     generate_dcat,
@@ -131,6 +132,28 @@ async def quality_profile(
         user.subject, "geojson" if geo else "csv", "url" if body.url else "content", len(text),
     )
     return profile_geojson(text) if geo else profile_csv(text)
+
+
+@router.post("/quality/scale")
+async def quality_scale(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Consigli di scala/performance per un CSV grande: formato colonnare (Parquet),
+    indici, partizionamento, esposizione via API. Deterministico. Solo CSV → geo 415.
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="I consigli di scala valgono per i CSV tabellari; per i GeoJSON usa la diagnosi geografica.",
+        )
+    size_bytes = len(text.encode("utf-8"))
+    log.info(
+        "/quality/scale subject=%s source=%s bytes=%d",
+        user.subject, "url" if body.url else "content", size_bytes,
+    )
+    return advise_scale(profile_csv(text), size_bytes=size_bytes)
 
 
 @router.post("/quality/summary")
