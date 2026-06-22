@@ -5,11 +5,12 @@ II grado) di un comune dai dataset anagrafe MIUR (scuole statali + paritarie).
 È l'unica fonte a copertura nazionale che geolocalizza la singola scuola al
 comune; misura la dotazione del servizio scolastico sul territorio.
 
-Vincolo del join (lezione della discovery 2026-06): i CSV MIUR **non contengono
-il codice ISTAT** del comune, solo `DESCRIZIONECOMUNE` (nome), `REGIONE` e il
-codice catastale Belfiore (`CODICECOMUNESCUOLA`, es. E038). Il join è quindi per
-NOME comune normalizzato (+ `regione` opzionale per disambiguare gli omonimi).
-Upgrade futuro: tabella ISTAT↔Belfiore per un match deterministico.
+Join (deterministico, dal 2026-06): i CSV MIUR non contengono il codice ISTAT,
+ma il codice catastale **Belfiore** (`CODICECOMUNESCUOLA`, es. E038). Si converte
+il codice ISTAT della richiesta in Belfiore tramite la tabella statica
+`data/istat_catastale.csv` (derivata da ISTAT + Agenzia Entrate, ~7900 comuni) e
+si filtra l'anagrafe su quel codice. Niente più match per nome → nessuna
+ambiguità sugli omonimi.
 
 Accesso (verificato live):
   https://dati.istruzione.it/opendata/opendata/catalogo/elements1/{SHORT}{AS}{YYYYMMDD}.csv
@@ -28,8 +29,8 @@ import csv
 import io
 import logging
 import os
-import unicodedata
 from datetime import date
+from importlib.resources import files
 from typing import Any
 
 import httpx
@@ -51,10 +52,12 @@ _START_YEAR_ENV = os.getenv("MIUR_START_YEAR")
 
 # Anagrafe annuale → cache lunga (l'anno scolastico cambia una volta l'anno).
 _TTL = int(os.getenv("MIUR_CACHE_TTL_SECONDS", str(7 * 24 * 3600)))
-# dataset → {nome_comune_norm: [(ordine, regione_norm), ...]}
+# dataset → {cod_catastale: [ordine, ...]}
 _index_cache: TTLCache = TTLCache(maxsize=8, ttl=_TTL)
-# (statali_year, comune_norm, regione_norm) → risultato
+# (start_year, base, cod_istat) → risultato
 _result_cache: TTLCache = TTLCache(maxsize=2048, ttl=_TTL)
+# Mappa ISTAT→Belfiore (lazy, statica): {cod_istat: cod_catastale}.
+_catastale_map: dict[str, str] | None = None
 
 # SHORT name del file per dataset.
 _DATASETS = {
@@ -64,15 +67,26 @@ _DATASETS = {
 _HEADER_SENTINEL = "ANNOSCOLASTICO"
 
 
-def _norm(value: str | None) -> str:
-    """Normalizza un nome (comune/regione) per il match: NFKD, niente accenti né
-    punteggiatura, spazi collassati, maiuscolo. 'Forlì'→'FORLI', "FORLI'"→'FORLI'."""
-    if not value:
-        return ""
-    s = unicodedata.normalize("NFKD", str(value))
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = "".join(c if c.isalnum() else " " for c in s)
-    return " ".join(s.split()).upper()
+def _catastale_for_istat(cod_istat: str) -> str | None:
+    """Codice catastale Belfiore (es. 'E038') per un codice ISTAT comune ('072021').
+
+    Carica una volta la tabella statica `data/istat_catastale.csv` (shippata nel
+    package). None se il codice ISTAT non è mappato (comune nuovo/variato → la
+    tabella va aggiornata)."""
+    global _catastale_map
+    if _catastale_map is None:
+        m: dict[str, str] = {}
+        raw = files("opendata_core.miur.data").joinpath("istat_catastale.csv").read_text(
+            encoding="utf-8"
+        )
+        reader = csv.DictReader(io.StringIO(raw))
+        for row in reader:
+            istat = (row.get("cod_istat") or "").strip()
+            cat = (row.get("cod_catastale") or "").strip().upper()
+            if istat and cat:
+                m[istat] = cat
+        _catastale_map = m
+    return _catastale_map.get((cod_istat or "").strip())
 
 
 def _macro_ordine(desc: str) -> str | None:
@@ -107,32 +121,33 @@ def _build_url(base: str, short: str, as_compact: str, ref: str) -> str:
     return f"{base.rstrip('/')}/{short}{as_compact}{ref}.csv"
 
 
-def _parse_anagrafe(text: str) -> dict[str, list[tuple[str, str]]]:
-    """CSV anagrafe → {nome_comune_norm: [(ordine, regione_norm), ...]}.
+def _parse_anagrafe(text: str) -> dict[str, list[str]]:
+    """CSV anagrafe → {cod_catastale: [ordine, ...]}.
 
-    Una riga = un plesso (`CODICESCUOLA`). Gli aggregatori amministrativi
-    (`_macro_ordine` None) sono esclusi. Parsing per NOME colonna (header reale),
-    robusto all'ordine e alle colonne extra fra statali (20) e paritarie (14).
+    Una riga = un plesso (`CODICESCUOLA`). Chiave = codice catastale Belfiore
+    (`CODICECOMUNESCUOLA`) → join deterministico col codice ISTAT via tabella.
+    Gli aggregatori amministrativi (`_macro_ordine` None) sono esclusi. Parsing
+    per NOME colonna (header reale), robusto fra statali (20 col) e paritarie (14).
     """
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames or _HEADER_SENTINEL not in reader.fieldnames:
         return {}
-    index: dict[str, list[tuple[str, str]]] = {}
+    index: dict[str, list[str]] = {}
     for row in reader:
         ordine = _macro_ordine(row.get("DESCRIZIONETIPOLOGIAGRADOISTRUZIONESCUOLA", ""))
         if ordine is None:
             continue
-        comune = _norm(row.get("DESCRIZIONECOMUNE"))
-        if not comune:
+        cat = (row.get("CODICECOMUNESCUOLA") or "").strip().upper()
+        if not cat:
             continue
-        index.setdefault(comune, []).append((ordine, _norm(row.get("REGIONE"))))
+        index.setdefault(cat, []).append(ordine)
     return index
 
 
 async def _load_index(
     dataset: str, base: str, start_year: int
-) -> tuple[dict[str, list[tuple[str, str]]], str, str] | None:
-    """Indice nazionale del dataset (nome comune → plessi), con anno effettivo e
+) -> tuple[dict[str, list[str]], str, str] | None:
+    """Indice nazionale del dataset (cod. catastale → plessi), con anno effettivo e
     URL. Cache module-level per (dataset, base): l'anagrafe nazionale si scarica
     una volta e serve tutti i comuni. None se nessun anno è disponibile."""
     ck = (dataset, base)
@@ -164,27 +179,34 @@ async def _load_index(
 
 
 async def fetch_scuole_comune(
-    comune_nome: str,
-    regione: str | None = None,
+    cod_comune: str,
     base_url: str | None = None,
     start_year: int | None = None,
 ) -> dict[str, Any]:
     """Dotazione scolastica del comune (plessi per ordine) da MIUR Open Data.
 
-    Somma scuole statali + paritarie. Join per NOME comune normalizzato; passa
-    `regione` per disambiguare gli omonimi. Ritorna `trovato=False` quando il
-    comune non compare nell'anagrafe (nome assente, o dataset non disponibile)
-    → "dato insufficiente", mai conteggi falsi. Cache per (anno, comune, regione).
+    Somma scuole statali + paritarie. Join DETERMINISTICO: codice ISTAT →
+    codice catastale Belfiore (tabella statica) → filtro su `CODICECOMUNESCUOLA`.
+    Ritorna `trovato=False` quando il comune non compare nell'anagrafe, il codice
+    ISTAT non è mappato, o il dataset non è disponibile → "dato insufficiente",
+    mai conteggi falsi. Cache per (anno, comune).
     """
-    nome_norm = _norm(comune_nome)
-    reg_norm = _norm(regione) if regione else None
-    if not nome_norm:
-        return {"trovato": False, "note": "comune_nome mancante: join MIUR non possibile."}
+    cod = (cod_comune or "").strip()
+    catastale = _catastale_for_istat(cod)
+    if not catastale:
+        return {
+            "trovato": False,
+            "comune": cod,
+            "note": (
+                f"Codice ISTAT {cod!r} non mappato a un codice catastale "
+                "(tabella istat_catastale da aggiornare?): join MIUR non possibile."
+            ),
+        }
     base = (base_url or _BASE_DEFAULT).rstrip("/")
     sy = start_year if start_year is not None else (
         int(_START_YEAR_ENV) if _START_YEAR_ENV else date.today().year
     )
-    ck = (sy, base, nome_norm, reg_norm or "")
+    ck = (sy, base, cod)
     if ck in _result_cache:
         return _result_cache[ck]
 
@@ -192,7 +214,7 @@ async def fetch_scuole_comune(
     if statali is None:
         return {
             "trovato": False,
-            "comune": comune_nome,
+            "comune": cod,
             "note": "Anagrafe scuole statali MIUR non disponibile (nessun anno scolastico recente).",
         }
     # Paritarie best-effort: se manca, la dotazione resta valida sulle sole statali.
@@ -206,9 +228,7 @@ async def fetch_scuole_comune(
         if not loaded:
             return
         index, _label, _url = loaded
-        for ordine, reg in index.get(nome_norm, ()):
-            if reg_norm and reg != reg_norm:
-                continue
+        for ordine in index.get(catastale, ()):
             conteggi[ordine] += 1
             if is_statale:
                 statali_tot += 1
@@ -224,12 +244,12 @@ async def fetch_scuole_comune(
     if totale == 0:
         result = {
             "trovato": False,
-            "comune": comune_nome,
+            "comune": cod,
             "anno_scolastico": anno,
             "source_url": source_url,
             "note": (
-                f"Nessuna scuola trovata per '{comune_nome}' nell'anagrafe MIUR {anno} "
-                "(verifica il nome del comune o l'eventuale regione di disambiguazione)."
+                f"Nessuna scuola in anagrafe MIUR {anno} per il comune {cod} "
+                f"(codice catastale {catastale})."
             ),
         }
         _result_cache[ck] = result
@@ -237,7 +257,7 @@ async def fetch_scuole_comune(
 
     result = {
         "trovato": True,
-        "comune": comune_nome,
+        "comune": cod,
         "anno_scolastico": anno,
         "scuole_totali": totale,
         "scuole_statali": statali_tot,
