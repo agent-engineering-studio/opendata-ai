@@ -21,7 +21,7 @@ import logging
 import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable
 
 import httpx
 
@@ -108,6 +108,31 @@ def _log_lens_skip(msg: str, *args: object, exc: BaseException) -> None:
 # vengono messi in cache: un'assenza dovuta a un'outage transitoria NON deve
 # oscurare la lente per 24h — si ritenta alla richiesta successiva.
 _LENS_TTL = 24 * 3600
+
+# Rete di sicurezza per le lenti OSM che NON hanno già un `wait_for` interno
+# (zona, zone_commerciali): un socket appeso non deve trascinare l'intera fase
+# "evidenze territoriali". Volutamente GENEROSO (= al ceiling delle lenti più
+# lente già esistenti, istruzione/sanità a 90s): con Overpass che fallisce in
+# fretta sui mirror morti (connect corto) questo guardrail NON scatta mai nel
+# percorso sano — protegge solo dalle patologie, senza degradare una lente viva.
+_LENS_SAFETY_TIMEOUT = 90.0
+
+# Etichette-fonte delle 10 lenti territoriali: emesse come `source` negli eventi
+# di streaming così la UI mostra una checklist live ("come il thinking") invece
+# di un'unica barra opaca "evidenze territoriali". Stringhe già leggibili → il
+# frontend le mostra senza dover mantenere un dizionario parallelo.
+_LENS_SOURCES: dict[str, str] = {
+    "zona": "Zona selezionata",
+    "zone_comm": "Zone commerciali",
+    "commercio": "Commercio · imprese ISTAT",
+    "turismo": "Turismo e cultura",
+    "lavoro": "Lavoro e competenze",
+    "trasporti": "Trasporti e mobilità",
+    "welfare": "Welfare e coesione sociale",
+    "istruzione": "Istruzione · scuole",
+    "ambiente": "Ambiente · rischio idrogeologico",
+    "sanita": "Sanità di prossimità",
+}
 
 
 async def _lens_cached(parts: tuple[str, ...], producer):  # noqa: ANN001, ANN202
@@ -533,7 +558,10 @@ class OrchestratorSession:
             from opendata_core.osm import zones as osm_zones
 
             osm_type, _, osm_id = req.zona_osm_id.partition("/")
-            feature = await osm_zones.get_zone(osm_type, osm_id or osm_type)
+            feature = await asyncio.wait_for(
+                osm_zones.get_zone(osm_type, osm_id or osm_type),
+                timeout=_LENS_SAFETY_TIMEOUT,
+            )
             if feature is None:
                 return None
             geom = feature.get("geometry") or {}
@@ -590,24 +618,29 @@ class OrchestratorSession:
         try:
             from opendata_core.osm import zones as osm_zones
 
-            for tipo in ("commerciale", "quartieri"):
-                out = await osm_zones.list_zones(
-                    req.cod_comune, tipo, comune_nome=req.comune_nome
-                )
-                cand = out.get("candidates") or []
-                if cand and out.get("fallback_level") != 3:
-                    # Max 2 zone: ogni zona = 1 chiamata Overpass in più; con
-                    # l'istanza pubblica che throttla (429), meglio poche.
-                    return [
-                        {
-                            "name": c.get("name"),
-                            "centroid": c.get("centroid"),
-                            "bbox": c.get("bbox"),
-                            "zona_tipo": c.get("zona_tipo", tipo),
-                        }
-                        for c in cand[:2]
-                    ]
-            return None
+            async def _work() -> list[dict[str, Any]] | None:
+                for tipo in ("commerciale", "quartieri"):
+                    out = await osm_zones.list_zones(
+                        req.cod_comune, tipo, comune_nome=req.comune_nome
+                    )
+                    cand = out.get("candidates") or []
+                    if cand and out.get("fallback_level") != 3:
+                        # Max 2 zone: ogni zona = 1 chiamata Overpass in più; con
+                        # l'istanza pubblica che throttla (429), meglio poche.
+                        return [
+                            {
+                                "name": c.get("name"),
+                                "centroid": c.get("centroid"),
+                                "bbox": c.get("bbox"),
+                                "zona_tipo": c.get("zona_tipo", tipo),
+                            }
+                            for c in cand[:2]
+                        ]
+                return None
+
+            # Due list_zones in sequenza (Overpass + eventuale fallback Nominatim):
+            # rete di sicurezza così la lente non resta appesa oltre il ceiling.
+            return await asyncio.wait_for(_work(), timeout=_LENS_SAFETY_TIMEOUT)
         except Exception as exc:
             _log_lens_skip("zone commerciali non risolte per %s — gap commercio a livello comune",
                            req.cod_comune, exc=exc)
@@ -1049,51 +1082,67 @@ class OrchestratorSession:
             _log_lens_skip("presìdi sanitari OSM non risolti per %s", req.cod_comune, exc=exc)
             return None
 
-    async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
+    async def _resolve_all_lenses(
+        self,
+        req: ProgrammaRequest,
+        *,
+        emit: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
         turismo, lavoro, trasporti, welfare, istruzione, ambiente, sanita).
 
         Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
         dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
         costo passa da SOMMA a MAX. Ogni lente è già fail-safe (ritorna None su
-        errore); qui isoliamo anche le eccezioni impreviste con return_exceptions,
-        così una lente che esplode non affonda le altre.
+        errore); qui isoliamo anche le eccezioni impreviste, così una lente che
+        esplode non affonda le altre.
+
+        Se `emit` è fornito, OGNI lente pubblica un evento `status` start/end
+        appena parte/conclude — con `elapsed_ms` e l'esito (None ⇒ `error`:
+        "nessun dato", marcata "–" dalla UI). Così la fase "evidenze territoriali"
+        diventa una checklist live delle 10 lenti invece di una barra opaca.
         """
-        (
-            zona, zone_comm, commercio, turismo, lavoro, trasporti, welfare,
-            istruzione, ambiente, sanita,
-        ) = await asyncio.gather(
-            self._resolve_zona(req),
-            self._resolve_zone_commerciali(req),
-            self._resolve_commercio(req),
-            self._resolve_turismo(req),
-            self._resolve_lavoro(req),
-            self._resolve_trasporti(req),
-            self._resolve_welfare(req),
-            self._resolve_istruzione(req),
-            self._resolve_ambiente(req),
-            self._resolve_sanita(req),
-            return_exceptions=True,
-        )
+        lenses: list[tuple[str, Any]] = [
+            ("zona", self._resolve_zona(req)),
+            ("zone_comm", self._resolve_zone_commerciali(req)),
+            ("commercio", self._resolve_commercio(req)),
+            ("turismo", self._resolve_turismo(req)),
+            ("lavoro", self._resolve_lavoro(req)),
+            ("trasporti", self._resolve_trasporti(req)),
+            ("welfare", self._resolve_welfare(req)),
+            ("istruzione", self._resolve_istruzione(req)),
+            ("ambiente", self._resolve_ambiente(req)),
+            ("sanita", self._resolve_sanita(req)),
+        ]
+        loop = asyncio.get_event_loop()
 
-        def _ok(x: Any) -> Any:
-            if isinstance(x, BaseException):
-                log.warning("resolver lente fallito (isolato): %s", x)
-                return None
-            return x
+        async def _run(key: str, coro: Any) -> tuple[str, Any]:
+            src = _LENS_SOURCES.get(key, key)
+            if emit is not None:
+                emit({"event": "status", "source": src, "phase": "start"})
+            t0 = loop.time()
+            result: Any = None
+            try:
+                result = await coro
+            except Exception as exc:  # noqa: BLE001 — isola la lente (CancelledError risale)
+                log.warning("resolver lente %s fallito (isolato): %s", key, exc)
+                result = None
+            if emit is not None:
+                ev: dict[str, Any] = {
+                    "event": "status", "source": src, "phase": "end",
+                    "elapsed_ms": int((loop.time() - t0) * 1000),
+                }
+                if result is None:  # nessun dato → la UI marca "–" (saltata, non errore)
+                    ev["error"] = "nessun dato"
+                emit(ev)
+            return key, result
 
-        return {
-            "zona": _ok(zona),
-            "zone_comm": _ok(zone_comm),
-            "commercio": _ok(commercio),
-            "turismo": _ok(turismo),
-            "lavoro": _ok(lavoro),
-            "trasporti": _ok(trasporti),
-            "welfare": _ok(welfare),
-            "istruzione": _ok(istruzione),
-            "ambiente": _ok(ambiente),
-            "sanita": _ok(sanita),
-        }
+        pairs = await asyncio.gather(*(_run(k, c) for k, c in lenses))
+        out = dict(pairs)
+        return {k: out[k] for k in (
+            "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
+            "welfare", "istruzione", "ambiente", "sanita",
+        )}
 
     async def run_programma_streaming(
         self,
@@ -1126,16 +1175,25 @@ class OrchestratorSession:
         # per ~150-200s. I resolver restano fuori dal lock (indipendenti, cache-ati).
         yield {"event": "status", "source": "evidenze territoriali", "phase": "start"}
         t_lens = asyncio.get_event_loop().time()
-        lens_task = asyncio.create_task(self._resolve_all_lenses(req))
-        while not lens_task.done():
+        # P1 con visibilità per-lente: ogni lente pubblica start/end sulla coda
+        # man mano che parte/conclude → la UI mostra la checklist live delle 10
+        # lenti, non più un'unica barra ferma per minuti.
+        lens_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        lens_task = asyncio.create_task(
+            self._resolve_all_lenses(req, emit=lens_queue.put_nowait)
+        )
+        while not lens_task.done() or not lens_queue.empty():
             try:
-                await asyncio.wait_for(asyncio.shield(lens_task), timeout=heartbeat_sec)
+                ev = await asyncio.wait_for(lens_queue.get(), timeout=heartbeat_sec)
             except asyncio.TimeoutError:
-                yield {
-                    "event": "heartbeat",
-                    "in_flight": ["evidenze territoriali"],
-                    "elapsed_ms": int((asyncio.get_event_loop().time() - t_lens) * 1000),
-                }
+                if not lens_task.done():
+                    yield {
+                        "event": "heartbeat",
+                        "in_flight": ["evidenze territoriali"],
+                        "elapsed_ms": int((asyncio.get_event_loop().time() - t_lens) * 1000),
+                    }
+                continue
+            yield ev
         lenses = await lens_task
         yield {"event": "status", "source": "evidenze territoriali", "phase": "end"}
 

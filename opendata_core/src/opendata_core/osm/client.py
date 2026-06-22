@@ -143,15 +143,24 @@ def _overpass_filter(category: str) -> str:
 # Le istanze Overpass pubbliche throttlano (429) e vanno in 504 sotto carico:
 # OGNI chiamata Overpass del repo passa da `overpass_post`, che ritenta con
 # backoff e RUOTA sui mirror di fallback (env OVERPASS_FALLBACK_URLS).
+# Default: mirror FR per primo (overpass-api.de e kumi sono bloccati in egress
+# da alcune reti — vedi nota operativa). Sovrascrivibile via env.
 OVERPASS_FALLBACK_URLS = [
     u.strip()
     for u in os.getenv(
-        "OVERPASS_FALLBACK_URLS", "https://overpass.kumi.systems/api/interpreter"
+        "OVERPASS_FALLBACK_URLS",
+        "https://overpass.openstreetmap.fr/api/interpreter,"
+        "https://overpass.kumi.systems/api/interpreter",
     ).split(",")
     if u.strip()
 ]
 _OVERPASS_MAX_RETRIES = 3
 _OVERPASS_RETRYABLE = (429, 502, 504)
+# Un mirror irraggiungibile (egress bloccato → spesso il pacchetto è DROPpato,
+# niente RST: la connect resterebbe appesa fino al timeout di read) va scartato
+# in fretta. Teniamo il CONNECT corto e il READ generoso (Overpass calcola query
+# pesanti per decine di secondi su un host VIVO).
+_OVERPASS_CONNECT_TIMEOUT = 6.0
 
 log = logging.getLogger("opendata-core.osm")
 
@@ -172,27 +181,55 @@ async def overpass_post(
     backoff_base: float = 4.0,
     max_retries: int = _OVERPASS_MAX_RETRIES,
 ) -> list[dict[str, Any]]:
-    """POST a Overpass con retry/backoff e rotazione degli endpoint."""
+    """POST a Overpass con rotazione degli endpoint a ogni fallimento.
+
+    Due cambi rispetto al naïve "ritenta lo stesso host con backoff":
+    - CONNECT corto (`_OVERPASS_CONNECT_TIMEOUT`): un mirror morto (egress
+      bloccato → il pacchetto è DROPpato, niente RST) si scarta in pochi secondi
+      invece di appendere la connect fino al timeout di read. Il READ resta
+      generoso per un host VIVO che calcola una query pesante.
+    - Su un errore di trasporto (host irraggiungibile) NON si dorme: ritentare lo
+      stesso host è solo tempo perso, si ruota subito al mirror successivo. Lo
+      sleep di backoff serve solo quando c'è un UNICO mirror che throttla (429):
+      con più mirror la rotazione è già la mitigazione giusta.
+
+    In rete sana non cambia nulla: il primo mirror raggiungibile risponde e si
+    esce al primo tentativo.
+    """
     last = ""
     endpoints = overpass_endpoints()
+    httpx_timeout = httpx.Timeout(timeout, connect=min(_OVERPASS_CONNECT_TIMEOUT, timeout))
+    attempts = max(max_retries, len(endpoints))
     async with await _http() as client:
-        for attempt in range(max_retries):
+        for attempt in range(attempts):
             endpoint = endpoints[attempt % len(endpoints)]
             try:
-                resp = await client.post(endpoint, data={"data": query}, timeout=timeout)
+                resp = await client.post(
+                    endpoint, data={"data": query}, timeout=httpx_timeout
+                )
             except httpx.HTTPError as exc:
                 last = f"transport: {type(exc).__name__}"
-                log.warning("Overpass %s su %s — provo il mirror successivo", last, endpoint)
-                continue
+                log.warning(
+                    "Overpass %s su %s — mirror irraggiungibile, passo al prossimo",
+                    last, endpoint,
+                )
+                continue  # host morto: nessuno sleep, prova subito il mirror dopo
             if resp.status_code in _OVERPASS_RETRYABLE:
                 last = f"HTTP {resp.status_code}"
-                delay = backoff_base * (attempt + 1)
-                log.warning("Overpass %s su %s — retry in %.1fs", last, endpoint, delay)
-                await asyncio.sleep(delay)
+                # Sleep solo se NON c'è un altro mirror su cui ruotare (un solo
+                # endpoint): altrimenti il prossimo giro tocca già un host diverso.
+                if len(endpoints) == 1 and attempt + 1 < attempts:
+                    delay = backoff_base * (attempt + 1)
+                    log.warning("Overpass %s su %s — retry in %.1fs", last, endpoint, delay)
+                    await asyncio.sleep(delay)
+                else:
+                    log.warning("Overpass %s su %s — ruoto al mirror successivo", last, endpoint)
                 continue
             resp.raise_for_status()
             return resp.json().get("elements", [])
-    raise OverpassError(f"Overpass non disponibile dopo {max_retries} tentativi ({last})")
+    raise OverpassError(
+        f"Overpass non disponibile su {len(endpoints)} mirror dopo {attempts} tentativi ({last})"
+    )
 
 
 async def overpass_around(

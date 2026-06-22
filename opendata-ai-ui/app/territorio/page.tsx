@@ -36,6 +36,7 @@ type Step = {
   label: string;
   kind: "fonte" | "tool";
   phase: "start" | "end" | "error";
+  elapsedMs?: number; // durata della fase, mostrata accanto allo step concluso
 };
 
 const FONTE_LABEL: Record<string, string> = {
@@ -130,7 +131,11 @@ function TerritorioInner() {
       if (step.phase !== "start" && idx !== -1) {
         const real = prev.length - 1 - idx;
         const next = [...prev];
-        next[real] = { ...next[real], phase: step.phase };
+        next[real] = {
+          ...next[real],
+          phase: step.phase,
+          ...(step.elapsedMs != null ? { elapsedMs: step.elapsedMs } : {}),
+        };
         return next;
       }
       return [...prev, step];
@@ -200,6 +205,7 @@ function TerritorioInner() {
               label: FONTE_LABEL[source] ?? source,
               kind: "fonte",
               phase: ev.error ? "error" : (ev.phase as "start" | "end"),
+              elapsedMs: typeof ev.elapsed_ms === "number" ? ev.elapsed_ms : undefined,
             });
           } else if (ev.event === "tool" && ev.name) {
             const name = String(ev.name);
@@ -386,6 +392,11 @@ function TerritorioInner() {
                           <span className="text-success flex-shrink-0" aria-hidden="true">✓</span>
                         )}
                         <span className={s.phase === "end" ? "text-muted" : ""}>{s.label}</span>
+                        {s.phase !== "start" && s.elapsedMs != null ? (
+                          <span className="ms-auto flex-shrink-0 font-monospace text-muted" style={{ fontSize: "0.7rem", opacity: 0.7 }}>
+                            {(s.elapsedMs / 1000).toFixed(1)}s
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

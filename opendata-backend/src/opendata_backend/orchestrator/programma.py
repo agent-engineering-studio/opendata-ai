@@ -570,6 +570,36 @@ def _request_header(req: ProgrammaRequest) -> str:
     return "RICHIESTA:\n" + "\n".join(rows)
 
 
+def _salvage_voce_swot(item: Any) -> VoceSwot | None:
+    """Recupera il TESTO di una voce SWOT che non valida alla forma stretta.
+
+    I modelli più deboli (es. Ollama locale) rendono spesso le voci come stringa
+    nuda ("Patrimonio culturale…") o come dict con `testo` ma `evidenze` non-lista
+    — la validazione stretta le scarterebbe TUTTE, lasciando lo SWOT vuoto. Qui
+    non perdiamo il contenuto: ricostruiamo la voce con le sole evidenze che
+    parsano (0+). NON è un bypass del contratto: l'obbligo di ≥1 citazione
+    risolvibile resta imposto dai guardrail a valle — una voce senza evidenza
+    valida viene comunque rimossa lì. Salviamo solo voci ben argomentate buttate
+    per un dettaglio di forma. Ritorna None se non c'è nemmeno un testo usabile.
+    """
+    if isinstance(item, str):
+        testo = item.strip()
+        return VoceSwot(testo=testo, evidenze=[]) if testo else None
+    if isinstance(item, dict):
+        raw_testo = item.get("testo") or item.get("text") or item.get("voce")
+        testo = raw_testo.strip() if isinstance(raw_testo, str) else ""
+        if not testo:
+            return None
+        evidenze: list[Evidenza] = []
+        for e in item.get("evidenze") if isinstance(item.get("evidenze"), list) else []:
+            try:
+                evidenze.append(Evidenza.model_validate(e))
+            except ValidationError:
+                continue
+        return VoceSwot(testo=testo, evidenze=evidenze)
+    return None
+
+
 def _parse_llm_json(raw: str) -> _LlmProgramma:
     """Estrae il JSON della scheda; tollera fence markdown e preamboli.
 
@@ -618,7 +648,17 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
         for item in items:
             try:
                 kept.append(VoceSwot.model_validate(item))
+                continue
             except ValidationError:
+                pass
+            # Forma non standard: recupera il testo (i guardrail restano il gate
+            # sull'obbligo di citazione) invece di buttare la voce in silenzio.
+            salvaged = _salvage_voce_swot(item)
+            if salvaged is not None:
+                log.warning("voce SWOT '%s' recuperata da forma non standard: %.80s",
+                            key, item)
+                kept.append(salvaged)
+            else:
                 log.warning("voce SWOT '%s' malformata scartata: %.80s", key, item)
         out.swot[key] = kept
     proposte_raw = data.get("proposte") if isinstance(data.get("proposte"), list) else []
