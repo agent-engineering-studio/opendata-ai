@@ -872,10 +872,10 @@ class OrchestratorSession:
     @staticmethod
     async def _resolve_istruzione(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora ISTRUZIONE con cache Redis 24h (vedi `_lens_cached`)."""
-        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+        if req.modalita not in ("idee", "completa"):
             return None
         return await _lens_cached(
-            ("istruzione", req.cod_comune, req.comune_nome or ""),
+            ("istruzione", req.cod_comune),
             lambda: OrchestratorSession._resolve_istruzione_uncached(req),
         )
 
@@ -884,17 +884,17 @@ class OrchestratorSession:
         """Ancora ISTRUZIONE deterministica: dotazione scolastica del comune (plessi
         per ordine) da MIUR Open Data (anagrafe scuole statali + paritarie). Misura
         l'offerta scolastica sul territorio (gap di un ordine → pendolarismo, pochi
-        plessi per abitante). Il join MIUR è per NOME comune (i CSV non hanno il
-        codice ISTAT) → serve `comune_nome`. Best-effort: se l'anagrafe non risponde
-        o il comune non compare, la lente si salta (non si inventa). Solo idee/completa.
+        plessi per abitante). Join deterministico per codice ISTAT→catastale (tabella
+        statica) → niente ambiguità sugli omonimi. Best-effort: se l'anagrafe non
+        risponde o il comune non compare, la lente si salta. Solo idee/completa.
         """
-        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+        if req.modalita not in ("idee", "completa"):
             return None
         try:
             from opendata_core.miur import fetch_scuole_comune
 
             res = await asyncio.wait_for(
-                fetch_scuole_comune(req.comune_nome), timeout=90.0
+                fetch_scuole_comune(req.cod_comune), timeout=90.0
             )
         except Exception as exc:
             _log_lens_skip("ancora istruzione MIUR non risolta per %s — lente istruzione assente",
