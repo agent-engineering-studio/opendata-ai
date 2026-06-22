@@ -68,8 +68,9 @@ const ROADMAP: Punto[] = [
     perche:
       "Trasformare un elenco disordinato in qualcosa di ben organizzato e facile da consultare, anche quando i dati sono davvero tanti.",
     issue: 51,
+    wip: true,
     voci: [
-      { titolo: "Mettere ordine", stato: "near", testo: "Suggerisce come organizzare il dato — cosa raggruppare, quali informazioni tenere — per renderlo più chiaro e coerente." },
+      { titolo: "Mettere ordine", stato: "wip", testo: "Dal file ricava una tabella ben organizzata: tipi delle colonne, chiave primaria e indici utili, con il comando pronto da eseguire (CREATE TABLE). Disponibile, in fase di test." },
       { titolo: "Riepiloghi pronti", testo: "Crea sintesi utili: andamenti nel tempo, totali per categoria, viste pronte da consultare o pubblicare." },
       { titolo: "Veloce anche quando è grande", testo: "Consigli pratici per gestire dataset voluminosi senza rallentamenti, e per servirli online in modo fluido." },
       { titolo: "Cambio formato con un clic", testo: "Converte un file da un formato all'altro (es. da foglio di calcolo a formato aperto, da una mappa all'altra) senza lavoro manuale." },

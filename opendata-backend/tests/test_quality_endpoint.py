@@ -107,3 +107,27 @@ def test_metadata_csv_dcat() -> None:
 
 def test_metadata_requires_input() -> None:
     assert _client().post("/quality/metadata", json={}).status_code == 400
+
+
+def test_schema_csv_ddl() -> None:
+    res = _client().post("/quality/schema", json={
+        "content": "codice,comune,popolazione\n1,Bari,320475\n2,Monopoli,49000\n",
+        "table_name": "Comuni",
+    })
+    assert res.status_code == 200
+    s = res.json()
+    assert s["table_name"] == "comuni"
+    assert s["primary_key"] == "codice"  # univoco, senza vuoti, id-like
+    assert "CREATE TABLE comuni (" in s["ddl"]
+    types = {c["name"]: c["sql_type"] for c in s["columns"]}
+    assert types["popolazione"] == "INTEGER"
+
+
+def test_schema_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    res = _client().post("/quality/schema", json={"content": gj, "format": "geojson"})
+    assert res.status_code == 415
+
+
+def test_schema_requires_input() -> None:
+    assert _client().post("/quality/schema", json={}).status_code == 400

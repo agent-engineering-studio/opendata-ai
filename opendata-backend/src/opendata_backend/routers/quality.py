@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from opendata_core.quality import fix_csv, generate_dcat, profile_csv, profile_geojson
+from opendata_core.quality import fix_csv, generate_dcat, infer_schema, profile_csv, profile_geojson
 
 from ..auth import ClerkUser
 from ..shared.ratelimit import enforce_rate_limit
@@ -33,6 +33,11 @@ class ProfileIn(BaseModel):
     content: str | None = None
     url: str | None = None
     format: str | None = None  # opzionale: csv/tsv/txt o geojson
+
+
+class SchemaIn(ProfileIn):
+    # Nome tabella desiderato (sanificato come identificatore SQL lato motore).
+    table_name: str | None = None
 
 
 class MetadataIn(ProfileIn):
@@ -137,6 +142,30 @@ async def quality_fix(
         user.subject, "url" if body.url else "content", len(text),
     )
     return fix_csv(text)
+
+
+@router.post("/quality/schema")
+async def quality_schema(
+    body: SchemaIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Da dato a schema: inferisce schema SQL + DDL (`CREATE TABLE`) da un CSV.
+
+    Profila il CSV, poi `infer_schema` propone tipi SQL, nullabilità, chiave
+    primaria (o surrogata) e indici utili (date, codici, colonne categoriali).
+    Solo CSV: per i GeoJSON lo schema è la geometria stessa (→ 415).
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="Lo schema relazionale si inferisce dai CSV; per i GeoJSON la struttura è la geometria.",
+        )
+    log.info(
+        "/quality/schema subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return infer_schema(profile_csv(text), table_name=(body.table_name or "dataset"))
 
 
 @router.post("/quality/metadata")
