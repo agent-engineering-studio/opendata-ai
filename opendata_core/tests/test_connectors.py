@@ -124,3 +124,31 @@ async def test_overpass_health_counts(monkeypatch) -> None:
     monkeypatch.setattr(osm, "overpass_post", fake_post)
     out = await osm.overpass_health_counts(bbox=(40.69, 16.78, 40.86, 17.03))
     assert out == {"ospedali": 1, "ambulatori": 2, "studi_medici": 3, "totale": 6}
+
+
+async def test_nearest_hospital_picks_closest(monkeypatch) -> None:
+    from opendata_core.osm import client as osm
+
+    async def fake_post(query: str, **_kw):
+        assert '"amenity"="hospital"' in query
+        return [
+            {"type": "node", "lat": 41.2, "lon": 16.9, "tags": {"name": "Ospedale Lontano"}},
+            {"type": "node", "lat": 40.9, "lon": 16.9, "tags": {"name": "Ospedale Vicino"}},
+            {"type": "way", "center": {"lat": 40.95, "lon": 16.95}, "tags": {}},  # senza nome
+        ]
+
+    monkeypatch.setattr(osm, "overpass_post", fake_post)
+    nh = await osm.nearest_hospital(40.8, 16.9)
+    assert nh is not None
+    assert nh["nome"] == "Ospedale Vicino"   # il più vicino in linea d'aria
+    assert 0 < nh["dist_linea_km"] < 20
+
+
+async def test_nearest_hospital_none_when_empty(monkeypatch) -> None:
+    from opendata_core.osm import client as osm
+
+    async def empty(query: str, **_kw):
+        return []
+
+    monkeypatch.setattr(osm, "overpass_post", empty)
+    assert await osm.nearest_hospital(40.8, 16.9) is None

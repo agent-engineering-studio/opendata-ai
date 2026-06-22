@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-22d"
+PROMPT_VERSION = "2026-06-22e"
 
 
 class ProgrammaResponse(BaseModel):
@@ -507,6 +507,17 @@ def build_programma_task(
                 )
                 if sanita_info.get("osm_source_url"):
                     fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
+            osp = sanita_info.get("ospedale_piu_vicino")
+            if osp:
+                dist = (
+                    f"{osp.get('distanza_km')} km / ~{osp.get('durata_min')} min in auto"
+                    if osp.get("distanza_km") is not None
+                    else f"~{osp.get('dist_linea_km')} km in linea d'aria"
+                )
+                bits.append(
+                    f"NESSUN ospedale nel comune: il più vicino è «{osp.get('nome')}» a {dist} "
+                    "(accessibilità ospedaliera — mobilità sanitaria verso altri comuni)"
+                )
             if bits:
                 parts.append(
                     "LENTE SANITÀ — DATI GIÀ RACCOLTI: " + "; ".join(bits) + ". "
@@ -1092,6 +1103,17 @@ def build_programma_aggregator(
                     f"presìdi OSM: {sanita_info.get('ospedali')} ospedali, "
                     f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
                     "(ambulatori/studi medici)"
+                )
+            osp = sanita_info.get("ospedale_piu_vicino")
+            if osp:
+                dist = (
+                    f"{osp.get('distanza_km')} km / ~{osp.get('durata_min')} min in auto"
+                    if osp.get("distanza_km") is not None
+                    else f"~{osp.get('dist_linea_km')} km in linea d'aria"
+                )
+                narrative_bits.append(
+                    f"nessun ospedale nel comune; il più vicino è «{osp.get('nome')}» a {dist} "
+                    "(accessibilità ospedaliera)"
                 )
             if san_resources:
                 narrative = (

@@ -554,6 +554,50 @@ async def overpass_health_counts(
     return out
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distanza in linea d'aria (km) tra due punti (lat/lon in gradi)."""
+    import math
+
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(min(1.0, a**0.5))
+
+
+async def nearest_hospital(
+    lat: float, lon: float, *, radii_m: tuple[int, ...] = (15000, 40000, 90000)
+) -> dict[str, Any] | None:
+    """Ospedale (amenity=hospital) più vicino a (lat,lon), cercando in raggi
+    CRESCENTI (Overpass live). Utile per i comuni SENZA ospedale: misura
+    l'accessibilità ospedaliera. Ritorna `{nome, lat, lon, dist_linea_km}` del più
+    vicino in linea d'aria, o None se nessuno entro il raggio massimo. La distanza/
+    tempo STRADALI si ottengono poi con `osrm_route()`."""
+    for radius in radii_m:
+        elements = await overpass_around(lat, lon, radius, "hospital", limit=80)
+        best: dict[str, Any] | None = None
+        best_d: float | None = None
+        for el in elements:
+            center = el.get("center") or {}
+            elat = el.get("lat", center.get("lat"))
+            elon = el.get("lon", center.get("lon"))
+            if elat is None or elon is None:
+                continue
+            d = _haversine_km(lat, lon, float(elat), float(elon))
+            if best_d is None or d < best_d:
+                best_d = d
+                best = {
+                    "nome": (el.get("tags") or {}).get("name") or "ospedale",
+                    "lat": float(elat),
+                    "lon": float(elon),
+                    "dist_linea_km": round(d, 1),
+                }
+        if best:
+            return best
+    return None
+
+
 # ── OSRM ────────────────────────────────────────────────────────────
 
 async def osrm_route(

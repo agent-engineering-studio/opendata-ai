@@ -1073,8 +1073,10 @@ class OrchestratorSession:
     @staticmethod
     async def _sanita_osm_strutture(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ospedali + strutture territoriali (ambulatori, studi medici) mappati su OSM,
-        contati dentro il bbox del comune. Best-effort (Nominatim/Overpass); richiede
-        `comune_nome` per il geocoding. None se nessun presidio o fonte giù."""
+        contati nel bbox del comune. Se il comune NON ha ospedale, calcola
+        l'ACCESSIBILITÀ: ospedale più vicino + distanza/tempo in auto (Overpass +
+        OSRM, dati live). Best-effort (Nominatim/Overpass/OSRM); richiede `comune_nome`.
+        None se né presìdi nel comune né un ospedale raggiungibile."""
         if not req.comune_nome:
             return None
         try:
@@ -1088,18 +1090,38 @@ class OrchestratorSession:
                 if len(bb) != 4:
                     return None
                 s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
-                counts = await osm_client.overpass_health_counts(bbox=(s, w, n, e))
-                if not counts or counts.get("totale", 0) == 0:
-                    return None
                 clat, clon = (s + n) / 2, (w + e) / 2
-                return {
-                    "ospedali": counts.get("ospedali", 0),
+                counts = await osm_client.overpass_health_counts(bbox=(s, w, n, e)) or {}
+                ospedali = counts.get("ospedali", 0)
+                result: dict[str, Any] = {
+                    "ospedali": ospedali,
                     "strutture_territoriali": counts.get("ambulatori", 0)
                     + counts.get("studi_medici", 0),
                     "osm_source_url": _osm_object_url(hits[0], clat, clon),
                 }
+                # Nessun ospedale nel comune → misura l'accessibilità al più vicino.
+                if ospedali == 0:
+                    nh = await osm_client.nearest_hospital(clat, clon)
+                    if nh:
+                        osp = {"nome": nh["nome"], "dist_linea_km": nh["dist_linea_km"]}
+                        try:
+                            route = await osm_client.osrm_route(
+                                (clat, clon), (nh["lat"], nh["lon"])
+                            )
+                            r0 = (route.get("routes") or [{}])[0]
+                            if r0.get("distance") is not None:
+                                osp["distanza_km"] = round(r0["distance"] / 1000, 1)
+                                osp["durata_min"] = round(r0["duration"] / 60)
+                        except Exception:
+                            pass  # routing best-effort: resta la distanza in linea d'aria
+                        result["ospedale_piu_vicino"] = osp
+                # La lente OSM esiste se c'è almeno un presidio nel comune o un
+                # ospedale vicino raggiungibile (il caso "comune senza nulla" è informativo).
+                if counts.get("totale", 0) == 0 and "ospedale_piu_vicino" not in result:
+                    return None
+                return result
 
-            return await asyncio.wait_for(_work(), timeout=40.0)
+            return await asyncio.wait_for(_work(), timeout=60.0)
         except Exception as exc:
             _log_lens_skip("presìdi sanitari OSM non risolti per %s", req.cod_comune, exc=exc)
             return None
