@@ -13,6 +13,14 @@ export function SourcesList({ citazioni }: { citazioni: Resource[] }) {
           <li key={i} className="mb-1">
             {r.source ? <span className="text-uppercase fw-semibold">[{r.source}] </span> : null}
             {r.name}{" "}
+            {r.livello ? (
+              <span
+                className="badge rounded-pill text-bg-light border align-middle"
+                title="Livello territoriale del dato"
+              >
+                {r.livello}
+              </span>
+            ) : null}{" "}
             <a
               href={r.url}
               target="_blank"

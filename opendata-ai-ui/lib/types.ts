@@ -18,6 +18,8 @@ export type Resource = {
   description?: string | null;
   /** Self-contained Leaflet+OSM HTML map (rendered by osm-mcp) for GeoJSON resources. */
   preview_html?: string | null;
+  /** Livello territoriale del dato (es. "comunale", "europeo") — trasparenza nei report. */
+  livello?: string | null;
 };
 
 export type ChatRequest = {

@@ -170,7 +170,8 @@ export function schedaToMarkdown(s: ProgrammaResponse): string {
     out.push("## Fonti", "");
     for (const c of s.citazioni) {
       const fmt = c.format ? ` (${c.format})` : "";
-      out.push(`- [${c.name || c.url}](${c.url})${fmt}`);
+      const liv = c.livello ? ` · livello: ${c.livello}` : "";
+      out.push(`- [${c.name || c.url}](${c.url})${fmt}${liv}`);
     }
     out.push("");
   }
