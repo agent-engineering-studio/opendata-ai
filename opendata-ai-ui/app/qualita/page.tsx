@@ -39,6 +39,17 @@ type SchemaResult = {
   ddl: string;
   notes: string[];
 };
+type ConvertResult = {
+  ok: boolean;
+  error: string | null;
+  lat_field?: string | null;
+  lon_field?: string | null;
+  geojson: Record<string, unknown> | null;
+  n_features: number;
+  n_skipped: number;
+  candidate_columns?: string[];
+  warnings?: string[];
+};
 const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
   { k: "titolo", label: "Titolo", ph: "Es. Popolazione residente per comune" },
   { k: "descrizione", label: "Descrizione", ph: "A cosa serve il dato, cosa contiene…" },
@@ -79,6 +90,10 @@ function QualitaInner() {
   const [schema, setSchema] = useState<SchemaResult | null>(null);
   const [schemaBusy, setSchemaBusy] = useState(false);
   const [tableName, setTableName] = useState("");
+  const [convert, setConvert] = useState<ConvertResult | null>(null);
+  const [convertBusy, setConvertBusy] = useState(false);
+  const [latField, setLatField] = useState("");
+  const [lonField, setLonField] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -219,6 +234,37 @@ function QualitaInner() {
     _download(schema.ddl + "\n", `${schema.table_name}.sql`, "application/sql;charset=utf-8");
   }
 
+  // Convertitore 1-click: tabella con coordinate → GeoJSON (POST /quality/to-geojson).
+  async function convertiGeoJSON() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un file (incolla CSV/JSON o un URL)."); return; }
+    setConvertBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = latField.trim() && lonField.trim()
+        ? { lat_field: latField.trim(), lon_field: lonField.trim() }
+        : {};
+      const res = await apiFetch("/quality/to-geojson", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setConvert((await res.json()) as ConvertResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setConvertBusy(false);
+    }
+  }
+
+  function scaricaGeoJSON() {
+    if (!convert?.geojson) return;
+    _download(JSON.stringify(convert.geojson), "dati.geojson", "application/geo+json;charset=utf-8");
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
@@ -226,6 +272,7 @@ function QualitaInner() {
     setFixChanges(null);
     setDcat(null);
     setSchema(null);
+    setConvert(null);
     try {
       const body = _body();
       if (!body) {
@@ -307,7 +354,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); }}
               >
                 Pulisci
               </button>
@@ -518,6 +565,76 @@ function QualitaInner() {
                           ))}
                         </ul>
                       </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CONVERTITORE → GEOJSON (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Crea una mappa dal file (→ GeoJSON)</h2>
+                <p className="text-muted small">
+                  Se la tabella ha colonne di <strong>latitudine</strong> e <strong>longitudine</strong>,
+                  le trasforma in un <strong>GeoJSON</strong> di punti pronto per la mappa e per i portali.
+                  Le altre colonne diventano proprietà di ogni punto.
+                </p>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={convertiGeoJSON} disabled={convertBusy}>
+                  {convertBusy ? "Converto…" : "Converti in GeoJSON"}
+                </button>
+
+                {convert && !convert.ok && (
+                  <div className="mt-3">
+                    <div className="alert alert-warning py-2 small mb-2">{convert.error}</div>
+                    {convert.candidate_columns && convert.candidate_columns.length > 0 && (
+                      <div className="d-flex flex-wrap align-items-end gap-2">
+                        <div>
+                          <label className="form-label small mb-1">Colonna latitudine</label>
+                          <select className="form-select form-select-sm" value={latField} onChange={(e) => setLatField(e.target.value)}>
+                            <option value="">—</option>
+                            {convert.candidate_columns.map((c) => (<option key={c} value={c}>{c}</option>))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label small mb-1">Colonna longitudine</label>
+                          <select className="form-select form-select-sm" value={lonField} onChange={(e) => setLonField(e.target.value)}>
+                            <option value="">—</option>
+                            {convert.candidate_columns.map((c) => (<option key={c} value={c}>{c}</option>))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={convertiGeoJSON}
+                          disabled={convertBusy || !latField || !lonField}
+                        >
+                          Riprova
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {convert && convert.ok && (
+                  <div className="mt-3">
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <button type="button" className="btn btn-success btn-sm" onClick={scaricaGeoJSON} disabled={!convert.geojson}>
+                        ⬇ Scarica GeoJSON
+                      </button>
+                      <span className="text-muted small">
+                        {convert.n_features.toLocaleString("it-IT")} punti
+                        {convert.lat_field && convert.lon_field
+                          ? <> · da <code>{convert.lat_field}</code> / <code>{convert.lon_field}</code></>
+                          : null}
+                      </span>
+                    </div>
+                    {convert.warnings && convert.warnings.length > 0 && (
+                      <ul className="small text-muted mb-0">
+                        {convert.warnings.map((w, i) => (<li key={i}>{w}</li>))}
+                      </ul>
                     )}
                   </div>
                 )}

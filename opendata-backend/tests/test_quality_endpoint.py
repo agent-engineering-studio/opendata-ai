@@ -131,3 +131,27 @@ def test_schema_geojson_rejected() -> None:
 
 def test_schema_requires_input() -> None:
     assert _client().post("/quality/schema", json={}).status_code == 400
+
+
+def test_to_geojson_csv_ok() -> None:
+    res = _client().post("/quality/to-geojson", json={
+        "content": "nome;lat;lon\nBari;41,12;16,87\n",
+    })
+    assert res.status_code == 200
+    r = res.json()
+    assert r["ok"] is True and r["n_features"] == 1
+    assert r["geojson"]["features"][0]["geometry"]["coordinates"] == [16.87, 41.12]
+
+
+def test_to_geojson_no_coords_reports_candidates() -> None:
+    r = _client().post("/quality/to-geojson", json={"content": "a,b\n1,2\n"}).json()
+    assert r["ok"] is False
+    assert r["candidate_columns"] == ["a", "b"]
+
+
+def test_to_geojson_json_array() -> None:
+    res = _client().post("/quality/to-geojson", json={
+        "content": '[{"nome":"Bari","y":41.1,"x":16.8}]', "format": "json",
+    })
+    assert res.status_code == 200
+    assert res.json()["n_features"] == 1
