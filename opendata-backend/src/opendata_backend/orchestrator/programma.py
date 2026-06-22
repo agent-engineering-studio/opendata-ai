@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-22a"
+PROMPT_VERSION = "2026-06-22b"
 
 
 class ProgrammaResponse(BaseModel):
@@ -466,18 +466,34 @@ def build_programma_task(
                 "evidenza); un'idea 'ambiente' deve ancorarsi a questi numeri e citare questa fonte."
             )
         if sanita_info:
-            tip = sanita_info.get("per_tipologia") or {}
-            tip_str = ", ".join(f"{k}: {v}" for k, v in tip.items()) or "n.d."
-            parts.append(
-                "LENTE SANITÀ — DATI Ministero della Salute GIÀ RACCOLTI (anagrafe "
-                f"farmacie, presidio sanitario di prossimità): {sanita_info.get('farmacie_totali')} "
-                f"farmacie attive nel comune (per tipologia: {tip_str}). "
-                f"FONTE DA CITARE VERBATIM: {sanita_info.get('source_url')} . USA questi "
-                "numeri per valutare l'accessibilità ai servizi sanitari di base (farmacie "
-                "per abitante, aree scoperte); un'idea 'sanita' deve ancorarsi a questi "
-                "numeri e citare questa fonte (es. farmacia dei servizi dove mancano "
-                "strutture territoriali)."
-            )
+            bits: list[str] = []
+            fonti: list[str] = []
+            if sanita_info.get("farmacie_totali") is not None:
+                tip = sanita_info.get("per_tipologia") or {}
+                tip_str = ", ".join(f"{k}: {v}" for k, v in tip.items()) or "n.d."
+                bits.append(
+                    f"{sanita_info.get('farmacie_totali')} farmacie attive (Min. Salute; "
+                    f"per tipologia: {tip_str})"
+                )
+                if sanita_info.get("source_url"):
+                    fonti.append(f"farmacie: {sanita_info.get('source_url')}")
+            if sanita_info.get("ospedali") is not None:
+                bits.append(
+                    f"presìdi mappati su OSM nel comune: {sanita_info.get('ospedali')} ospedali, "
+                    f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
+                    "(ambulatori/studi medici)"
+                )
+                if sanita_info.get("osm_source_url"):
+                    fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
+            if bits:
+                parts.append(
+                    "LENTE SANITÀ — DATI GIÀ RACCOLTI: " + "; ".join(bits) + ". "
+                    "FONTI DA CITARE VERBATIM: " + " | ".join(fonti) + " . USA questi numeri "
+                    "per valutare l'accessibilità ai servizi sanitari (farmacie/presìdi per "
+                    "abitante, assenza di ospedale → mobilità sanitaria, aree scoperte); un'idea "
+                    "'sanita' deve ancorarsi a questi numeri e citare la fonte (es. farmacia dei "
+                    "servizi o telemedicina dove mancano strutture territoriali)."
+                )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -950,29 +966,50 @@ def build_programma_aggregator(
             )
             sections.append(_bundle_section("ambiente", narrative, [amb_res]))
 
-        # Ancora SANITÀ deterministica (Ministero della Salute, anagrafe farmacie):
-        # dotazione di farmacie come Resource citabile (host dati.salute.gov.it) +
-        # sezione evidenza. Un'idea 'sanita' ancora sul conteggio e cita la fonte.
-        if sanita_info and sanita_info.get("source_url"):
-            src = sanita_info["source_url"].strip()
-            tip = sanita_info.get("per_tipologia") or {}
-            tip_str = ", ".join(f"{k}: {v}" for k, v in tip.items()) or "n.d."
-            san_res = Resource(
-                name="Ministero della Salute — anagrafe farmacie del comune",
-                url=src,
-                format="CSV",
-                source="salute",
-            )
-            if src not in {r.url.strip() for r in all_resources}:
-                all_resources.append(san_res)
-            narrative = (
-                "Dotazione sanitaria di prossimità del comune (Ministero della Salute, "
-                f"anagrafe farmacie): {sanita_info.get('farmacie_totali')} farmacie attive "
-                f"(per tipologia: {tip_str}). Le farmacie sono il presidio sanitario più "
-                "capillare: valuta l'accessibilità ai servizi (farmacie per abitante, aree "
-                "scoperte); un'idea 'sanita' ancori su questi numeri e citi questa fonte."
-            )
-            sections.append(_bundle_section("sanita", narrative, [san_res]))
+        # Ancora SANITÀ deterministica da DUE fonti: farmacie (Min. Salute, host
+        # dati.salute.gov.it, citabile) + presìdi OSM (ospedali/territoriali; host
+        # openstreetmap.org NASCOSTO in display ma àncora valida per il guardrail).
+        # Sezione costruita se c'è almeno una fonte; un'idea 'sanita' ancora sui numeri.
+        if sanita_info:
+            san_resources: list[Resource] = []
+            narrative_bits: list[str] = []
+            fsrc = (sanita_info.get("source_url") or "").strip()
+            if fsrc and sanita_info.get("farmacie_totali") is not None:
+                tip = sanita_info.get("per_tipologia") or {}
+                tip_str = ", ".join(f"{k}: {v}" for k, v in tip.items()) or "n.d."
+                far_res = Resource(
+                    name="Ministero della Salute — anagrafe farmacie del comune",
+                    url=fsrc, format="CSV", source="salute",
+                )
+                if fsrc not in {r.url.strip() for r in all_resources}:
+                    all_resources.append(far_res)
+                san_resources.append(far_res)
+                narrative_bits.append(
+                    f"{sanita_info.get('farmacie_totali')} farmacie attive (per tipologia: {tip_str})"
+                )
+            osrc = (sanita_info.get("osm_source_url") or "").strip()
+            if osrc and sanita_info.get("ospedali") is not None:
+                osm_res = Resource(
+                    name="OpenStreetMap — presìdi sanitari del comune",
+                    url=osrc, format="JSON", source="osm",
+                )
+                if osrc not in {r.url.strip() for r in all_resources}:
+                    all_resources.append(osm_res)
+                san_resources.append(osm_res)
+                narrative_bits.append(
+                    f"presìdi OSM: {sanita_info.get('ospedali')} ospedali, "
+                    f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
+                    "(ambulatori/studi medici)"
+                )
+            if san_resources:
+                narrative = (
+                    "Dotazione sanitaria del comune — " + "; ".join(narrative_bits) + ". "
+                    "Le farmacie sono il presidio più capillare; ospedali e strutture "
+                    "territoriali misurano l'accessibilità ai servizi (assenza di ospedale → "
+                    "mobilità sanitaria; aree scoperte). Un'idea 'sanita' ancori su questi "
+                    "numeri e citi la fonte."
+                )
+                sections.append(_bundle_section("sanita", narrative, san_resources))
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)

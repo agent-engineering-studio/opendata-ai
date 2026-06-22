@@ -1039,6 +1039,39 @@ async def test_sanita_info_injects_citable_salute_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sanita_osm_presidi_anchor_and_hidden_display() -> None:
+    """Sanità da DUE fonti: farmacie (Min. Salute) + presìdi OSM (ospedali/territoriali).
+    Un'idea ancorata sui presìdi OSM passa il guardrail (host OSM ora valido per sanità);
+    in display l'OSM è NASCOSTO (dato di mappa), il Min. Salute resta citato."""
+    salute_url = "https://www.dati.salute.gov.it/it/dataset/farmacie/"
+    osm_url = "https://www.openstreetmap.org/#map=13/40.79800/16.92300"
+    sanita_info = {
+        "trovato": True, "comune": "072021", "farmacie_totali": 8,
+        "per_tipologia": {"Ordinaria": 8}, "source_url": salute_url,
+        "ospedali": 1, "strutture_territoriali": 3, "osm_source_url": osm_url,
+    }
+    ev_osm = {"fonte": "osm", "url": osm_url, "dettaglio": "1 ospedale, 3 strutture territoriali"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("sanita", [ev_osm])],  # ancorata sui presìdi OSM
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, sanita_info=sanita_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["sanita"]
+    # display: Min. Salute mostrato, OSM nascosto (dato di mappa, non citazione).
+    assert any(r.url == "https://www.dati.salute.gov.it/" for r in resp.citazioni)
+    assert not any("openstreetmap.org" in r.url for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_scheda_mode_is_unaffected_by_generator_rules() -> None:
     """Regressione: la modalità scheda ignora i requisiti per generatore."""
     agent = _StubProgrammaAgent(_llm_json())  # proposta senza generatore
