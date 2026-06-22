@@ -87,6 +87,9 @@ class Resource(BaseModel):
     # Value card (Fase 2): stima art. 14 + combinabilità. Additivo e opzionale →
     # i client esistenti che non lo leggono restano compatibili.
     value_card: dict | None = None
+    # Livello territoriale del dato (es. "comunale", "europeo"), impostato display-only
+    # in `_clean_citazioni_for_display` via `sources.source_level`. Trasparenza nei report.
+    livello: str | None = None
 
 
 def _is_binary(raw: bytes) -> bool:

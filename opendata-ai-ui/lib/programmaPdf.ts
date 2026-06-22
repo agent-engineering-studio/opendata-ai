@@ -281,10 +281,12 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
     content.push(sectionTitle("Fonti"));
     for (const c of s.citazioni) {
       const fmt = c.format ? ` (${c.format})` : "";
+      const liv = c.livello ? ` · livello: ${c.livello}` : "";
       content.push({
         text: [
           { text: "• " },
           { text: (c.name || c.url) + fmt, link: c.url, color: BRAND.primary, decoration: "underline" },
+          ...(liv ? [{ text: liv, color: BRAND.muted }] : []),
         ],
         fontSize: 8,
         margin: [0, 0.5, 0, 0.5],

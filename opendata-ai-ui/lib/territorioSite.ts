@@ -212,15 +212,24 @@ function reportHtml(r?: Report): string {
 
 function fontiHtml(citazioni: Resource[]): string {
   // Una voce per FONTE chiara (portale), deduplicata: niente elenco di file/URL profondi.
+  // Mantiene il `livello` territoriale (comunale/…) accanto alla fonte per trasparenza.
   const seen = new Set<string>();
   const items = (citazioni ?? [])
-    .map((c) => resolveSource(c.url))
-    .filter((s): s is { href: string; name: string } => {
+    .map((c) => {
+      const s = resolveSource(c.url);
+      return s ? { ...s, livello: c.livello ?? null } : null;
+    })
+    .filter((s): s is { href: string; name: string; livello: string | null } => {
       if (!s || seen.has(s.href)) return false;
       seen.add(s.href);
       return true;
     })
-    .map((s) => `<li><a href="${esc(s.href)}" target="_blank" rel="noopener">${esc(s.name)} ↗</a></li>`)
+    .map((s) => {
+      const liv = s.livello
+        ? ` <span class="liv">${esc(s.livello)}</span>`
+        : "";
+      return `<li><a href="${esc(s.href)}" target="_blank" rel="noopener">${esc(s.name)} ↗</a>${liv}</li>`;
+    })
     .join("");
   return items ? `<ul class="fonti">${items}</ul>` : "<p class='muted'>—</p>";
 }
@@ -307,6 +316,7 @@ details.ev ul{font-size:13px;margin:8px 0 0;padding-left:18px}
 .bp-note{padding:0 22px 18px;font-size:12px}
 .gap ul{font-size:14px;margin:6px 0 0;padding-left:18px}
 .fonti{font-size:13px;columns:2;column-gap:28px}
+.liv{display:inline-block;font-size:11px;padding:1px 7px;border:1px solid var(--bd);border-radius:999px;color:#555;background:#f7f7f9;vertical-align:middle}
 #map{height:400px;border-radius:16px;border:1px solid var(--bd);overflow:hidden;box-shadow:0 2px 10px rgba(16,42,76,.06)}
 .lente-block{margin:0 0 20px}.lente-block h3{font-size:1.1rem;color:var(--p9);margin:0 0 10px}
 .share{margin-top:14px;padding-top:12px;border-top:1px dashed var(--bd)}

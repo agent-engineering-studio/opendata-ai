@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from .guardrails import validate_programma
 from .parsing import Resource, parse_agent_reply
-from .sources import resolve_source_url
+from .sources import resolve_source_url, source_level
 from .synth import (
     _capture_tool_resources,
     _executor_id,
@@ -689,7 +689,10 @@ def _clean_citazioni_for_display(resources: list[Resource]) -> list[Resource]:
         if href in seen:
             continue
         seen.add(href)
-        out.append(r.model_copy(update={"url": href, "name": r.name or name}))
+        # Livello territoriale dall'URL GREZZO (prima del collasso al portale), così
+        # il cittadino sa se il dato è comunale o un proxy sovra-comunale.
+        livello = source_level(r.url) or r.livello
+        out.append(r.model_copy(update={"url": href, "name": r.name or name, "livello": livello}))
     return out
 
 

@@ -3,7 +3,7 @@ OSM nascosto, portali noti → pagina riconoscibile, OpenCoesione progetto tenut
 
 from __future__ import annotations
 
-from opendata_backend.orchestrator.sources import resolve_source_url
+from opendata_backend.orchestrator.sources import resolve_source_url, source_level
 
 
 def test_osm_and_overpass_are_hidden() -> None:
@@ -39,6 +39,22 @@ def test_opencoesione_project_page_is_kept() -> None:
     assert resolve_source_url(
         "https://opencoesione.gov.it/it/api/aggregati/territori/comune-x.json"
     ) == ("https://opencoesione.gov.it/", "OpenCoesione")
+
+
+def test_source_level_labels_territorial_granularity() -> None:
+    # Fonti delle lenti territoriali → comunale (granularità d'uso nell'analisi).
+    assert source_level("https://idrogeo.isprambiente.it/api/pir/comuni/72021") == "comunale"
+    assert source_level("https://dati.istruzione.it/opendata/.../SCUANAGRAFESTAT.csv") == "comunale"
+    assert source_level("https://www.dati.salute.gov.it/it/dataset/farmacie/") == "comunale"
+    assert source_level("https://esploradati.istat.it/SDMXWS/rest/data/183_285/x") == "comunale"
+    assert source_level("https://opencoesione.gov.it/it/progetti/abc/") == "comunale"
+    assert source_level("https://www.openstreetmap.org/#map=13/40/16") == "comunale"
+    # Sovra-nazionali → etichettati come tali.
+    assert source_level("https://ec.europa.eu/eurostat/x") == "europeo"
+    assert source_level("https://data.oecd.org/x") == "internazionale"
+    # Host sconosciuto / URL non valido → nessuna etichetta.
+    assert source_level("https://comune.z.it/turismo") is None
+    assert source_level(None) is None
 
 
 def test_clean_urls_and_non_http_are_dropped() -> None:

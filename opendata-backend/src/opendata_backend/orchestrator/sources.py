@@ -37,6 +37,45 @@ _PORTALS: tuple[tuple[str, str, str], ...] = (
 _HIDDEN_HOSTS: tuple[str, ...] = ("openstreetmap.org", "overpass-api.de", "openstreetmap.de")
 _FILE_RE = re.compile(r"\.(csv|json|xml|pbf|zip|xlsx?|geojson|tsv)(\?|#|$)", re.IGNORECASE)
 
+# Livello territoriale del dato per host (trasparenza nei report). Nelle analisi
+# territoriali queste fonti sono usate a granularità COMUNALE: le lenti
+# deterministiche ancorano al comune (ISPRA IdroGEO per uid comune, MIUR/Min. Salute
+# per codice comune, ISTAT ASIA/POPRES/ricettività e 8milaCensus per comune) e i
+# progetti/ricerche OpenCoesione/CKAN sono filtrati sul comune. Eurostat/OCSE
+# restano sovra-nazionali → etichettati come tali. Host ignoto → None (nessun badge).
+_HOST_LEVEL: tuple[tuple[str, str], ...] = (
+    ("isprambiente.it", "comunale"),
+    ("dati.istruzione.it", "comunale"),
+    ("dati.salute.gov.it", "comunale"),
+    ("ottomilacensus.istat.it", "comunale"),
+    ("esploradati.istat.it", "comunale"),
+    ("opencoesione.gov.it", "comunale"),
+    ("openstreetmap.org", "comunale"),
+    ("overpass-api.de", "comunale"),
+    ("dati.gov.it", "comunale"),
+    ("istat.it", "comunale"),
+    ("ec.europa.eu", "europeo"),
+    ("oecd.org", "internazionale"),
+)
+
+
+def source_level(raw: str | None) -> str | None:
+    """Livello territoriale del dato citato (es. 'comunale', 'europeo'), per la
+    trasparenza nei report. Euristica per host (vedi `_HOST_LEVEL`); None se l'host
+    è sconosciuto. NB: riflette il livello a cui la fonte è usata nell'analisi
+    territoriale, non l'intero catalogo della fonte."""
+    if not raw:
+        return None
+    try:
+        u = urlparse(raw.replace("&amp;", "&"))
+    except ValueError:
+        return None
+    host = u.hostname.lower().removeprefix("www.") if u.hostname else ""
+    for suffix, lvl in _HOST_LEVEL:
+        if host == suffix or host.endswith("." + suffix):
+            return lvl
+    return None
+
 
 def resolve_source_url(raw: str | None) -> tuple[str, str] | None:
     """Fonte chiara (href, nome) per i cittadini, oppure None se va NASCOSTA.
