@@ -914,28 +914,50 @@ class OrchestratorSession:
 
     @staticmethod
     async def _resolve_istruzione_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
-        """Ancora ISTRUZIONE deterministica: dotazione scolastica del comune (plessi
-        per ordine) da MIUR Open Data (anagrafe scuole statali + paritarie). Misura
-        l'offerta scolastica sul territorio (gap di un ordine → pendolarismo, pochi
-        plessi per abitante). Join deterministico per codice ISTAT→catastale (tabella
-        statica) → niente ambiguità sugli omonimi. Best-effort: se l'anagrafe non
-        risponde o il comune non compare, la lente si salta. Solo idee/completa.
+        """Ancora ISTRUZIONE deterministica da DUE fonti complementari: OFFERTA
+        scolastica (MIUR Open Data, anagrafe scuole + alunni; join ISTAT→catastale) +
+        GRADO DI ISTRUZIONE della popolazione (ISTAT 8milaCensus, Censimento 2011: %
+        laureati/diplomati/licenza media/analfabeti — gli esiti, il capitale umano).
+        Best-effort su entrambe: la lente esiste se almeno una ha dati. Solo idee/completa.
         """
         if req.modalita not in ("idee", "completa"):
             return None
+        scuole = await OrchestratorSession._istruzione_scuole(req)
+        grado = await OrchestratorSession._istruzione_grado(req)
+        if not scuole and not grado:
+            return None
+        result: dict[str, Any] = dict(scuole) if scuole else {
+            "trovato": True, "comune": req.cod_comune
+        }
+        if grado:
+            result["grado_istruzione"] = grado
+        return result
+
+    @staticmethod
+    async def _istruzione_scuole(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Offerta scolastica (MIUR Open Data, anagrafe scuole + alunni)."""
         try:
             from opendata_core.miur import fetch_scuole_comune
 
+            res = await asyncio.wait_for(fetch_scuole_comune(req.cod_comune), timeout=90.0)
+        except Exception as exc:
+            _log_lens_skip("scuole MIUR non risolte per %s", req.cod_comune, exc=exc)
+            return None
+        return res if (res and res.get("trovato")) else None
+
+    @staticmethod
+    async def _istruzione_grado(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Grado di istruzione della popolazione (ISTAT 8milaCensus, Censimento 2011)."""
+        try:
+            from opendata_core.census import fetch_grado_istruzione_comune
+
             res = await asyncio.wait_for(
-                fetch_scuole_comune(req.cod_comune), timeout=90.0
+                fetch_grado_istruzione_comune(req.cod_comune), timeout=60.0
             )
         except Exception as exc:
-            _log_lens_skip("ancora istruzione MIUR non risolta per %s — lente istruzione assente",
-                           req.cod_comune, exc=exc)
+            _log_lens_skip("grado istruzione 8milaCensus non risolto per %s", req.cod_comune, exc=exc)
             return None
-        if not (res and res.get("trovato")):
-            return None
-        return res
+        return res if (res and res.get("trovato")) else None
 
     @staticmethod
     async def _resolve_ambiente(req: ProgrammaRequest) -> dict[str, Any] | None:

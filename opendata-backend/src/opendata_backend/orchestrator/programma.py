@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-22b"
+PROMPT_VERSION = "2026-06-22c"
 
 
 class ProgrammaResponse(BaseModel):
@@ -429,25 +429,46 @@ def build_programma_task(
                     "sull'inclusione sociale basse o spese male = leva di intervento)."
                 )
         if istruzione_info:
-            ord_ = istruzione_info.get("per_ordine") or {}
-            alu = istruzione_info.get("alunni_statali")
-            alu_txt = (
-                f" Alunni nelle scuole statali (primaria + secondaria, a.s. "
-                f"{istruzione_info.get('alunni_anno')}): {alu}."
-                if alu else ""
-            )
-            parts.append(
-                "LENTE ISTRUZIONE — DATI MIUR Open Data GIÀ RACCOLTI (anagrafe scuole, "
-                f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
-                f"plessi ({istruzione_info.get('scuole_statali')} statali, "
-                f"{istruzione_info.get('scuole_paritarie')} paritarie) — "
-                f"infanzia={ord_.get('infanzia')}, primaria={ord_.get('primaria')}, "
-                f"sec. I grado={ord_.get('secondaria_i')}, sec. II grado={ord_.get('secondaria_ii')}.{alu_txt} "
-                f"FONTE DA CITARE VERBATIM: {istruzione_info.get('source_url')} . USA questi "
-                "numeri per valutare l'offerta scolastica (assenza di un ordine → pendolarismo "
-                "scolastico; pochi plessi/alunni per abitante; calo iscritti → rischio "
-                "accorpamenti); un'idea 'istruzione' deve ancorarsi a questi numeri e citare questa fonte."
-            )
+            bits: list[str] = []
+            fonti: list[str] = []
+            if istruzione_info.get("scuole_totali") is not None:
+                ord_ = istruzione_info.get("per_ordine") or {}
+                alu = istruzione_info.get("alunni_statali")
+                alu_txt = (
+                    f" — alunni statali (primaria+secondaria, a.s. "
+                    f"{istruzione_info.get('alunni_anno')}): {alu}"
+                    if alu else ""
+                )
+                bits.append(
+                    "OFFERTA (MIUR, anagrafe scuole a.s. "
+                    f"{istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} plessi "
+                    f"({istruzione_info.get('scuole_statali')} statali, "
+                    f"{istruzione_info.get('scuole_paritarie')} paritarie) — infanzia="
+                    f"{ord_.get('infanzia')}, primaria={ord_.get('primaria')}, sec. I="
+                    f"{ord_.get('secondaria_i')}, sec. II={ord_.get('secondaria_ii')}{alu_txt}"
+                )
+                if istruzione_info.get("source_url"):
+                    fonti.append(f"scuole: {istruzione_info.get('source_url')}")
+            grado = istruzione_info.get("grado_istruzione") or {}
+            if grado.get("source_url"):
+                bits.append(
+                    "GRADO DI ISTRUZIONE della popolazione (ISTAT 8milaCensus, Censimento "
+                    f"2011): laureati 30-34 {grado.get('incidenza_laureati_30_34')}%, diploma o "
+                    f"laurea 25-64 {grado.get('incidenza_diploma_o_laurea_25_64')}%, sola licenza "
+                    f"media {grado.get('incidenza_licenza_media_25_64')}%, analfabeti "
+                    f"{grado.get('incidenza_analfabeti')}%, uscita precoce 15-24 "
+                    f"{grado.get('uscita_precoce_15_24')}%"
+                )
+                fonti.append(f"grado istruzione: {grado.get('source_url')}")
+            if bits:
+                parts.append(
+                    "LENTE ISTRUZIONE — DATI GIÀ RACCOLTI: " + "; ".join(bits) + ". "
+                    "FONTI DA CITARE VERBATIM: " + " | ".join(fonti) + " . USA questi numeri "
+                    "per valutare offerta (assenza di un ordine → pendolarismo; calo iscritti → "
+                    "accorpamenti) ED esiti formativi (bassa quota laureati/diplomati, "
+                    "analfabetismo, uscita precoce = capitale umano da rafforzare); un'idea "
+                    "'istruzione' deve ancorarsi a questi numeri e citare la fonte."
+                )
         if ambiente_info:
             parts.append(
                 "LENTE AMBIENTE / RISCHIO IDROGEOLOGICO — DATI ISPRA IdroGEO GIÀ "
@@ -948,37 +969,63 @@ def build_programma_aggregator(
                 )
             sections.append(_bundle_section("welfare", narrative, wel_resources))
 
-        # Ancora ISTRUZIONE deterministica (MIUR Open Data, anagrafe scuole): dotazione
-        # scolastica per ordine come Resource citabile (host dati.istruzione.it) +
-        # sezione evidenza. Un'idea 'istruzione' ancora sui conteggi e cita la fonte.
-        if istruzione_info and istruzione_info.get("source_url"):
-            src = istruzione_info["source_url"].strip()
-            ord_ = istruzione_info.get("per_ordine") or {}
-            ist_res = Resource(
-                name=f"MIUR Open Data — anagrafe scuole del comune (a.s. {istruzione_info.get('anno_scolastico')})",
-                url=src,
-                format="CSV",
-                source="miur",
-            )
-            if src not in {r.url.strip() for r in all_resources}:
-                all_resources.append(ist_res)
-            alu = istruzione_info.get("alunni_statali")
-            alu_txt = (
-                f" Alunni nelle statali (primaria + secondaria, a.s. "
-                f"{istruzione_info.get('alunni_anno')}): {alu}."
-                if alu else ""
-            )
-            narrative = (
-                "Dotazione scolastica del comune (MIUR Open Data, anagrafe scuole, "
-                f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
-                f"plessi ({istruzione_info.get('scuole_statali')} statali, "
-                f"{istruzione_info.get('scuole_paritarie')} paritarie). Per ordine — infanzia: "
-                f"{ord_.get('infanzia')}, primaria: {ord_.get('primaria')}, sec. I grado: "
-                f"{ord_.get('secondaria_i')}, sec. II grado: {ord_.get('secondaria_ii')}.{alu_txt} Valuta "
-                "l'offerta scolastica (assenza di un ordine = pendolarismo scolastico; pochi plessi "
-                "o alunni per abitante); un'idea 'istruzione' ancori su questi numeri e citi questa fonte."
-            )
-            sections.append(_bundle_section("istruzione", narrative, [ist_res]))
+        # Ancora ISTRUZIONE deterministica da DUE fonti: OFFERTA (MIUR, anagrafe scuole +
+        # alunni; host dati.istruzione.it) + GRADO DI ISTRUZIONE della popolazione (ISTAT
+        # 8milaCensus, host ottomilacensus.istat.it; gli esiti, il capitale umano). Sezione
+        # costruita se c'è almeno una fonte; un'idea 'istruzione' ancora sui numeri e cita.
+        if istruzione_info:
+            ist_resources: list[Resource] = []
+            narrative_bits: list[str] = []
+            src = (istruzione_info.get("source_url") or "").strip()
+            if src and istruzione_info.get("scuole_totali") is not None:
+                ord_ = istruzione_info.get("per_ordine") or {}
+                ist_res = Resource(
+                    name=f"MIUR Open Data — anagrafe scuole del comune (a.s. {istruzione_info.get('anno_scolastico')})",
+                    url=src, format="CSV", source="miur",
+                )
+                if src not in {r.url.strip() for r in all_resources}:
+                    all_resources.append(ist_res)
+                ist_resources.append(ist_res)
+                alu = istruzione_info.get("alunni_statali")
+                alu_txt = (
+                    f" Alunni statali (primaria + secondaria, a.s. "
+                    f"{istruzione_info.get('alunni_anno')}): {alu}."
+                    if alu else ""
+                )
+                narrative_bits.append(
+                    "Offerta scolastica (MIUR, a.s. "
+                    f"{istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
+                    f"plessi ({istruzione_info.get('scuole_statali')} statali, "
+                    f"{istruzione_info.get('scuole_paritarie')} paritarie). Per ordine — infanzia: "
+                    f"{ord_.get('infanzia')}, primaria: {ord_.get('primaria')}, sec. I grado: "
+                    f"{ord_.get('secondaria_i')}, sec. II grado: {ord_.get('secondaria_ii')}.{alu_txt}"
+                )
+            grado = istruzione_info.get("grado_istruzione") or {}
+            gsrc = (grado.get("source_url") or "").strip()
+            if gsrc:
+                grado_res = Resource(
+                    name="ISTAT 8milaCensus — grado di istruzione del comune (Censimento 2011)",
+                    url=gsrc, format="CSV", source="istat",
+                )
+                if gsrc not in {r.url.strip() for r in all_resources}:
+                    all_resources.append(grado_res)
+                ist_resources.append(grado_res)
+                narrative_bits.append(
+                    "Grado di istruzione della popolazione (ISTAT 8milaCensus, Censimento 2011): "
+                    f"laureati 30-34 {grado.get('incidenza_laureati_30_34')}%, diploma o laurea "
+                    f"25-64 {grado.get('incidenza_diploma_o_laurea_25_64')}%, sola licenza media "
+                    f"{grado.get('incidenza_licenza_media_25_64')}%, analfabeti "
+                    f"{grado.get('incidenza_analfabeti')}%, uscita precoce 15-24 "
+                    f"{grado.get('uscita_precoce_15_24')}%"
+                )
+            if ist_resources:
+                narrative = (
+                    "Istruzione del comune — " + ". ".join(narrative_bits) + ". Valuta l'offerta "
+                    "(assenza di un ordine = pendolarismo; pochi plessi/alunni) e gli esiti formativi "
+                    "(bassa quota laureati/diplomati, analfabetismo = capitale umano da rafforzare); "
+                    "un'idea 'istruzione' ancori su questi numeri e citi la fonte."
+                )
+                sections.append(_bundle_section("istruzione", narrative, ist_resources))
 
         # Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica (ISPRA IdroGEO):
         # pericolosità frane (P3+P4) e idraulica (alluvioni P3/P2) come Resource
