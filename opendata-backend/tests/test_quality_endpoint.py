@@ -61,3 +61,32 @@ def test_fix_content_ok() -> None:
 
 def test_fix_requires_input() -> None:
     assert _client().post("/quality/fix", json={}).status_code == 400
+
+
+def test_profile_dispatches_geojson() -> None:
+    gj = (
+        '{"type":"FeatureCollection","features":'
+        '[{"type":"Feature","geometry":{"type":"Point","coordinates":[11.37,44.49]},"properties":{}}]}'
+    )
+    res = _client().post("/quality/profile", json={"content": gj})
+    assert res.status_code == 200
+    rep = res.json()
+    assert rep["format"] == "GEOJSON"
+    assert rep["crs_wgs84"] is True
+    assert rep["features"] == 1
+
+
+def test_profile_geojson_projected_flagged() -> None:
+    gj = (
+        '{"type":"FeatureCollection","features":'
+        '[{"type":"Feature","geometry":{"type":"Point","coordinates":[612345.0,4912345.0]},"properties":{}}]}'
+    )
+    rep = _client().post("/quality/profile", json={"content": gj}).json()
+    assert rep["crs_wgs84"] is False
+    assert any(f["codice"] == "coord_proiettate" for f in rep["findings"])
+
+
+def test_fix_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    res = _client().post("/quality/fix", json={"content": gj, "format": "geojson"})
+    assert res.status_code == 415
