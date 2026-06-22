@@ -6,6 +6,7 @@ dal backend (endpoint), da una skill A2A e dalla UI.
 """
 
 from .fix import fix_csv
+from .geo import profile_geojson
 from .profile import profile_csv
 
-__all__ = ["profile_csv", "fix_csv"]
+__all__ = ["profile_csv", "fix_csv", "profile_geojson"]
