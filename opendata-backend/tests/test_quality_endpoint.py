@@ -213,3 +213,23 @@ def test_validate_from_metadata_complete() -> None:
     assert v["valido"] is True
     assert v["licenza"]["aperta"] is True
     assert v["fair"]["overall"] >= 85
+
+
+def test_package_zip_contains_files() -> None:
+    import io
+    import zipfile
+
+    res = _client().post("/quality/package", json={
+        "content": "comune,popolazione\nBari,320475\n",
+        "titolo": "Popolazione", "licenza": "CC-BY-4.0", "ente": "Regione Puglia",
+    })
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(res.content))
+    names = set(zf.namelist())
+    assert names == {"dati.csv", "metadati-dcat-ap_it.jsonld", "LICENSE.txt", "README.txt"}
+    assert "Creative Commons" in zf.read("LICENSE.txt").decode("utf-8")
+
+
+def test_package_requires_input() -> None:
+    assert _client().post("/quality/package", json={}).status_code == 400

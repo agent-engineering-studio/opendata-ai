@@ -115,6 +115,7 @@ function QualitaInner() {
   const [dcatBusy, setDcatBusy] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [validateBusy, setValidateBusy] = useState(false);
+  const [packageBusy, setPackageBusy] = useState(false);
   const [meta, setMeta] = useState<MetaForm>({ titolo: "", descrizione: "", licenza: "", ente: "", tema: "", frequenza: "" });
   const [schema, setSchema] = useState<SchemaResult | null>(null);
   const [schemaBusy, setSchemaBusy] = useState(false);
@@ -141,8 +142,7 @@ function QualitaInner() {
     return text.trim() ? { content: text } : url.trim() ? { url: url.trim() } : null;
   }
 
-  function _download(content: string, name: string, mime: string) {
-    const blob = new Blob([content], { type: mime });
+  function _downloadBlob(blob: Blob, name: string) {
     const dlUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = dlUrl;
@@ -151,6 +151,10 @@ function QualitaInner() {
     a.click();
     a.remove();
     URL.revokeObjectURL(dlUrl);
+  }
+
+  function _download(content: string, name: string, mime: string) {
+    _downloadBlob(new Blob([content], { type: mime }), name);
   }
 
   // CSV: auto-fix server-side (POST /quality/fix)
@@ -260,6 +264,30 @@ function QualitaInner() {
   function scaricaDcat() {
     if (!dcat) return;
     _download(JSON.stringify(dcat, null, 2), "metadati-dcat-ap_it.json", "application/ld+json;charset=utf-8");
+  }
+
+  // Pacchetto ZIP pronto da pubblicare: dato pulito + metadati + licenza + README.
+  async function scaricaPacchetto() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un file (incolla CSV/GeoJSON o un URL)."); return; }
+    setPackageBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = Object.fromEntries(Object.entries(meta).filter(([, v]) => v.trim()));
+      const res = await apiFetch("/quality/package", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      _downloadBlob(await res.blob(), "pacchetto-opendata.zip");
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPackageBusy(false);
+    }
   }
 
   // Da dato a schema: inferisce schema SQL + DDL (POST /quality/schema).
@@ -916,9 +944,18 @@ function QualitaInner() {
                   </div>
                 ))}
               </div>
-              <button type="button" className="btn btn-outline-primary btn-sm mt-3" onClick={generaDcat} disabled={dcatBusy}>
-                {dcatBusy ? "Genero…" : "Genera scheda DCAT-AP_IT"}
-              </button>
+              <div className="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaDcat} disabled={dcatBusy}>
+                  {dcatBusy ? "Genero…" : "Genera scheda DCAT-AP_IT"}
+                </button>
+                <button type="button" className="btn btn-success btn-sm" onClick={scaricaPacchetto} disabled={packageBusy}>
+                  {packageBusy ? "Preparo…" : "📦 Scarica pacchetto pronto (.zip)"}
+                </button>
+              </div>
+              <div className="text-muted small mt-1">
+                Il pacchetto contiene il dato pulito, la scheda DCAT-AP_IT, la licenza e un README con
+                l&apos;esito FAIR e i passi per pubblicarlo.
+              </div>
 
               {dcat && (
                 <div className="mt-3">

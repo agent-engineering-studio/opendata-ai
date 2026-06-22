@@ -8,14 +8,17 @@ validazione anti-SSRF del proxy dataset.
 
 from __future__ import annotations
 
+import io
 import logging
+import zipfile
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from opendata_core.quality import (
     advise_scale,
+    build_publish_package,
     csv_to_geojson,
     fix_csv,
     generate_dcat,
@@ -312,3 +315,42 @@ async def quality_validate(
     log.info("/quality/validate subject=%s source=%s",
              user.subject, "metadata" if body.metadata is not None else "file")
     return {"validazione": validate_dcat(meta), "metadata": meta}
+
+
+@router.post("/quality/package")
+async def quality_package(
+    body: MetadataIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> Response:
+    """Pacchetto ZIP pronto da pubblicare: dato pulito + scheda DCAT-AP_IT +
+    licenza + README con esito FAIR e checklist. CSV o GeoJSON.
+    """
+    text = await _resolve_input(body)
+    geo = _is_geojson(text, (body.format or "").lower())
+    if geo:
+        data_filename, data_content = "dati.geojson", text
+        profile = profile_geojson(text)
+    else:
+        data_content = fix_csv(text).get("content") or text  # versione corretta nel pacchetto
+        data_filename = "dati.csv"
+        profile = profile_csv(data_content)
+
+    pkg = build_publish_package(
+        profile, data_filename=data_filename, data_content=data_content,
+        titolo=body.titolo, descrizione=body.descrizione, licenza=body.licenza,
+        ente=body.ente, tema=body.tema, frequenza=body.frequenza, url=body.url,
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, content in pkg["files"].items():
+            zf.writestr(name, content)
+    log.info(
+        "/quality/package subject=%s tipo=%s valido=%s files=%d",
+        user.subject, "geojson" if geo else "csv",
+        pkg["validazione"]["valido"], len(pkg["files"]),
+    )
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="pacchetto-opendata.zip"'},
+    )
