@@ -155,6 +155,29 @@ def test_osm_ispra_settings_and_instructions_contract() -> None:
     assert "P3/P4" in PROGRAMMA_INSTRUCTIONS
 
 
+def test_programma_fewshot_is_valid_and_complete() -> None:
+    """Il few-shot SWOT (per i modelli locali tipo qwen3) deve essere JSON
+    valido, con TUTTI E QUATTRO i quadranti popolati da OGGETTI {testo,
+    evidenze:[…]} — è ciò che insegna al modello a non emettere stringhe nude.
+    La regola FORMA e l'anti-esempio devono restare nel prompt."""
+    import json
+
+    from opendata_backend.config import _PROGRAMMA_FEWSHOT_JSON
+
+    parsed = json.loads(_PROGRAMMA_FEWSHOT_JSON)  # deve essere JSON valido
+    swot = parsed["swot"]
+    assert set(swot) == {"forze", "debolezze", "opportunita", "minacce"}
+    for quad in swot.values():
+        assert quad, "ogni quadrante dell'esempio deve essere popolato"
+        for voce in quad:
+            assert isinstance(voce, dict) and voce["testo"]
+            assert voce["evidenze"] and voce["evidenze"][0]["url"]
+    # il prompt deve contenere la regola anti-stringa + l'anti-esempio
+    assert "FORMA (CRITICO)" in PROGRAMMA_INSTRUCTIONS
+    assert "DA NON FARE MAI" in PROGRAMMA_INSTRUCTIONS
+    assert _PROGRAMMA_FEWSHOT_JSON in PROGRAMMA_INSTRUCTIONS
+
+
 def test_kg_settings_and_instructions_contract() -> None:
     """KG = memoria delle analisi (non documenti): il read recupera le analisi
     passate dal namespace `analisi-` per riuso/risparmio token (R13: niente
