@@ -58,7 +58,7 @@ const ROADMAP: Punto[] = [
       { titolo: "Le mosse che contano di più", stato: "wip", testo: "Le azioni che migliorano di più la situazione, separate tra quelle facili e rapide (correzioni sui dati già pubblicati) e quelle più strategiche (pubblicare nuovi dati). Disponibile, in fase di test." },
       { titolo: "Un percorso su misura", stato: "wip", testo: "Quanti punti mancano al livello successivo e qual è il “collo di bottiglia” su cui conviene concentrarsi: una strada chiara verso il passo successivo. Disponibile, in fase di test." },
       { titolo: "Confronto con enti simili", stato: "wip", testo: "Come si posiziona rispetto agli enti dello stesso tipo: posizione nel gruppo e confronto, area per area, con la mediana dei pari. Disponibile, in fase di test." },
-      { titolo: "Controllo nel tempo e avvisi", stato: "explore", testo: "Segnala dati non aggiornati, collegamenti che non funzionano e peggioramenti, appena succedono." },
+      { titolo: "Controllo nel tempo e avvisi", stato: "explore", testo: "Segnala dati non aggiornati, collegamenti che non funzionano e peggioramenti, appena succedono. Tracciata nelle issue #103 (avvisi di maturità) e #88 (monitoraggio schedulato)." },
     ],
   },
   {
@@ -73,7 +73,7 @@ const ROADMAP: Punto[] = [
       { titolo: "Mettere ordine", stato: "wip", testo: "Dal file ricava una tabella ben organizzata: tipi delle colonne, chiave primaria e indici utili, con il comando pronto da eseguire (CREATE TABLE). Disponibile, in fase di test." },
       { titolo: "Riepiloghi pronti", stato: "wip", testo: "Crea sintesi utili dal file: statistiche delle colonne numeriche, totali per categoria e andamenti nel tempo, pronti da consultare o pubblicare. Disponibile, in fase di test." },
       { titolo: "Veloce anche quando è grande", stato: "wip", testo: "In base a dimensione e contenuto del file, suggerisce come tenerlo veloce: formato compresso (Parquet), indici, suddivisione e pubblicazione via API. Disponibile, in fase di test." },
-      { titolo: "Cambio formato con un clic", stato: "wip", testo: "Trasforma una tabella con coordinate in una mappa (GeoJSON) pronta da pubblicare, riconoscendo da solo le colonne di latitudine e longitudine. Disponibile, in fase di test." },
+      { titolo: "Cambio formato con un clic", stato: "wip", testo: "Trasforma una tabella con coordinate in una mappa (GeoJSON) pronta da pubblicare, riconoscendo da solo le colonne di latitudine e longitudine. Disponibile, in fase di test. Convertitori avanzati (Excel, Shapefile, Parquet) tracciati nell'issue #101." },
     ],
   },
   {
@@ -87,7 +87,7 @@ const ROADMAP: Punto[] = [
     voci: [
       { titolo: "Controllo della scheda dati", stato: "wip", testo: "Verifica che la scheda del dato rispetti lo standard europeo (DCAT-AP_IT), segnala i campi obbligatori mancanti e calcola un punteggio FAIR (trovabile, accessibile, interoperabile, riutilizzabile). Disponibile, in fase di test." },
       { titolo: "Pacchetto pronto da pubblicare", stato: "wip", testo: "Scarichi in un clic un unico pacchetto (.zip) con dato pulito, scheda dei metadati, licenza e una guida con i passi per pubblicarlo sul portale. Disponibile, in fase di test." },
-      { titolo: "I dati che “contano di più”", testo: "Verifica quali dei dataset più importanti (quelli indicati a livello europeo) l'ente già pubblica e quali mancano." },
+      { titolo: "I dati che “contano di più”", stato: "explore", testo: "Verifica quali dei dataset più importanti (quelli indicati a livello europeo) l'ente già pubblica e quali mancano; a livello di singolo file, stima se rientra tra gli High-Value Dataset UE. Tracciata nell'issue #102." },
       { titolo: "La licenza giusta", stato: "wip", testo: "Riconosce se la licenza dichiarata è davvero aperta e, in caso contrario, suggerisce quella corretta (es. CC-BY-4.0). Disponibile, in fase di test." },
     ],
   },
@@ -100,7 +100,7 @@ const ROADMAP: Punto[] = [
     issue: 53,
     wip: true,
     voci: [
-      { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali). In arrivo appalti, bilanci, catasto e altri. Disponibile, in fase di test." },
+      { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali), già collegato alla ricerca. Prossimi connettori tracciati: Socrata #98, ANAC appalti #99, BDAP bilanci #100." },
       { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT, pacchetto di pubblicazione) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
       { titolo: "Controlli automatici programmati", stato: "explore", testo: "La piattaforma verifica da sola lo stato dei dati (aggiornamento, qualità, link rotti) e avvisa quando qualcosa cambia o si rompe. Progettata in dettaglio (issue #88), da sviluppare nelle prossime sessioni." },
     ],
