@@ -89,6 +89,16 @@ type Gap = {
   strategiche: AzioneGap[];
 };
 
+// Confronto con enti simili (#50): posizione nel cluster + mediane.
+type PeerComparison = {
+  cluster_label: string;
+  count: number;
+  rank: number | null;
+  better_than_pct: number | null;
+  median_overall: number;
+  median_dimensions: Dimensions;
+};
+
 type Scorecard = {
   entity: { id: number; name: string; type: string | null; region: string | null };
   assessed_at: string;
@@ -100,6 +110,7 @@ type Scorecard = {
   dimension_breakdown?: DimensionBreakdown[];
   coverage?: Coverage | null;
   gap?: Gap | null;
+  peer_comparison?: PeerComparison | null;
   n_datasets: number | null;
   truncated: boolean | null;
   insufficient_data?: boolean;
@@ -701,6 +712,84 @@ function GapRoadmapView({ gap }: { gap: Gap }) {
   );
 }
 
+/**
+ * Confronto con enti simili (#50): dove si posiziona l'ente nel cluster (stesso
+ * tipo) e come si confronta, dimensione per dimensione, con la mediana dei pari.
+ */
+function PeerComparisonView({
+  pc,
+  dimensions,
+  entityName,
+}: {
+  pc: PeerComparison;
+  dimensions: Dimensions;
+  entityName: string;
+}) {
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Confronto con enti simili</h3>
+      <p className="text-slate-600 mb-3" style={{ fontSize: 13 }}>
+        Tra i <strong>{pc.count} {pc.cluster_label}</strong> valutati,{" "}
+        <strong>{entityName}</strong>
+        {pc.rank != null ? (
+          <>
+            {" "}è al <strong>{pc.rank}° posto</strong>
+            {pc.better_than_pct != null ? (
+              <> — fa meglio del <strong>{pc.better_than_pct}%</strong> degli enti simili</>
+            ) : null}
+            . Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.
+          </>
+        ) : (
+          <>. Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.</>
+        )}
+      </p>
+      <ul className="list-unstyled d-flex flex-column gap-2 mb-0" style={{ maxWidth: 640 }}>
+        {DIM_KEYS.map((k) => {
+          const mine = dimensions[k];
+          const med = pc.median_dimensions[k];
+          const delta = Math.round(mine - med);
+          const deltaColor = delta > 0 ? "#059669" : delta < 0 ? "#dc2626" : "#64748b";
+          return (
+            <li key={k} className="d-flex align-items-center gap-2" style={{ fontSize: 13 }}>
+              <span style={{ width: 80, color: "#475569" }}>{DIM_LABEL[k]}</span>
+              {/* Barra: punteggio dell'ente, con tacca sulla mediana del cluster */}
+              <div style={{ position: "relative", flex: 1, height: 10, background: "#eef0f3", borderRadius: 5 }}>
+                <div
+                  style={{
+                    width: `${Math.round(mine)}%`,
+                    height: "100%",
+                    borderRadius: 5,
+                    background: delta >= 0 ? "#2563eb" : "#d97706",
+                  }}
+                />
+                <span
+                  title={`Mediana ${pc.cluster_label}: ${Math.round(med)}`}
+                  style={{
+                    position: "absolute",
+                    left: `calc(${Math.round(med)}% - 1px)`,
+                    top: -3,
+                    width: 2,
+                    height: 16,
+                    background: "#0f172a",
+                  }}
+                />
+              </div>
+              <span style={{ width: 36, textAlign: "right", color: "#0f172a" }}>{Math.round(mine)}</span>
+              <span style={{ width: 56, textAlign: "right", color: deltaColor, fontVariantNumeric: "tabular-nums" }}>
+                {delta > 0 ? `+${delta}` : delta} vs
+              </span>
+              <span style={{ width: 24, textAlign: "left", color: "#64748b" }}>{Math.round(med)}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 11 }}>
+        La tacca verticale è la mediana degli enti dello stesso tipo; il numero a destra il loro valore.
+      </p>
+    </div>
+  );
+}
+
 function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const radarRef = useRef<HTMLDivElement>(null);
@@ -839,6 +928,15 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
 
             {/* Gap analysis (#50): mosse facili vs strategiche, collo di bottiglia */}
             {scorecard.gap ? <GapRoadmapView gap={scorecard.gap} /> : null}
+
+            {/* Confronto con enti simili (#50): posizione nel cluster + per dimensione */}
+            {scorecard.peer_comparison ? (
+              <PeerComparisonView
+                pc={scorecard.peer_comparison}
+                dimensions={scorecard.dimensions}
+                entityName={scorecard.entity.name}
+              />
+            ) : null}
 
             {/* Spiegazione per dimensione (Fase B): cosa misura ogni punteggio */}
             {scorecard.dimension_breakdown && scorecard.dimension_breakdown.length ? (

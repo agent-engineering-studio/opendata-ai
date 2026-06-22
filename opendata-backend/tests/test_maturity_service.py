@@ -143,6 +143,66 @@ async def test_trend_grows_and_ranking(session: AsyncSession, httpx_mock: HTTPXM
     assert ranking["ranking"][0]["entity"]["id"] == eid
 
 
+async def test_peer_comparison(session: AsyncSession) -> None:
+    """Due comuni valutati → lo scorecard espone il confronto con enti simili."""
+    from datetime import datetime, timezone
+
+    from opendata_backend.db.repositories import maturity as repo
+
+    def _scores(overall, policy, portal, quality, impact, level):
+        return SimpleNamespace(
+            overall=overall, policy=policy, portal=portal,
+            quality=quality, impact=impact, level=level,
+        )
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    # Ente A: forte. Ente B: più debole. Stesso tipo "comune".
+    a = await repo.upsert_entity(session, name="Comune A", ckan_org_id="org-a", entity_type="comune")
+    b = await repo.upsert_entity(session, name="Comune B", ckan_org_id="org-b", entity_type="comune")
+    await repo.save_assessment(
+        session, entity_id=a.id, scores=_scores(70, 80, 70, 65, 60, "Fast-tracker"),
+        details={"n_datasets": 10}, assessed_at=now,
+    )
+    await repo.save_assessment(
+        session, entity_id=b.id, scores=_scores(40, 50, 40, 35, 30, "Follower"),
+        details={"n_datasets": 5}, assessed_at=now,
+    )
+    await session.commit()
+
+    sc_a = await build_scorecard(session, a.id)
+    pc = sc_a["peer_comparison"]
+    assert pc is not None
+    assert pc["cluster_label"] == "comuni"
+    assert pc["count"] == 2
+    assert pc["rank"] == 1  # A è il migliore
+    assert pc["better_than_pct"] == 50  # davanti a metà del cluster
+    assert pc["median_overall"] == 55.0  # mediana di 70 e 40
+    assert set(pc["median_dimensions"]) == {"policy", "portal", "quality", "impact"}
+
+    # L'ente più debole è ultimo, non supera nessuno.
+    sc_b = await build_scorecard(session, b.id)
+    assert sc_b["peer_comparison"]["rank"] == 2
+    assert sc_b["peer_comparison"]["better_than_pct"] == 0
+
+
+async def test_peer_comparison_none_when_alone(session: AsyncSession) -> None:
+    """Un solo ente del tipo → nessun confronto possibile (None)."""
+    from datetime import datetime, timezone
+
+    from opendata_backend.db.repositories import maturity as repo
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    e = await repo.upsert_entity(session, name="Solo", ckan_org_id="org-s", entity_type="comune")
+    await repo.save_assessment(
+        session, entity_id=e.id,
+        scores=SimpleNamespace(overall=50, policy=50, portal=50, quality=50, impact=50, level="Follower"),
+        details={"n_datasets": 3}, assessed_at=now,
+    )
+    await session.commit()
+    sc = await build_scorecard(session, e.id)
+    assert sc["peer_comparison"] is None
+
+
 async def test_scorecard_404_when_missing(session: AsyncSession) -> None:
     assert await build_scorecard(session, 999) is None
 

@@ -257,6 +257,47 @@ async def _cluster_median(session: AsyncSession, entity_type: str | None) -> flo
     return round(median(overalls), 1) if overalls else None
 
 
+# Etichetta plurale del cluster di enti simili (per il testo "tra i N …").
+_CLUSTER_PLURAL = {
+    "comune": "comuni",
+    "regione": "Regioni",
+    "provincia": "Province",
+    "ente": "enti",
+}
+
+
+async def _peer_comparison(session: AsyncSession, ent: Any) -> dict[str, Any] | None:
+    """Confronto con enti simili: posizione + mediane (overall e per dimensione).
+
+    Il cluster sono gli enti dello **stesso tipo** già valutati (stessa logica di
+    `_cluster_median`, qui arricchita). Serve almeno un altro ente: con un solo
+    elemento il confronto non ha senso e si restituisce ``None`` (la UI lo nasconde).
+    """
+    rows = await repo.ranking(session, entity_type=ent.type)  # ordinati desc per overall
+    if len(rows) < 2:
+        return None
+    overalls = [float(a.score_overall or 0) for _, a in rows]
+    median_dims = {
+        "policy": round(median([float(a.score_policy or 0) for _, a in rows]), 1),
+        "portal": round(median([float(a.score_portal or 0) for _, a in rows]), 1),
+        "quality": round(median([float(a.score_quality or 0) for _, a in rows]), 1),
+        "impact": round(median([float(a.score_impact or 0) for _, a in rows]), 1),
+    }
+    ids = [e.id for e, _ in rows]
+    count = len(rows)
+    rank = ids.index(ent.id) + 1 if ent.id in ids else None
+    # "meglio del X% degli enti simili": quota di cluster sotto questo ente.
+    better_than_pct = round((count - rank) / count * 100) if rank else None
+    return {
+        "cluster_label": _CLUSTER_PLURAL.get((ent.type or "").lower(), "enti"),
+        "count": count,
+        "rank": rank,
+        "better_than_pct": better_than_pct,
+        "median_overall": round(median(overalls), 1),
+        "median_dimensions": median_dims,
+    }
+
+
 async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, Any] | None:
     """Scorecard dell'ente dall'ultimo snapshot + trend + mediana cluster."""
     ent = await repo.get_entity(session, entity_id)
@@ -307,6 +348,8 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "unmet_reuse_demand": details.get("unmet_reuse_demand", {"count": 0, "items": [], "penalty": 0.0}),
         "trend": trend,
         "cluster_median": await _cluster_median(session, ent.type),
+        # Confronto con enti simili (#50): posizione + mediane per dimensione.
+        "peer_comparison": await _peer_comparison(session, ent),
     }
 
 
