@@ -57,6 +57,20 @@ type SummaryResult = {
   serie_temporali: { column: string; periodo: string; punti: { periodo: string; conteggio: number }[] }[];
   note: string[];
 };
+type ScaleResult = {
+  righe: number;
+  colonne: number;
+  dimensione: { bytes: number; leggibile: string; stimata: boolean; classe: "piccolo" | "medio" | "grande" };
+  consigli: { codice: string; titolo: string; dettaglio: string; priorita: "alta" | "media" | "bassa" }[];
+};
+const PRIORITA_BADGE: Record<"alta" | "media" | "bassa", string> = {
+  alta: "bg-danger",
+  media: "bg-warning text-dark",
+  bassa: "bg-secondary",
+};
+const CLASSE_LABEL: Record<"piccolo" | "medio" | "grande", string> = {
+  piccolo: "piccolo", medio: "medio", grande: "grande",
+};
 const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
   { k: "titolo", label: "Titolo", ph: "Es. Popolazione residente per comune" },
   { k: "descrizione", label: "Descrizione", ph: "A cosa serve il dato, cosa contiene…" },
@@ -103,6 +117,8 @@ function QualitaInner() {
   const [lonField, setLonField] = useState("");
   const [summary, setSummary] = useState<SummaryResult | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  const [scale, setScale] = useState<ScaleResult | null>(null);
+  const [scaleBusy, setScaleBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -297,6 +313,29 @@ function QualitaInner() {
     }
   }
 
+  // Consigli di scala/performance per dataset grandi (POST /quality/scale).
+  async function generaScale() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setScaleBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/scale", { method: "POST", token, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setScale((await res.json()) as ScaleResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setScaleBusy(false);
+    }
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
@@ -306,6 +345,7 @@ function QualitaInner() {
     setSchema(null);
     setConvert(null);
     setSummary(null);
+    setScale(null);
     try {
       const body = _body();
       if (!body) {
@@ -387,7 +427,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); setSummary(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); }}
               >
                 Pulisci
               </button>
@@ -771,6 +811,52 @@ function QualitaInner() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* VELOCE ANCHE QUANDO È GRANDE (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Veloce anche quando è grande</h2>
+                <p className="text-muted small">
+                  In base alla dimensione e al contenuto del file, suggerisce come tenerlo veloce
+                  da consultare anche con molti dati: formato compresso, indici, suddivisione e
+                  modalità di pubblicazione.
+                </p>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaScale} disabled={scaleBusy}>
+                  {scaleBusy ? "Valuto…" : "Valuta scala e performance"}
+                </button>
+
+                {scale && (
+                  <div className="mt-3">
+                    <p className="small mb-2">
+                      <span className="text-muted">Dimensione:</span>{" "}
+                      <strong>{scale.dimensione.leggibile}</strong>
+                      {scale.dimensione.stimata ? " (stimata)" : ""} ·{" "}
+                      {scale.righe.toLocaleString("it-IT")} righe × {scale.colonne} colonne ·{" "}
+                      <span className="badge bg-light text-dark border align-middle">
+                        dataset {CLASSE_LABEL[scale.dimensione.classe]}
+                      </span>
+                    </p>
+                    <ul className="list-group list-group-flush">
+                      {scale.consigli.map((c) => (
+                        <li key={c.codice} className="list-group-item px-0">
+                          <div className="d-flex gap-2 align-items-start">
+                            <span className={`badge ${PRIORITA_BADGE[c.priorita]} flex-shrink-0`} style={{ minWidth: 64 }}>
+                              {c.priorita}
+                            </span>
+                            <div>
+                              <div className="fw-semibold">{c.titolo}</div>
+                              <div className="small text-muted">{c.dettaglio}</div>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>

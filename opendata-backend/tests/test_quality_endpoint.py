@@ -171,3 +171,17 @@ def test_summary_csv_ok() -> None:
 def test_summary_geojson_rejected() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     assert _client().post("/quality/summary", json={"content": gj, "format": "geojson"}).status_code == 415
+
+
+def test_scale_csv_small_ok() -> None:
+    res = _client().post("/quality/scale", json={"content": "a;b\n1;2\n3;4\n"})
+    assert res.status_code == 200
+    s = res.json()
+    assert s["dimensione"]["classe"] == "piccolo"
+    assert s["dimensione"]["stimata"] is False  # via endpoint la size è reale
+    assert [c["codice"] for c in s["consigli"]] == ["ok"]
+
+
+def test_scale_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    assert _client().post("/quality/scale", json={"content": gj, "format": "geojson"}).status_code == 415
