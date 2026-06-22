@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Roadmap — OpenData AI",
   description:
-    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma. Cinque punti — qualità del dato, maturità open data, ottimizzazione, pubblicazione secondo gli standard, nuove fonti e automazione. Niente scadenze, solo direzioni utili.",
+    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma. Sei punti — qualità del dato, maturità open data, ottimizzazione, pubblicazione secondo gli standard, nuove fonti e automazione, e nuove lenti per l'analisi del territorio. Niente scadenze, solo direzioni utili.",
 };
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
@@ -103,6 +103,21 @@ const ROADMAP: Punto[] = [
       { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali). In arrivo appalti, bilanci, catasto e altri. Disponibile, in fase di test." },
       { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT, pacchetto di pubblicazione) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
       { titolo: "Controlli automatici programmati", stato: "explore", testo: "La piattaforma verifica da sola lo stato dei dati (aggiornamento, qualità, link rotti) e avvisa quando qualcosa cambia o si rompe. Progettata in dettaglio (issue #88), da sviluppare nelle prossime sessioni." },
+    ],
+  },
+  {
+    n: "06",
+    icon: "🗺️",
+    titolo: "Leggere un comune da più punti di vista",
+    perche:
+      "L'analisi del territorio legge un comune attraverso “lenti”: incroci tra dati pubblici e ciò che è stato fatto, per far emergere punti di forza, bisogni e idee. Oggi sono attive otto lenti; il passo avanti è aggiungerne di nuove, sempre con dati comunali e fonti citate.",
+    issue: 94,
+    voci: [
+      { titolo: "Le 8 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
+      { titolo: "Casa e abitazioni", stato: "near", testo: "Affollamento, case non occupate, proprietà o affitto: le condizioni abitative del comune, dal Censimento ISTAT." },
+      { titolo: "Reddito e benessere economico", stato: "explore", testo: "Reddito medio dichiarato e fasce di reddito per comune (dati del Ministero dell'Economia): un'àncora socio-economica accanto a lavoro e welfare." },
+      { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune — entrate, spese, capacità di spesa — da SIOPE e dalla banca dati dei bilanci pubblici: trasparenza sui soldi pubblici." },
+      { titolo: "Connettività digitale", stato: "explore", testo: "Copertura della rete veloce (fibra) nel comune: il divario digitale, da verificare sulla disponibilità dei dati aperti." },
     ],
   },
 ];
