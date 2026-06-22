@@ -150,10 +150,14 @@ agent-backend: ## Launch the unified backend REPL against the running stack
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-backend:local opendata-agent
 
-.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-ispra mcp-stdio-web mcp-stdio-maturity
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-ispra mcp-stdio-web mcp-stdio-maturity mcp-stdio-ods
 mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
+
+mcp-stdio-ods: ## Smoke-test the OpenDataSoft MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio ods-mcp-server:local
 
 mcp-stdio-maturity: ## Smoke-test the Maturity MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \

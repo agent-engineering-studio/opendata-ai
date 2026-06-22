@@ -172,6 +172,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── OpenDataSoft MCP server (Streamable HTTP) ─────
+  ods-mcp:
+    build:
+      context: .
+      dockerfile: ods-mcp-server/Dockerfile
+    image: ods-mcp-server:local
+    container_name: ods-mcp
+    ports:
+      - "${ODS_MCP_PORT:-18089}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      ODS_DEFAULT_BASE_URL: ${ODS_DEFAULT_BASE_URL:-https://public.opendatasoft.com}
+      ODS_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:

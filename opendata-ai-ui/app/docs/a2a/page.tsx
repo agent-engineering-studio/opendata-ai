@@ -108,7 +108,8 @@ export default function Page() {
     { "id": "find_geo_resources", "name": "Cerca risorse geografiche" },
     { "id": "classify_dataset",   "name": "Classifica un dataset" },
     { "id": "assess_maturity",    "name": "Valuta la maturità di un ente" },
-    { "id": "analyze_territory",  "name": "Analizza un territorio (SWOT + proposte)" }
+    { "id": "analyze_territory",  "name": "Analizza un territorio (SWOT + proposte)" },
+    { "id": "data_quality",       "name": "Diagnosi e preparazione di un dato" }
   ],
   "endpoints": { "jsonrpc": "https://api.opendata-ai.it/a2a/" }
 }`}
@@ -182,6 +183,21 @@ export default function Page() {
                 <td>
                   <code>{`{"cod_comune":…,"modalita"?}`}</code> (scheda · idee
                   · completa · marketing).
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>data_quality</code>
+                </td>
+                <td>
+                  Data Quality Lab su un file inline (CSV/GeoJSON): diagnosi,
+                  auto-fix, schema SQL, riepiloghi, consigli di scala, conversione
+                  in GeoJSON, validazione DCAT-AP_IT + FAIR e pacchetto pronto da
+                  pubblicare. Deterministico, nessun LLM.
+                </td>
+                <td>
+                  <code>{`{"azione":…,"content":…}`}</code> (profile · fix ·
+                  schema · summary · scale · to-geojson · validate · package).
                 </td>
               </tr>
             </tbody>

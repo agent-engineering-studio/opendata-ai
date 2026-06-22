@@ -100,9 +100,9 @@ const ROADMAP: Punto[] = [
     issue: 53,
     wip: true,
     voci: [
-      { titolo: "Nuove fonti collegate", stato: "near", testo: "Più portali e banche dati pubbliche: appalti, bilanci degli enti, portali regionali, catasto e altro." },
-      { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
-      { titolo: "Controlli automatici programmati", testo: "La piattaforma verifica da sola lo stato dei dati e avvisa quando qualcosa cambia o si rompe." },
+      { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali). In arrivo appalti, bilanci, catasto e altri. Disponibile, in fase di test." },
+      { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT, pacchetto di pubblicazione) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
+      { titolo: "Controlli automatici programmati", stato: "explore", testo: "La piattaforma verifica da sola lo stato dei dati (aggiornamento, qualità, link rotti) e avvisa quando qualcosa cambia o si rompe. Progettata in dettaglio (issue #88), da sviluppare nelle prossime sessioni." },
     ],
   },
 ];
