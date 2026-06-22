@@ -83,11 +83,12 @@ const ROADMAP: Punto[] = [
     perche:
       "Rendere il dato facile da trovare e riusare per tutti, seguendo le regole comuni europee e italiane per i dati aperti.",
     issue: 52,
+    wip: true,
     voci: [
-      { titolo: "Controllo della scheda dati", testo: "Verifica che la descrizione del dato rispetti gli standard e suggerisce le correzioni mancanti." },
+      { titolo: "Controllo della scheda dati", stato: "wip", testo: "Verifica che la scheda del dato rispetti lo standard europeo (DCAT-AP_IT), segnala i campi obbligatori mancanti e calcola un punteggio FAIR (trovabile, accessibile, interoperabile, riutilizzabile). Disponibile, in fase di test." },
       { titolo: "Pacchetto pronto da pubblicare", testo: "Dato pulito + descrizione + licenza: tutto insieme, pronto da caricare sul portale." },
       { titolo: "I dati che “contano di più”", testo: "Verifica quali dei dataset più importanti (quelli indicati a livello europeo) l'ente già pubblica e quali mancano." },
-      { titolo: "La licenza giusta", stato: "explore", testo: "Suggerisce la licenza aperta corretta, così chiunque può riusare il dato senza dubbi." },
+      { titolo: "La licenza giusta", stato: "wip", testo: "Riconosce se la licenza dichiarata è davvero aperta e, in caso contrario, suggerisce quella corretta (es. CC-BY-4.0). Disponibile, in fase di test." },
     ],
   },
   {

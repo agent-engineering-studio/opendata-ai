@@ -185,3 +185,31 @@ def test_scale_csv_small_ok() -> None:
 def test_scale_geojson_rejected() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     assert _client().post("/quality/scale", json={"content": gj, "format": "geojson"}).status_code == 415
+
+
+def test_validate_from_file_incomplete() -> None:
+    # scheda generata al volo dal CSV, senza campi editoriali → non valida
+    res = _client().post("/quality/validate", json={"content": "comune,popolazione\nBari,320475\n"})
+    assert res.status_code == 200
+    body = res.json()
+    v = body["validazione"]
+    assert v["valido"] is False
+    assert v["licenza"]["suggerita"] == "CC-BY-4.0"
+    assert "metadata" in body and body["metadata"]["profilo"] == "DCAT-AP_IT"
+
+
+def test_validate_from_metadata_complete() -> None:
+    meta = {"dataset": {
+        "@type": "dcat:Dataset",
+        "dct:title": "Popolazione", "dct:description": "Per comune.",
+        "dct:identifier": "pop-001", "dcat:keyword": ["popolazione"],
+        "dcat:theme": "SOCI",
+        "dct:publisher": {"foaf:name": "Regione Puglia"},
+        "dct:accrualPeriodicity": "ANNUAL", "dct:license": "CC-BY-4.0",
+        "dcat:distribution": [{"dct:format": "CSV", "dcat:mediaType": "text/csv",
+                               "dcat:downloadURL": "https://x.it/p.csv", "dct:license": "CC-BY-4.0"}],
+    }, "schema_campi": [{"nome": "comune", "tipo_xsd": "xsd:string"}]}
+    v = _client().post("/quality/validate", json={"metadata": meta}).json()["validazione"]
+    assert v["valido"] is True
+    assert v["licenza"]["aperta"] is True
+    assert v["fair"]["overall"] >= 85

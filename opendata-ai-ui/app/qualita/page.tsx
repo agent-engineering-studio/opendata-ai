@@ -29,6 +29,12 @@ type DcatResult = {
   schema_campi: { nome: string; tipo_xsd: string }[];
   campi_mancanti: string[];
 };
+type ValidationResult = {
+  valido: boolean;
+  findings: { livello: "alto" | "medio" | "basso"; codice: string; messaggio: string; campo: string }[];
+  licenza: { dichiarata: string | null; aperta: boolean | null; suggerita: string | null };
+  fair: { findable: number; accessible: number; interoperable: number; reusable: number; overall: number };
+};
 type SchemaResult = {
   table_name: string;
   row_estimate: number;
@@ -107,6 +113,8 @@ function QualitaInner() {
   const [fixChanges, setFixChanges] = useState<{ codice: string; messaggio: string }[] | null>(null);
   const [dcat, setDcat] = useState<DcatResult | null>(null);
   const [dcatBusy, setDcatBusy] = useState(false);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [validateBusy, setValidateBusy] = useState(false);
   const [meta, setMeta] = useState<MetaForm>({ titolo: "", descrizione: "", licenza: "", ente: "", tema: "", frequenza: "" });
   const [schema, setSchema] = useState<SchemaResult | null>(null);
   const [schemaBusy, setSchemaBusy] = useState(false);
@@ -218,10 +226,34 @@ function QualitaInner() {
         return;
       }
       setDcat((await res.json()) as DcatResult);
+      setValidation(null);  // la nuova scheda invalida la validazione precedente
     } catch (e) {
       setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setDcatBusy(false);
+    }
+  }
+
+  // Valida la scheda DCAT-AP_IT generata: campi obbligatori, licenza, FAIR.
+  async function validaDcat() {
+    if (!dcat) return;
+    setValidateBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/validate", { method: "POST", token, body: JSON.stringify({ metadata: dcat }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      const data = (await res.json()) as { validazione: ValidationResult };
+      setValidation(data.validazione);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setValidateBusy(false);
     }
   }
 
@@ -342,6 +374,7 @@ function QualitaInner() {
     setReport(null);
     setFixChanges(null);
     setDcat(null);
+    setValidation(null);
     setSchema(null);
     setConvert(null);
     setSummary(null);
@@ -427,7 +460,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); }}
               >
                 Pulisci
               </button>
@@ -897,10 +930,60 @@ function QualitaInner() {
                       </ul>
                     </div>
                   )}
-                  <div className="d-flex align-items-center gap-2 mb-2">
+                  <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
                     <button type="button" className="btn btn-success btn-sm" onClick={scaricaDcat}>⬇ Scarica metadati (JSON-LD)</button>
+                    <button type="button" className="btn btn-outline-primary btn-sm" onClick={validaDcat} disabled={validateBusy}>
+                      {validateBusy ? "Valido…" : "Valida (DCAT-AP_IT + FAIR)"}
+                    </button>
                     <span className="text-muted small">{dcat.schema_campi.length} campi nello schema</span>
                   </div>
+
+                  {validation && (
+                    <div className="border rounded p-3 mb-2">
+                      <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                        <span className={`badge ${validation.valido ? "bg-success" : "bg-danger"}`}>
+                          {validation.valido ? "Conforme" : "Non ancora conforme"}
+                        </span>
+                        <span className="small">
+                          Licenza:{" "}
+                          {validation.licenza.aperta === true
+                            ? <span className="text-success">aperta ({validation.licenza.dichiarata})</span>
+                            : validation.licenza.aperta === false
+                              ? <span className="text-danger">non aperta ({validation.licenza.dichiarata}) → usa {validation.licenza.suggerita}</span>
+                              : <span className="text-muted">non indicata → suggerita {validation.licenza.suggerita}</span>}
+                        </span>
+                      </div>
+
+                      <div className="row g-2 text-center mb-2">
+                        {([
+                          ["Trovabile", validation.fair.findable],
+                          ["Accessibile", validation.fair.accessible],
+                          ["Interoperabile", validation.fair.interoperable],
+                          ["Riutilizzabile", validation.fair.reusable],
+                          ["FAIR", validation.fair.overall],
+                        ] as [string, number][]).map(([label, val]) => (
+                          <div className="col" key={label}>
+                            <div className={`h5 mb-0 ${scoreColor(val)}`}>{val}</div>
+                            <div className="small text-muted">{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {validation.findings.length > 0 && (
+                        <ul className="list-group list-group-flush">
+                          {validation.findings.map((f) => (
+                            <li key={f.codice} className="list-group-item px-0 py-1 d-flex gap-2 align-items-start border-0">
+                              <span className={`badge ${LIVELLO[f.livello].badge} flex-shrink-0`} style={{ minWidth: 96 }}>
+                                {LIVELLO[f.livello].label}
+                              </span>
+                              <span className="small">{f.messaggio} <span className="text-muted">— <code>{f.campo}</code></span></span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
                   <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 320, overflow: "auto" }}>
                     {JSON.stringify(dcat.dataset, null, 2)}
                   </pre>

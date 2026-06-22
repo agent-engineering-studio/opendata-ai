@@ -24,6 +24,7 @@ from opendata_core.quality import (
     profile_csv,
     profile_geojson,
     summarize_csv,
+    validate_dcat,
 )
 
 from ..auth import ClerkUser
@@ -65,6 +66,12 @@ class MetadataIn(ProfileIn):
     ente: str | None = None
     tema: str | None = None
     frequenza: str | None = None
+
+
+class ValidateIn(MetadataIn):
+    # Si può validare una scheda DCAT già pronta (`metadata`) oppure generarla al
+    # volo dal file (content/url + campi editoriali) e validarla.
+    metadata: dict | None = None
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -278,3 +285,30 @@ async def quality_metadata(
         frequenza=body.frequenza,
         url=body.url,
     )
+
+
+@router.post("/quality/validate")
+async def quality_validate(
+    body: ValidateIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Valida una scheda DCAT-AP_IT: campi obbligatori, licenza aperta, punteggio FAIR.
+
+    Si passa una scheda già pronta (`metadata`, l'output di /quality/metadata) oppure
+    un file (content/url + campi editoriali) da cui generarla al volo e validarla.
+    Restituisce `{validazione, metadata}`.
+    """
+    if body.metadata is not None:
+        meta = body.metadata
+    else:
+        text = await _resolve_input(body)
+        geo = _is_geojson(text, (body.format or "").lower())
+        profile = profile_geojson(text) if geo else profile_csv(text)
+        meta = generate_dcat(
+            profile, titolo=body.titolo, descrizione=body.descrizione,
+            licenza=body.licenza, ente=body.ente, tema=body.tema,
+            frequenza=body.frequenza, url=body.url,
+        )
+    log.info("/quality/validate subject=%s source=%s",
+             user.subject, "metadata" if body.metadata is not None else "file")
+    return {"validazione": validate_dcat(meta), "metadata": meta}
