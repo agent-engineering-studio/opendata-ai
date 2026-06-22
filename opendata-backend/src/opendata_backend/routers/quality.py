@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from opendata_core.quality import fix_csv, profile_csv, profile_geojson
+from opendata_core.quality import fix_csv, generate_dcat, profile_csv, profile_geojson
 
 from ..auth import ClerkUser
 from ..shared.ratelimit import enforce_rate_limit
@@ -33,6 +33,17 @@ class ProfileIn(BaseModel):
     content: str | None = None
     url: str | None = None
     format: str | None = None  # opzionale: csv/tsv/txt o geojson
+
+
+class MetadataIn(ProfileIn):
+    # Campi editoriali DCAT-AP_IT che NON si deducono dal file: se forniti
+    # riempiono la scheda, altrimenti restano segnaposto in `campi_mancanti`.
+    titolo: str | None = None
+    descrizione: str | None = None
+    licenza: str | None = None
+    ente: str | None = None
+    tema: str | None = None
+    frequenza: str | None = None
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -126,3 +137,33 @@ async def quality_fix(
         user.subject, "url" if body.url else "content", len(text),
     )
     return fix_csv(text)
+
+
+@router.post("/quality/metadata")
+async def quality_metadata(
+    body: MetadataIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Genera lo scheletro DCAT-AP_IT (Dataset + Distribution) da un file.
+
+    Profila il file (CSV o GeoJSON), poi `generate_dcat` ricava i campi deducibili
+    (formato, media type, schema campi, keyword) e segna `<da compilare>` quelli
+    editoriali non passati. Restituisce metadati + `campi_mancanti`.
+    """
+    text = await _resolve_input(body)
+    geo = _is_geojson(text, (body.format or "").lower())
+    profile = profile_geojson(text) if geo else profile_csv(text)
+    log.info(
+        "/quality/metadata subject=%s tipo=%s source=%s",
+        user.subject, "geojson" if geo else "csv", "url" if body.url else "content",
+    )
+    return generate_dcat(
+        profile,
+        titolo=body.titolo,
+        descrizione=body.descrizione,
+        licenza=body.licenza,
+        ente=body.ente,
+        tema=body.tema,
+        frequenza=body.frequenza,
+        url=body.url,
+    )

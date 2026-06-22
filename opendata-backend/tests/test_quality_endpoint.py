@@ -90,3 +90,20 @@ def test_fix_geojson_rejected() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     res = _client().post("/quality/fix", json={"content": gj, "format": "geojson"})
     assert res.status_code == 415
+
+
+def test_metadata_csv_dcat() -> None:
+    res = _client().post("/quality/metadata", json={
+        "content": "comune,popolazione\nBari,320475\n",
+        "titolo": "Popolazione residente", "licenza": "CC-BY-4.0",
+    })
+    assert res.status_code == 200
+    d = res.json()
+    assert d["profilo"] == "DCAT-AP_IT"
+    assert d["dataset"]["dct:title"] == "Popolazione residente"
+    assert d["dataset"]["dcat:distribution"][0]["dct:format"] == "CSV"
+    assert any(c["nome"] == "popolazione" for c in d["schema_campi"])
+
+
+def test_metadata_requires_input() -> None:
+    assert _client().post("/quality/metadata", json={}).status_code == 400

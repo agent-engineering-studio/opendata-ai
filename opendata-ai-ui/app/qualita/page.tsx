@@ -24,6 +24,20 @@ type GeoReport = {
   findings: Finding[]; punteggio: number;
 };
 type Report = CsvReport | GeoReport;
+type DcatResult = {
+  dataset: Record<string, unknown>;
+  schema_campi: { nome: string; tipo_xsd: string }[];
+  campi_mancanti: string[];
+};
+const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
+  { k: "titolo", label: "Titolo", ph: "Es. Popolazione residente per comune" },
+  { k: "descrizione", label: "Descrizione", ph: "A cosa serve il dato, cosa contiene…" },
+  { k: "licenza", label: "Licenza", ph: "Es. CC-BY-4.0" },
+  { k: "ente", label: "Ente titolare", ph: "Es. Comune di Bari" },
+  { k: "tema", label: "Tema EU", ph: "Es. GOVE, ECON, ENVI" },
+  { k: "frequenza", label: "Frequenza aggiornamento", ph: "Es. ANNUAL, MONTHLY" },
+];
+type MetaForm = { titolo: string; descrizione: string; licenza: string; ente: string; tema: string; frequenza: string };
 
 const LIVELLO: Record<Finding["livello"], { label: string; badge: string; ord: number }> = {
   alto: { label: "Critico", badge: "bg-danger", ord: 0 },
@@ -49,6 +63,9 @@ function QualitaInner() {
   const [report, setReport] = useState<Report | null>(null);
   const [fixing, setFixing] = useState(false);
   const [fixChanges, setFixChanges] = useState<{ codice: string; messaggio: string }[] | null>(null);
+  const [dcat, setDcat] = useState<DcatResult | null>(null);
+  const [dcatBusy, setDcatBusy] = useState(false);
+  const [meta, setMeta] = useState<MetaForm>({ titolo: "", descrizione: "", licenza: "", ente: "", tema: "", frequenza: "" });
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -131,11 +148,41 @@ function QualitaInner() {
     }
   }
 
+  // Genera lo scheletro DCAT-AP_IT (POST /quality/metadata) coi campi editoriali.
+  async function generaDcat() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un file (incolla CSV/GeoJSON o un URL)."); return; }
+    setDcatBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = Object.fromEntries(Object.entries(meta).filter(([, v]) => v.trim()));
+      const res = await apiFetch("/quality/metadata", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setDcat((await res.json()) as DcatResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDcatBusy(false);
+    }
+  }
+
+  function scaricaDcat() {
+    if (!dcat) return;
+    _download(JSON.stringify(dcat, null, 2), "metadati-dcat-ap_it.json", "application/ld+json;charset=utf-8");
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
     setReport(null);
     setFixChanges(null);
+    setDcat(null);
     try {
       const body = _body();
       if (!body) {
@@ -217,7 +264,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); }}
               >
                 Pulisci
               </button>
@@ -373,6 +420,52 @@ function QualitaInner() {
               </div>
             </div>
           )}
+
+          {/* SCHEDA DCAT-AP_IT */}
+          <div className="card shadow-sm mt-4">
+            <div className="card-body">
+              <h2 className="h5 mb-1">Scheda descrittiva (DCAT-AP_IT)</h2>
+              <p className="text-muted small">
+                Genera i metadati pronti per il portale: formato, schema dei campi e keyword sono
+                ricavati dal file; compila i campi editoriali (o lasciali da completare).
+              </p>
+              <div className="row g-2">
+                {META_FIELDS.map((f) => (
+                  <div className={f.k === "descrizione" ? "col-12" : "col-md-6"} key={f.k}>
+                    <input
+                      className="form-control form-control-sm"
+                      placeholder={`${f.label} — ${f.ph}`}
+                      value={meta[f.k]}
+                      onChange={(e) => setMeta((m) => ({ ...m, [f.k]: e.target.value }))}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="btn btn-outline-primary btn-sm mt-3" onClick={generaDcat} disabled={dcatBusy}>
+                {dcatBusy ? "Genero…" : "Genera scheda DCAT-AP_IT"}
+              </button>
+
+              {dcat && (
+                <div className="mt-3">
+                  {dcat.campi_mancanti.length > 0 && (
+                    <div className="alert alert-warning py-2">
+                      <strong>Da completare prima di pubblicare:</strong>
+                      <ul className="mb-0 mt-1 small">
+                        {dcat.campi_mancanti.map((c) => (<li key={c}>{c}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="d-flex align-items-center gap-2 mb-2">
+                    <button type="button" className="btn btn-success btn-sm" onClick={scaricaDcat}>⬇ Scarica metadati (JSON-LD)</button>
+                    <span className="text-muted small">{dcat.schema_campi.length} campi nello schema</span>
+                  </div>
+                  <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 320, overflow: "auto" }}>
+                    {JSON.stringify(dcat.dataset, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
         </>
       )}
     </div>
