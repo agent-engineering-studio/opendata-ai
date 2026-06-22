@@ -8,6 +8,7 @@ from opendata_backend.config import (
     EUROSTAT_INSTRUCTIONS,
     ISPRA_INSTRUCTIONS,
     ISTAT_INSTRUCTIONS,
+    ODS_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
@@ -122,6 +123,25 @@ def test_enable_flags_default_to_ckan_istat_only(monkeypatch) -> None:
     assert s.enable_eurostat is False
     assert s.enable_oecd is False
     assert s.enable_opencoesione is False
+
+
+def test_ods_settings_and_instructions_contract(monkeypatch) -> None:
+    """OpenDataSoft fan-out wiring (R5): opt-in flag + settings + RESOURCES_JSON contract."""
+    from opendata_backend.factory import DATASET_SOURCES
+
+    for var in ("ENABLE_ODS", "ODS_MCP_URL", "ODS_AGENT_NAME"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_ods is False  # opt-in come eurostat/oecd
+    assert s.ods_mcp_url.endswith("/mcp")
+    assert s.ods_agent_name == "ods"
+    assert s.ods_default_base_url.startswith("http")
+    # è nello scope del fan-out dataset
+    assert "ods" in DATASET_SOURCES
+    # contratto R5: stessa forma di CKAN (narrativa + blocco risorse)
+    assert "<!--RESOURCES_JSON-->" in ODS_INSTRUCTIONS
+    assert "ods_search_datasets" in ODS_INSTRUCTIONS
+    assert "OpenDataSoft" in ODS_INSTRUCTIONS
 
 
 def test_opencoesione_settings_defaults(monkeypatch) -> None:

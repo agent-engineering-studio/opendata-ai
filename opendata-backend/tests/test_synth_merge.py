@@ -252,6 +252,8 @@ async def test_eurostat_substring_does_not_get_tagged_as_istat() -> None:
     assert _normalise_source_tag("ckan-it") == "ckan"
     assert _normalise_source_tag("opencoesione") == "opencoesione"
     assert _normalise_source_tag("OpenCoesione-agent") == "opencoesione"
+    assert _normalise_source_tag("ods") == "ods"
+    assert _normalise_source_tag("ODS") == "ods"
 
 
 # ───────────────────── opencoesione participant ─────────────────────

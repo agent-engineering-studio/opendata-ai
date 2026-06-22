@@ -520,7 +520,7 @@ def _normalise_source_tag(executor_id: str) -> str | None:
     Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ispra", "osm", "web", "kg"):
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ods", "ispra", "osm", "web", "kg"):
         # longest-first: eurostat before istat so a literal "eurostat" doesn't
         # get matched as istat; opencoesione first for the same reason. "kg"
         # è ultimo perché cortissimo (matcherebbe dentro nomi più lunghi).
