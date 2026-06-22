@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-21d"
+PROMPT_VERSION = "2026-06-22a"
 
 
 class ProgrammaResponse(BaseModel):
@@ -430,17 +430,23 @@ def build_programma_task(
                 )
         if istruzione_info:
             ord_ = istruzione_info.get("per_ordine") or {}
+            alu = istruzione_info.get("alunni_statali")
+            alu_txt = (
+                f" Alunni nelle scuole statali (primaria + secondaria, a.s. "
+                f"{istruzione_info.get('alunni_anno')}): {alu}."
+                if alu else ""
+            )
             parts.append(
                 "LENTE ISTRUZIONE — DATI MIUR Open Data GIÀ RACCOLTI (anagrafe scuole, "
                 f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
                 f"plessi ({istruzione_info.get('scuole_statali')} statali, "
                 f"{istruzione_info.get('scuole_paritarie')} paritarie) — "
                 f"infanzia={ord_.get('infanzia')}, primaria={ord_.get('primaria')}, "
-                f"sec. I grado={ord_.get('secondaria_i')}, sec. II grado={ord_.get('secondaria_ii')}. "
+                f"sec. I grado={ord_.get('secondaria_i')}, sec. II grado={ord_.get('secondaria_ii')}.{alu_txt} "
                 f"FONTE DA CITARE VERBATIM: {istruzione_info.get('source_url')} . USA questi "
                 "numeri per valutare l'offerta scolastica (assenza di un ordine → pendolarismo "
-                "scolastico; pochi plessi per abitante; offerta sbilanciata); un'idea "
-                "'istruzione' deve ancorarsi a questi numeri e citare questa fonte."
+                "scolastico; pochi plessi/alunni per abitante; calo iscritti → rischio "
+                "accorpamenti); un'idea 'istruzione' deve ancorarsi a questi numeri e citare questa fonte."
             )
         if ambiente_info:
             parts.append(
@@ -897,15 +903,21 @@ def build_programma_aggregator(
             )
             if src not in {r.url.strip() for r in all_resources}:
                 all_resources.append(ist_res)
+            alu = istruzione_info.get("alunni_statali")
+            alu_txt = (
+                f" Alunni nelle statali (primaria + secondaria, a.s. "
+                f"{istruzione_info.get('alunni_anno')}): {alu}."
+                if alu else ""
+            )
             narrative = (
                 "Dotazione scolastica del comune (MIUR Open Data, anagrafe scuole, "
                 f"a.s. {istruzione_info.get('anno_scolastico')}): {istruzione_info.get('scuole_totali')} "
                 f"plessi ({istruzione_info.get('scuole_statali')} statali, "
                 f"{istruzione_info.get('scuole_paritarie')} paritarie). Per ordine — infanzia: "
                 f"{ord_.get('infanzia')}, primaria: {ord_.get('primaria')}, sec. I grado: "
-                f"{ord_.get('secondaria_i')}, sec. II grado: {ord_.get('secondaria_ii')}. Valuta "
+                f"{ord_.get('secondaria_i')}, sec. II grado: {ord_.get('secondaria_ii')}.{alu_txt} Valuta "
                 "l'offerta scolastica (assenza di un ordine = pendolarismo scolastico; pochi plessi "
-                "per abitante); un'idea 'istruzione' ancori su questi numeri e citi questa fonte."
+                "o alunni per abitante); un'idea 'istruzione' ancori su questi numeri e citi questa fonte."
             )
             sections.append(_bundle_section("istruzione", narrative, [ist_res]))
 
