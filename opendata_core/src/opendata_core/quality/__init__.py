@@ -5,8 +5,9 @@ un CSV e restituisce un report (profilo colonne, problemi, punteggio) riusabile
 dal backend (endpoint), da una skill A2A e dalla UI.
 """
 
+from .dcat import generate_dcat
 from .fix import fix_csv
 from .geo import profile_geojson
 from .profile import profile_csv
 
-__all__ = ["profile_csv", "fix_csv", "profile_geojson"]
+__all__ = ["profile_csv", "fix_csv", "profile_geojson", "generate_dcat"]
