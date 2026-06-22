@@ -57,7 +57,7 @@ const ROADMAP: Punto[] = [
       { titolo: "Pagella in quattro aree", stato: "now", testo: "Quanto è aperto e ben tenuto il patrimonio dati dell'ente. C'è già: va resa più “azionabile”." },
       { titolo: "Le mosse che contano di più", stato: "wip", testo: "Le azioni che migliorano di più la situazione, separate tra quelle facili e rapide (correzioni sui dati già pubblicati) e quelle più strategiche (pubblicare nuovi dati). Disponibile, in fase di test." },
       { titolo: "Un percorso su misura", stato: "wip", testo: "Quanti punti mancano al livello successivo e qual è il “collo di bottiglia” su cui conviene concentrarsi: una strada chiara verso il passo successivo. Disponibile, in fase di test." },
-      { titolo: "Confronto con enti simili", testo: "Come si posiziona rispetto a comuni della stessa dimensione o regione, e come cambia nel tempo." },
+      { titolo: "Confronto con enti simili", stato: "wip", testo: "Come si posiziona rispetto agli enti dello stesso tipo: posizione nel gruppo e confronto, area per area, con la mediana dei pari. Disponibile, in fase di test." },
       { titolo: "Controllo nel tempo e avvisi", stato: "explore", testo: "Segnala dati non aggiornati, collegamenti che non funzionano e peggioramenti, appena succedono." },
     ],
   },
