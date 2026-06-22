@@ -5,6 +5,7 @@ Each skill delegates to existing orchestrator code (R13 — no duplicated logic)
 - classify_dataset                       → `classify.classify_dataset`
 - assess_maturity                        → `maturity.service.run_assessment`
 - analyze_territory                      → `OrchestratorSession.run_programma`
+- data_quality                           → pure `opendata_core.quality` engines
 
 The skill id comes from `message.metadata.skill` (default `search_open_data`).
 """
@@ -38,13 +39,15 @@ from .agent_card import (
     SKILL_CLASSIFY,
     SKILL_GEO,
     SKILL_MATURITY,
+    SKILL_QUALITY,
     SKILL_SEARCH,
     SKILL_TERRITORY,
 )
+from .quality_skill import run_quality_skill
 
 log = logging.getLogger("opendata-backend.a2a")
 
-_KNOWN_SKILLS = {SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY, SKILL_MATURITY, SKILL_TERRITORY}
+_KNOWN_SKILLS = {SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY, SKILL_MATURITY, SKILL_TERRITORY, SKILL_QUALITY}
 
 # Geographic format set used to filter resources for the find_geo_resources skill.
 # Mirrors the UI-side conversion in opendata-ai-ui/lib/geoConvert.ts.
@@ -108,6 +111,9 @@ class OpenDataAgentExecutor(AgentExecutor):
             return
         if skill == SKILL_TERRITORY:
             await self._run_territory(context, task_updater, query)
+            return
+        if skill == SKILL_QUALITY:
+            await self._run_quality(context, task_updater, query)
             return
 
         # search_open_data / find_geo_resources both go through run_streaming;
@@ -477,6 +483,46 @@ class OpenDataAgentExecutor(AgentExecutor):
         await task_updater.update_status(
             state=TaskState.TASK_STATE_COMPLETED,
             message=new_text_message("Analyzed."),
+        )
+
+    async def _run_quality(
+        self,
+        context: RequestContext,
+        task_updater: TaskUpdater,
+        query_text: str,
+    ) -> None:
+        """data_quality → motori puri opendata_core.quality (delega, no logica nuova).
+
+        Payload da `message.metadata` o da un JSON nel testo. Nessun DB/LLM/sessione:
+        i motori del Quality Lab sono deterministici, quindi la skill è sempre disponibile.
+        """
+        meta = getattr(context.message, "metadata", None) or {}
+        payload: dict = {}
+        if isinstance(meta, dict) and meta.get("content"):
+            payload = dict(meta)
+        else:
+            try:
+                parsed = json.loads(query_text)
+                payload = parsed if isinstance(parsed, dict) else {"content": query_text}
+            except Exception:
+                payload = {"content": query_text}
+
+        result = run_quality_skill(payload)
+        if not result.get("ok"):
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(str(result.get("error", "errore data_quality"))),
+            )
+            return
+        await task_updater.add_artifact(
+            parts=[new_text_part(
+                text=json.dumps(result, ensure_ascii=False),
+                media_type="application/json",
+            )],
+        )
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=new_text_message(f"Quality: {result.get('azione')}."),
         )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

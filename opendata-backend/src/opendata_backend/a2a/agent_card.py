@@ -1,10 +1,10 @@
 """A2A AgentCard for the opendata-ai orchestrator.
 
-Five skills published — they all reuse the existing orchestrator machinery
-(`run_streaming` for search/geo, `classify_dataset` for classify,
-`run_assessment` for maturity, `run_programma` for territory), so the contract
-on the A2A side stays a thin descriptor layer (R13: skills delegate, no
-duplicated logic).
+Six skills published — they all reuse existing machinery (`run_streaming` for
+search/geo, `classify_dataset` for classify, `run_assessment` for maturity,
+`run_programma` for territory, the pure `opendata_core.quality` engines for
+data_quality), so the contract on the A2A side stays a thin descriptor layer
+(R13: skills delegate, no duplicated logic).
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ SKILL_GEO = "find_geo_resources"
 SKILL_CLASSIFY = "classify_dataset"
 SKILL_MATURITY = "assess_maturity"
 SKILL_TERRITORY = "analyze_territory"
+SKILL_QUALITY = "data_quality"
 
 
 def _skills() -> list[AgentSkill]:
@@ -92,6 +93,24 @@ def _skills() -> list[AgentSkill]:
             examples=[
                 "Comune di Bari",
                 '{"entity":"Comune di Gioia del Colle","istat_code":"072021"}',
+            ],
+        ),
+        AgentSkill(
+            id=SKILL_QUALITY,
+            name="Diagnosi e preparazione di un dato (Data Quality Lab)",
+            description=(
+                "Dato un file inline (CSV o GeoJSON in `content`) esegue un'azione del "
+                "Data Quality Lab, scelta con `azione`: profile (diagnosi, default), fix "
+                "(CSV corretto), schema (CREATE TABLE), summary (riepiloghi), scale "
+                "(consigli per dataset grandi), to-geojson (tabella→mappa), validate "
+                "(DCAT-AP_IT + FAIR + licenza). Deterministico, nessun LLM."
+            ),
+            input_modes=["application/json"],
+            output_modes=["application/json"],
+            tags=["quality", "dcat-ap_it", "fair", "csv", "geojson"],
+            examples=[
+                '{"azione":"profile","content":"comune,popolazione\\nBari,320475\\n"}',
+                '{"azione":"validate","content":"...","licenza":"CC-BY-4.0","titolo":"…"}',
             ],
         ),
         AgentSkill(

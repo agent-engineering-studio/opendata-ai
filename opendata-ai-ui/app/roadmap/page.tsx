@@ -98,9 +98,10 @@ const ROADMAP: Punto[] = [
     perche:
       "Collegare nuove banche dati pubbliche e far girare i controlli in automatico, così il lavoro ripetitivo lo fa la piattaforma.",
     issue: 53,
+    wip: true,
     voci: [
       { titolo: "Nuove fonti collegate", stato: "near", testo: "Più portali e banche dati pubbliche: appalti, bilanci degli enti, portali regionali, catasto e altro." },
-      { titolo: "Funzioni usabili da altri strumenti", testo: "Le capacità della piattaforma rese disponibili anche a software e assistenti esterni." },
+      { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
       { titolo: "Controlli automatici programmati", testo: "La piattaforma verifica da sola lo stato dei dati e avvisa quando qualcosa cambia o si rompe." },
     ],
   },
