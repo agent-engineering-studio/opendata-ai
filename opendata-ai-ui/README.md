@@ -59,4 +59,5 @@ After `make up` from the repo root:
 
 ## Architecture
 
-See [`docs/superpowers/specs/2026-05-24-ckan-chat-ui-design.md`](../docs/superpowers/specs/2026-05-24-ckan-chat-ui-design.md).
+See the repo-level [`docs/architettura.md`](../docs/architettura.md) and
+[`docs/data-model.md`](../docs/data-model.md).
