@@ -14,7 +14,15 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from opendata_core.quality import fix_csv, generate_dcat, infer_schema, profile_csv, profile_geojson
+from opendata_core.quality import (
+    csv_to_geojson,
+    fix_csv,
+    generate_dcat,
+    infer_schema,
+    json_to_geojson,
+    profile_csv,
+    profile_geojson,
+)
 
 from ..auth import ClerkUser
 from ..shared.ratelimit import enforce_rate_limit
@@ -38,6 +46,12 @@ class ProfileIn(BaseModel):
 class SchemaIn(ProfileIn):
     # Nome tabella desiderato (sanificato come identificatore SQL lato motore).
     table_name: str | None = None
+
+
+class ConvertIn(ProfileIn):
+    # Override colonne coordinate (se l'auto-rilevamento non le trova).
+    lat_field: str | None = None
+    lon_field: str | None = None
 
 
 class MetadataIn(ProfileIn):
@@ -166,6 +180,29 @@ async def quality_schema(
         user.subject, "url" if body.url else "content", len(text),
     )
     return infer_schema(profile_csv(text), table_name=(body.table_name or "dataset"))
+
+
+@router.post("/quality/to-geojson")
+async def quality_to_geojson(
+    body: ConvertIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Convertitore 1-click: tabella con coordinate → GeoJSON di punti mappabile.
+
+    CSV o array JSON di record: rileva le colonne lat/lon (o usa quelle indicate),
+    valida i range WGS84 e produce un FeatureCollection. Un GeoJSON già pronto è
+    restituito invariato. Esito in `ok`; con `ok=false` arrivano `candidate_columns`
+    perché la UI faccia scegliere le colonne.
+    """
+    text = await _resolve_input(body)
+    stripped = text.lstrip()
+    is_json = stripped[:1] in ("[", "{") or (body.format or "").lower() in ("json", "geojson")
+    log.info(
+        "/quality/to-geojson subject=%s tipo=%s source=%s",
+        user.subject, "json" if is_json else "csv", "url" if body.url else "content",
+    )
+    fn = json_to_geojson if is_json else csv_to_geojson
+    return fn(text, lat_field=body.lat_field, lon_field=body.lon_field)
 
 
 @router.post("/quality/metadata")
