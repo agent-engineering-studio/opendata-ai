@@ -34,6 +34,17 @@ _PARITARIE = "\n".join([
 
 _HTML = "<!DOCTYPE html><html><body>Not found</body></html>"
 
+# Alunni (ALUCORSOINDCLASTA): per CODICESCUOLA. Codici statali di E038 = BAEE1,
+# BAMM1, BAPS1 (BAAA1 infanzia non è in questo dataset). Somma = 18+10+30 = 58.
+_ALUNNI_HDR = "ANNOSCOLASTICO,CODICESCUOLA,ORDINESCUOLA,ANNOCORSOCLASSE,CLASSI,ALUNNIMASCHI,ALUNNIFEMMINE"
+_ALUNNI = "\n".join([
+    _ALUNNI_HDR,
+    "202526,BAEE1,SCUOLA PRIMARIA,1,1,10,8",
+    "202526,BAMM1,SCUOLA PRIMO GRADO,1,1,5,5",
+    "202526,BAPS1,LICEO SCIENTIFICO,2,1,20,10",
+    "202526,MIEE9,SCUOLA PRIMARIA,1,1,3,3",   # Milano (F205) → non sommato per E038
+]) + "\n"
+
 
 def _reset() -> None:
     scuole._index_cache.clear()
@@ -49,9 +60,17 @@ def _mock_year(httpx_mock: HTTPXMock, *, statali: str, paritarie: str, as_compac
     )
 
 
+def _mock_alunni(httpx_mock: HTTPXMock, *, csv: str, as_compact: str, ref: str) -> None:
+    # ref alunni = {anno_fine}0831 (convenzione diversa dall'anagrafe).
+    httpx_mock.add_response(
+        url=f"{_BASE}/ALUCORSOINDCLASTA{as_compact}{ref}.csv", text=csv, is_reusable=True
+    )
+
+
 async def test_fetch_scuole_comune_happy(httpx_mock: HTTPXMock) -> None:
     _reset()
     _mock_year(httpx_mock, statali=_STATALI, paritarie=_PARITARIE, as_compact="202526", ref="20250901")
+    _mock_alunni(httpx_mock, csv=_ALUNNI, as_compact="202526", ref="20260831")
     res = await fetch_scuole_comune("072021", start_year=2025)  # ISTAT → E038
 
     assert res["trovato"] is True
@@ -63,6 +82,9 @@ async def test_fetch_scuole_comune_happy(httpx_mock: HTTPXMock) -> None:
     assert res["per_ordine"]["secondaria_ii"] == 1  # liceo scientifico
     assert res["scuole_statali"] == 4
     assert res["scuole_paritarie"] == 1
+    # Alunni statali (primaria + secondaria) dei codici di E038: 18 + 10 + 30 = 58.
+    assert res["alunni_statali"] == 58
+    assert res["alunni_anno"] == "2025/26"
     assert "SCUANAGRAFESTAT20252620250901.csv" in res["source_url"]
     assert res["sources"][0]["licenza"].startswith("MIUR Open Data")
 
@@ -89,6 +111,7 @@ async def test_fetch_scuole_comune_year_fallback(httpx_mock: HTTPXMock) -> None:
     # 2025/26 mancante (HTML con 200) → si scende al 2024/25.
     _mock_year(httpx_mock, statali=_HTML, paritarie=_HTML, as_compact="202526", ref="20250901")
     _mock_year(httpx_mock, statali=_STATALI, paritarie=_PARITARIE, as_compact="202425", ref="20240901")
+    _mock_alunni(httpx_mock, csv=_ALUNNI, as_compact="202526", ref="20260831")  # best-effort
     res = await fetch_scuole_comune("072021", start_year=2025)
     assert res["trovato"] is True
     assert res["anno_scolastico"] == "2024/25"

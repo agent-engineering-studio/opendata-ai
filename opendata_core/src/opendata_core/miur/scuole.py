@@ -121,18 +121,20 @@ def _build_url(base: str, short: str, as_compact: str, ref: str) -> str:
     return f"{base.rstrip('/')}/{short}{as_compact}{ref}.csv"
 
 
-def _parse_anagrafe(text: str) -> dict[str, list[str]]:
-    """CSV anagrafe → {cod_catastale: [ordine, ...]}.
+def _parse_anagrafe(text: str) -> dict[str, list[tuple[str, str]]]:
+    """CSV anagrafe → {cod_catastale: [(ordine, codice_scuola), ...]}.
 
     Una riga = un plesso (`CODICESCUOLA`). Chiave = codice catastale Belfiore
     (`CODICECOMUNESCUOLA`) → join deterministico col codice ISTAT via tabella.
-    Gli aggregatori amministrativi (`_macro_ordine` None) sono esclusi. Parsing
-    per NOME colonna (header reale), robusto fra statali (20 col) e paritarie (14).
+    Conserva anche `CODICESCUOLA` per agganciare gli alunni (ALUCORSOINDCLASTA,
+    che non ha colonna comune). Gli aggregatori amministrativi (`_macro_ordine`
+    None) sono esclusi. Parsing per NOME colonna (header reale), robusto fra
+    statali (20 col) e paritarie (14).
     """
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames or _HEADER_SENTINEL not in reader.fieldnames:
         return {}
-    index: dict[str, list[str]] = {}
+    index: dict[str, list[tuple[str, str]]] = {}
     for row in reader:
         ordine = _macro_ordine(row.get("DESCRIZIONETIPOLOGIAGRADOISTRUZIONESCUOLA", ""))
         if ordine is None:
@@ -140,13 +142,14 @@ def _parse_anagrafe(text: str) -> dict[str, list[str]]:
         cat = (row.get("CODICECOMUNESCUOLA") or "").strip().upper()
         if not cat:
             continue
-        index.setdefault(cat, []).append(ordine)
+        codice = (row.get("CODICESCUOLA") or "").strip().upper()
+        index.setdefault(cat, []).append((ordine, codice))
     return index
 
 
 async def _load_index(
     dataset: str, base: str, start_year: int
-) -> tuple[dict[str, list[str]], str, str] | None:
+) -> tuple[dict[str, list[tuple[str, str]]], str, str] | None:
     """Indice nazionale del dataset (cod. catastale → plessi), con anno effettivo e
     URL. Cache module-level per (dataset, base): l'anagrafe nazionale si scarica
     una volta e serve tutti i comuni. None se nessun anno è disponibile."""
@@ -173,6 +176,73 @@ async def _load_index(
             index = _parse_anagrafe(text)
             if index:
                 out = (index, label, url)
+                _index_cache[ck] = out
+                return out
+    return None
+
+
+# Dataset alunni per corso/classe (statali, primaria + secondaria; NO infanzia,
+# NO paritarie). Convenzione data diversa dall'anagrafe: ref = {anno_fine}0831.
+_ALUNNI_SHORT = "ALUCORSOINDCLASTA"
+
+
+def _to_int(raw: str | None) -> int:
+    try:
+        return int((raw or "").strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _alunni_years(start_year: int) -> list[tuple[str, str, str]]:
+    """(label '2024/25', AS '202425', ref '20250831') a ritroso da start_year.
+
+    NB: il ref usa l'anno DI FINE dell'anno scolastico (+1), a differenza
+    dell'anagrafe che usa l'anno di inizio (…0901)."""
+    out: list[tuple[str, str, str]] = []
+    for y in range(start_year, start_year - _YEARS_BACK - 1, -1):
+        out.append((f"{y}/{(y + 1) % 100:02d}", f"{y}{(y + 1) % 100:02d}", f"{y + 1}0831"))
+    return out
+
+
+def _parse_alunni(text: str) -> dict[str, int]:
+    """CSV ALUCORSOINDCLASTA → {codice_scuola: alunni_totali} (maschi + femmine,
+    sommati su tutte le classi/anni di corso del plesso)."""
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames or _HEADER_SENTINEL not in reader.fieldnames:
+        return {}
+    out: dict[str, int] = {}
+    for row in reader:
+        cod = (row.get("CODICESCUOLA") or "").strip().upper()
+        if not cod:
+            continue
+        out[cod] = out.get(cod, 0) + _to_int(row.get("ALUNNIMASCHI")) + _to_int(row.get("ALUNNIFEMMINE"))
+    return out
+
+
+async def _load_students_index(
+    base: str, start_year: int
+) -> tuple[dict[str, int], str, str] | None:
+    """Indice nazionale alunni per plesso (cod. scuola → alunni), con anno e URL.
+    Cache module-level. Best-effort: gli alunni sono pubblicati con ritardo
+    rispetto all'anagrafe (anni a ritroso). None se nessun anno è disponibile."""
+    ck = ("alunni", base)
+    if ck in _index_cache:
+        return _index_cache[ck]
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers={"User-Agent": _USER_AGENT}, follow_redirects=True
+    ) as client:
+        for label, as_compact, ref in _alunni_years(start_year):
+            url = f"{base.rstrip('/')}/{_ALUNNI_SHORT}{as_compact}{ref}.csv"
+            try:
+                resp = await client.get(url)
+            except httpx.HTTPError as exc:
+                log.warning("MIUR alunni %s non raggiungibile: %s", label, exc)
+                continue
+            if resp.status_code != 200 or not resp.text.lstrip().startswith(_HEADER_SENTINEL):
+                continue
+            idx = _parse_alunni(resp.text)
+            if idx:
+                out = (idx, label, url)
                 _index_cache[ck] = out
                 return out
     return None
@@ -222,16 +292,19 @@ async def fetch_scuole_comune(
 
     conteggi = {"infanzia": 0, "primaria": 0, "secondaria_i": 0, "secondaria_ii": 0}
     statali_tot = paritarie_tot = 0
+    statali_codici: list[str] = []  # CODICESCUOLA statali del comune → join alunni
 
     def _accumulate(loaded: tuple[dict, str, str] | None, is_statale: bool) -> None:
         nonlocal statali_tot, paritarie_tot
         if not loaded:
             return
         index, _label, _url = loaded
-        for ordine in index.get(catastale, ()):
+        for ordine, codice in index.get(catastale, ()):
             conteggi[ordine] += 1
             if is_statale:
                 statali_tot += 1
+                if codice:
+                    statali_codici.append(codice)
             else:
                 paritarie_tot += 1
 
@@ -255,6 +328,32 @@ async def fetch_scuole_comune(
         _result_cache[ck] = result
         return result
 
+    # Alunni (best-effort): primaria + secondaria STATALI del comune, join per
+    # CODICESCUOLA con ALUCORSOINDCLASTA (no infanzia, no paritarie). Pubblicati
+    # con ritardo → l'anno è spesso diverso dall'anagrafe (riportato a parte).
+    alunni: int | None = None
+    alunni_anno: str | None = None
+    if statali_codici:
+        students = await _load_students_index(base, sy)
+        if students:
+            idx_al, alunni_anno, _au = students
+            tot_al = sum(idx_al.get(c, 0) for c in statali_codici)
+            if tot_al > 0:
+                alunni = tot_al
+
+    note = (
+        f"Anagrafe scuole MIUR (statali + paritarie), a.s. {anno}. {totale} plessi: "
+        f"{conteggi['infanzia']} infanzia, {conteggi['primaria']} primaria, "
+        f"{conteggi['secondaria_i']} sec. I grado, {conteggi['secondaria_ii']} sec. II grado. "
+        "Conteggio della dotazione scolastica sul territorio (esclusi gli aggregatori "
+        "amministrativi: istituti comprensivi, CPIA)."
+    )
+    if alunni is not None:
+        note += (
+            f" Alunni nelle scuole statali (primaria + secondaria, a.s. {alunni_anno}): "
+            f"{alunni} — incrocia con la popolazione per il peso della popolazione scolastica."
+        )
+
     result = {
         "trovato": True,
         "comune": cod,
@@ -263,6 +362,8 @@ async def fetch_scuole_comune(
         "scuole_statali": statali_tot,
         "scuole_paritarie": paritarie_tot,
         "per_ordine": conteggi,
+        "alunni_statali": alunni,
+        "alunni_anno": alunni_anno,
         "source_url": source_url,
         "sources": [
             {
@@ -271,13 +372,7 @@ async def fetch_scuole_comune(
                 "licenza": "MIUR Open Data — IODL 2.0",
             }
         ],
-        "note": (
-            f"Anagrafe scuole MIUR (statali + paritarie), a.s. {anno}. {totale} plessi: "
-            f"{conteggi['infanzia']} infanzia, {conteggi['primaria']} primaria, "
-            f"{conteggi['secondaria_i']} sec. I grado, {conteggi['secondaria_ii']} sec. II grado. "
-            "Conteggio della dotazione scolastica sul territorio (esclusi gli aggregatori "
-            "amministrativi: istituti comprensivi, CPIA)."
-        ),
+        "note": note,
     }
     _result_cache[ck] = result
     return result
