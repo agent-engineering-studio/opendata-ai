@@ -248,3 +248,33 @@ async def test_overpass_post_rotates_to_mirror_on_429(httpx_mock) -> None:
 
     elements = await osm_client.overpass_post("[out:json];node(1);out;", backoff_base=0.01)
     assert elements == [{"type": "node", "id": 1}]
+
+
+async def test_overpass_post_rotates_past_dead_mirror_then_succeeds(httpx_mock) -> None:
+    """Mirror bloccato in egress (errore di trasporto) → si ruota SUBITO al
+    successivo senza ritentare l'host morto né dormire."""
+    import httpx
+
+    from opendata_core.osm import client as osm_client
+
+    endpoints = osm_client.overpass_endpoints()
+    assert len(endpoints) >= 2
+    httpx_mock.add_exception(httpx.ConnectError("egress blocked"), url=endpoints[0])
+    httpx_mock.add_response(url=endpoints[1], json={"elements": [{"type": "node", "id": 7}]})
+
+    elements = await osm_client.overpass_post("[out:json];node(7);out;")
+    assert elements == [{"type": "node", "id": 7}]
+
+
+async def test_overpass_post_raises_when_all_mirrors_dead(httpx_mock) -> None:
+    """Tutti i mirror irraggiungibili → OverpassError (best-effort: il chiamante
+    degrada), senza appendersi: ogni host è provato e scartato."""
+    import httpx
+
+    from opendata_core.osm import client as osm_client
+
+    for ep in osm_client.overpass_endpoints():
+        httpx_mock.add_exception(httpx.ConnectError("egress blocked"), url=ep)
+
+    with pytest.raises(osm_client.OverpassError):
+        await osm_client.overpass_post("[out:json];node(1);out;")

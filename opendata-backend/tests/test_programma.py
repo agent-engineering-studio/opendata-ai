@@ -367,6 +367,93 @@ async def test_malformed_voce_does_not_nuke_the_scheda() -> None:
     assert resp.swot["opportunita"][0].evidenze[0].fonte == "ispra"  # normalizzato
 
 
+def test_salvage_voce_swot_recovers_text_from_loose_shapes() -> None:
+    """I modelli deboli rendono le voci come stringa nuda o con `evidenze`
+    non-lista: il salvage NON le perde, recupera il testo + le evidenze valide.
+    L'obbligo di citazione resta ai guardrail (qui evidenze può uscire vuota)."""
+    from opendata_backend.orchestrator.programma import _salvage_voce_swot
+
+    # stringa nuda → recuperata senza evidenze
+    bare = _salvage_voce_swot("Patrimonio culturale (2 musei, 14 monumenti)")
+    assert bare is not None and bare.testo.startswith("Patrimonio") and bare.evidenze == []
+
+    # dict con testo + una evidenza valida e una rotta → tiene solo la valida
+    mixed = _salvage_voce_swot(
+        {"testo": "Rete commerciale", "evidenze": [
+            {"fonte": "istat", "url": "https://x", "dettaglio": "569 UL"},
+            {"manca": "url"},
+        ]}
+    )
+    assert mixed is not None and len(mixed.evidenze) == 1
+    # niente testo usabile → nessun recupero
+    assert _salvage_voce_swot({"evidenze": []}) is None
+    assert _salvage_voce_swot("   ") is None
+
+
+@pytest.mark.asyncio
+async def test_string_swot_voci_survive_parse_then_guardrail_gates() -> None:
+    """Regressione del caso Ollama: SWOT come liste di STRINGHE non azzera la
+    scheda al parse (le voci sopravvivono), ma senza evidenza il guardrail le
+    rimuove comunque — nessun claim non citato passa."""
+    from opendata_backend.orchestrator.programma import _parse_llm_json
+
+    raw = _llm_json(swot={
+        "forze": ["Posizione strategica in Puglia"],
+        "debolezze": ["Alta disoccupazione giovanile (36.5%)"],
+        "opportunita": [],
+        "minacce": [],
+    })
+    parsed = _parse_llm_json(raw)
+    # parse: le stringhe sono RECUPERATE (prima venivano tutte scartate)
+    assert len(parsed.swot["forze"]) == 1
+    assert parsed.swot["forze"][0].testo == "Posizione strategica in Puglia"
+
+    # ma il guardrail completo (via aggregatore) le scarta perché senza evidenza
+    agent = _StubProgrammaAgent(raw)
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(_participants())).response
+    assert resp is not None
+    assert resp.swot["forze"] == [] and resp.swot["debolezze"] == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_all_lenses_emits_per_lens_events() -> None:
+    """Track A: con `emit`, ogni lente pubblica start+end (con elapsed_ms e
+    esito) → la UI mostra la checklist live invece di una barra opaca."""
+    from opendata_backend.factory import OrchestratorSession, _LENS_SOURCES
+
+    events: list[dict[str, Any]] = []
+
+    async def _none(_req: Any) -> None:
+        return None
+
+    # Tutte le lenti stub a None (nessun dato): l'esito deve essere "nessun dato".
+    sess = OrchestratorSession.__new__(OrchestratorSession)
+    for name in (
+        "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
+        "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti",
+        "_resolve_welfare", "_resolve_istruzione", "_resolve_ambiente",
+        "_resolve_sanita",
+    ):
+        setattr(sess, name, _none)
+
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle",
+                           modalita="completa")
+    out = await OrchestratorSession._resolve_all_lenses(sess, req, emit=events.append)
+
+    # ritorno invariato: le 10 chiavi presenti, tutte None
+    assert set(out) == {
+        "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
+        "welfare", "istruzione", "ambiente", "sanita",
+    }
+    starts = [e for e in events if e["phase"] == "start"]
+    ends = [e for e in events if e["phase"] == "end"]
+    assert len(starts) == 10 and len(ends) == 10
+    assert {e["source"] for e in starts} == set(_LENS_SOURCES.values())
+    assert all("elapsed_ms" in e for e in ends)
+    assert all(e.get("error") == "nessun dato" for e in ends)  # None ⇒ saltata
+
+
 @pytest.mark.asyncio
 async def test_duplicate_tool_citations_are_deduped() -> None:
     """Due chiamate allo stesso tool → UNA citazione (regressione smoke 7B)."""
