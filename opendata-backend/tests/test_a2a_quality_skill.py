@@ -37,6 +37,15 @@ def test_to_geojson() -> None:
     assert r["result"]["n_features"] == 1
 
 
+def test_package_returns_files() -> None:
+    r = run_quality_skill({"azione": "package", "content": _CSV, "licenza": "CC-BY-4.0",
+                           "titolo": "Pop", "ente": "Regione Puglia"})
+    assert r["ok"] is True and r["azione"] == "package"
+    files = r["result"]["files"]
+    assert set(files) == {"dati.csv", "metadati-dcat-ap_it.jsonld", "LICENSE.txt", "README.txt"}
+    assert "Creative Commons" in files["LICENSE.txt"]
+
+
 def test_fix_rejects_geojson() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     r = run_quality_skill({"azione": "fix", "content": gj, "format": "geojson"})

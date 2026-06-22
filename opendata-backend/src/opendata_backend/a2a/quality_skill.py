@@ -12,6 +12,7 @@ from typing import Any
 
 from opendata_core.quality import (
     advise_scale,
+    build_publish_package,
     csv_to_geojson,
     fix_csv,
     generate_dcat,
@@ -24,7 +25,7 @@ from opendata_core.quality import (
 )
 
 # Azioni esposte (mirror della superficie REST /quality/*).
-AZIONI = ("profile", "fix", "schema", "summary", "scale", "to-geojson", "validate")
+AZIONI = ("profile", "fix", "schema", "summary", "scale", "to-geojson", "validate", "package")
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -88,5 +89,18 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
             frequenza=payload.get("frequenza"), url=payload.get("url"),
         )
         return ok({"validazione": validate_dcat(dcat), "metadata": dcat})
+    if azione == "package":
+        # publish-assistant: dato pulito + scheda DCAT-AP_IT + licenza + README.
+        if geo:
+            data_filename, data_content, profile = "dati.geojson", text, profile_geojson(text)
+        else:
+            data_content = fix_csv(text).get("content") or text
+            data_filename, profile = "dati.csv", profile_csv(data_content)
+        return ok(build_publish_package(
+            profile, data_filename=data_filename, data_content=data_content,
+            titolo=payload.get("titolo"), descrizione=payload.get("descrizione"),
+            licenza=payload.get("licenza"), ente=payload.get("ente"), tema=payload.get("tema"),
+            frequenza=payload.get("frequenza"), url=payload.get("url"),
+        ))
 
     return _err(f"azione sconosciuta: {azione}", azioni=list(AZIONI))
