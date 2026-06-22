@@ -41,6 +41,7 @@ from .config import (
     ISTAT_INSTRUCTIONS,
     KG_INSTRUCTIONS,
     MARKETING_INSTRUCTIONS,
+    ODS_INSTRUCTIONS,
     OECD_INSTRUCTIONS,
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
@@ -67,7 +68,7 @@ log = logging.getLogger("orchestrator.factory")
 # the A2A search/geo skills) so they don't drag in OpenCoesione/ISPRA/OSM/web —
 # those belong to the /territorio profile. Single source of truth, passed as
 # `sources=` to run_streaming. eurostat/oecd are opt-in; harmless if disabled.
-DATASET_SOURCES = frozenset({"ckan", "istat", "eurostat", "oecd"})
+DATASET_SOURCES = frozenset({"ckan", "ods", "istat", "eurostat", "oecd"})
 
 # Upstream sources for the best-effort lenses (Overpass, Nominatim, ISTAT SDMX) are
 # routinely unreachable, throttled or slow — that is an expected operating
@@ -311,6 +312,7 @@ class OrchestratorSession:
         enabled = [
             label for label, on in (
                 ("ckan", s.enable_ckan),
+                ("ods", s.enable_ods),
                 ("istat", s.enable_istat),
                 ("eurostat", s.enable_eurostat),
                 ("oecd", s.enable_oecd),
@@ -325,7 +327,7 @@ class OrchestratorSession:
         if not enabled:
             raise RuntimeError(
                 "At least one source must be enabled "
-                "(enable_ckan / istat / eurostat / oecd / opencoesione / osm / ispra / kg / web)"
+                "(enable_ckan / ods / istat / eurostat / oecd / opencoesione / osm / ispra / kg / web)"
             )
         self._enabled_sources = enabled
         log.info(
@@ -351,6 +353,19 @@ class OrchestratorSession:
                 chat_client, CKAN_INSTRUCTIONS, s.ckan_agent_name, [ckan_mcp], default_options,
             )
             participants.append(ckan_agent)
+
+        # OpenDataSoft specialist — same shape as CKAN (one portal per call, ODSQL
+        # filters). Opt-in; joins the dataset fan-out (DATASET_SOURCES) when enabled.
+        if s.enable_ods:
+            ods_mcp = await self._enter_mcp_tool(
+                s.ods_agent_name,
+                s.ods_mcp_url,
+                "Tools to query any OpenDataSoft portal via the Explore API v2.1.",
+            )
+            ods_agent = await self._enter_agent(
+                chat_client, ODS_INSTRUCTIONS, s.ods_agent_name, [ods_mcp], default_options,
+            )
+            participants.append(ods_agent)
 
         # Each SDMX specialist dials its OWN MCP server instance (same image,
         # different ISTAT_SDMX_BASE_URL) → the agent never passes a base_url.

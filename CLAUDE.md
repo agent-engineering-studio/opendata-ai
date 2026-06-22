@@ -158,9 +158,9 @@ Azure code anymore.
   inside `opendata-backend/`. Don't reintroduce the per-source agent
   packages — the orchestrator lives in `opendata_backend.orchestrator`.
 - When changing the agent response contract (the `<!--RESOURCES_JSON-->`
-  block), update the four sources of truth: `opendata_backend/config.py`
-  (CKAN_INSTRUCTIONS, ISTAT_INSTRUCTIONS, EUROSTAT_INSTRUCTIONS,
-  OECD_INSTRUCTIONS) and the parser in
+  block), update every dataset-source template in `opendata_backend/config.py`
+  (CKAN_INSTRUCTIONS, ODS_INSTRUCTIONS, ISTAT_INSTRUCTIONS,
+  EUROSTAT_INSTRUCTIONS, OECD_INSTRUCTIONS) and the parser in
   `opendata_backend/orchestrator/parsing.py`.
 - Don't strip `--pre` from the `opendata-backend` install —
   `agent-framework` is published as a pre-release.
@@ -216,16 +216,18 @@ a **How to apply** (when it kicks in).
   `opendata_backend/db/models.py`). New migration → `op.execute("CREATE
   SCHEMA IF NOT EXISTS opendata")` first.
 
-### R5 — Agent reply contract is duplicated four ways — update all
+### R5 — Agent reply contract is duplicated across dataset sources — update all
 
-- **Why:** the `<!--RESOURCES_JSON-->` block is emitted by four prompt
-  templates (`CKAN_INSTRUCTIONS`, `ISTAT_INSTRUCTIONS`,
-  `EUROSTAT_INSTRUCTIONS`, `OECD_INSTRUCTIONS` in
+- **Why:** the `<!--RESOURCES_JSON-->` block is emitted by the dataset-source
+  prompt templates (`CKAN_INSTRUCTIONS`, `ODS_INSTRUCTIONS`,
+  `ISTAT_INSTRUCTIONS`, `EUROSTAT_INSTRUCTIONS`, `OECD_INSTRUCTIONS` in
   `opendata_backend/config.py`) and parsed in
   `opendata_backend/orchestrator/parsing.py`. Touching one without the
-  others ships a contract mismatch.
+  others ships a contract mismatch. The scope of the dataset fan-out is
+  `factory.DATASET_SOURCES` (`ckan, ods, istat, eurostat, oecd`); a new
+  dataset source also needs a tag in `synth._normalise_source_tag`.
 - **How to apply:** any change to the marker, field names, or JSON shape
-  → grep both files, update all five spots, then run
+  → grep both files, update every template, then run
   `tests/test_synth_merge.py` and `tests/test_config.py`.
 
 ### R6 — Frontend is `output: 'export'` — no API routes

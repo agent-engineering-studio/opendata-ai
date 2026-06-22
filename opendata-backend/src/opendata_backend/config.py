@@ -92,6 +92,52 @@ CKAN_INSTRUCTIONS = (
 )
 
 
+# OpenDataSoft specialist — queries any ODS portal via the Explore API v2.1.
+# Mirrors CKAN_INSTRUCTIONS (same RESOURCES_JSON contract per R5) but with the
+# ODS tools and ODSQL filters. Many Italian regional/city portals run on ODS.
+ODS_INSTRUCTIONS = (
+    "You query OpenDataSoft open data portals via MCP tools. You MUST USE the tools — "
+    "never write tool calls as JSON or markdown text.\n\n"
+    "=== PORTAL SELECTION ===\n"
+    "If the user message starts with a 'PORTAL_HINT:' line, follow it exactly.\n"
+    "Otherwise pick exactly ONE portal. If the user explicitly names an ODS portal, "
+    "use it; otherwise default to https://public.opendatasoft.com (the ODS public "
+    "hub, which aggregates many datasets). Do NOT query multiple portals.\n\n"
+    "=== HOW TO RESPOND ===\n"
+    "Do NOT plan or explain. Just ACT:\n\n"
+    "First, USE the ods_search_datasets tool with q=<keywords from the user query> "
+    "and base_url=<the portal you picked>. ODS filters use ODSQL: a bare string does "
+    "full-text search. If you get 0 results, USE the tool once more with shorter keywords.\n\n"
+    "Then, for AT MOST 3 relevant datasets, USE ods_dataset_records (limit=5) to fetch "
+    "a small sample of rows so you can describe the data. If a call FAILS, skip that "
+    "dataset and move on — do not retry the same one.\n\n"
+    "=== GEOGRAPHIC SCOPING (apply when the query names a place) ===\n"
+    "If the user names a specific Italian comune/provincia/regione: include the place "
+    "in the keywords, and AFTER the search KEEP only datasets whose title/description "
+    "mentions that place (case/accent-insensitive); DROP the others. If 0 remain, say "
+    "so explicitly — do NOT silently broaden to other localities.\n\n"
+    "Finally, write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (same language as the user query) describing the datasets you "
+    "found and naming the portal you used, or explaining that nothing was found>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":<UPPERCASE str>,"
+    "\"content\":<str or null>}.\n"
+    "Build each resource `url` as <portal>/explore/dataset/<dataset_id>/ using a "
+    "dataset_id returned by the tools (NEVER invent ids). Set 'format' to \"ODS\" "
+    "(or \"CSV\" if you reference the CSV export), and 'content' to a short JSON sample "
+    "of the records you fetched (escape \\n and \\\"), or null.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output the literal tool names (ods_search_datasets, ods_dataset_records, "
+    "ods_dataset_show) in your final response — tools are executed by the framework.\n"
+    "- NEVER output Python or JSON code blocks, or step-by-step plans.\n"
+    "- NEVER invent URLs or dataset ids. Only use ids/URLs returned by tools.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- If you cannot find any data, the array is [] but the narrative is still required."
+)
+
+
 # Shared template for SDMX-based statistical specialists (ISTAT / Eurostat / OECD).
 # IMPORTANT: each specialist talks to its OWN MCP server instance whose default
 # endpoint is already the right one — so the agent must NEVER pass `base_url`
@@ -1053,6 +1099,9 @@ class Settings(BaseSettings):
     # ispra-mcp wraps IdroGEO (landslide/flood hazard); 8086 host-side
     # (8085 is the osm-mcp convention).
     ispra_mcp_url: str = Field(default="http://localhost:8086/mcp")
+    # ods-mcp wraps the OpenDataSoft Explore API v2.1; 8089 host-side
+    # (8088 is the web-mcp convention).
+    ods_mcp_url: str = Field(default="http://localhost:8089/mcp")
     # osm-mcp renders self-contained Leaflet+OSM HTML maps for GeoJSON resources.
     osm_mcp_url: str = Field(default="http://localhost:8085/mcp")
     enable_osm_maps: bool = Field(default=True)
@@ -1060,6 +1109,7 @@ class Settings(BaseSettings):
     # Source defaults — informational, but ALSO embedded in *_INSTRUCTIONS so
     # each specialist knows which SDMX endpoint to query
     ckan_default_base_url: str = Field(default="https://www.dati.gov.it/opendata")
+    ods_default_base_url: str = Field(default="https://public.opendatasoft.com")
     istat_sdmx_base_url: str = Field(default=_ISTAT_BASE_URL)
     eurostat_sdmx_base_url: str = Field(default=_EUROSTAT_BASE_URL)
     oecd_sdmx_base_url: str = Field(default=_OECD_BASE_URL)
@@ -1101,6 +1151,7 @@ class Settings(BaseSettings):
     # are the strings the synth aggregator uses to tag resources with `source`.
     # Keep them stable (the UI's ResourceCard reads `source` to colour-code).
     ckan_agent_name: str = Field(default="ckan")
+    ods_agent_name: str = Field(default="ods")
     istat_agent_name: str = Field(default="istat")
     eurostat_agent_name: str = Field(default="eurostat")
     oecd_agent_name: str = Field(default="oecd")
@@ -1119,6 +1170,9 @@ class Settings(BaseSettings):
     # their LLM bill on first upgrade; flip to true in production envs as needed.
     enable_ckan: bool = Field(default=True)
     enable_istat: bool = Field(default=True)
+    # OpenDataSoft specialist — opt-in like eurostat/oecd/opencoesione (adds 1
+    # specialist LLM call per dataset query; flip to true to include ODS portals).
+    enable_ods: bool = Field(default=False)
     enable_eurostat: bool = Field(default=False)
     enable_oecd: bool = Field(default=False)
     # OpenCoesione adds 1 specialist LLM call per query — opt-in like the others.
