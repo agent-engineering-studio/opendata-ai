@@ -9,5 +9,6 @@ from .dcat import generate_dcat
 from .fix import fix_csv
 from .geo import profile_geojson
 from .profile import profile_csv
+from .schema import infer_schema
 
-__all__ = ["profile_csv", "fix_csv", "profile_geojson", "generate_dcat"]
+__all__ = ["profile_csv", "fix_csv", "profile_geojson", "generate_dcat", "infer_schema"]

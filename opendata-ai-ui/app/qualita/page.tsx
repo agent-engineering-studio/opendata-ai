@@ -29,6 +29,16 @@ type DcatResult = {
   schema_campi: { nome: string; tipo_xsd: string }[];
   campi_mancanti: string[];
 };
+type SchemaResult = {
+  table_name: string;
+  row_estimate: number;
+  columns: { name: string; original: string; sql_type: string; nullable: boolean; is_primary_key: boolean; note: string | null }[];
+  primary_key: string | null;
+  surrogate_key: boolean;
+  indexes: { column: string; reason: string }[];
+  ddl: string;
+  notes: string[];
+};
 const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
   { k: "titolo", label: "Titolo", ph: "Es. Popolazione residente per comune" },
   { k: "descrizione", label: "Descrizione", ph: "A cosa serve il dato, cosa contiene…" },
@@ -66,6 +76,9 @@ function QualitaInner() {
   const [dcat, setDcat] = useState<DcatResult | null>(null);
   const [dcatBusy, setDcatBusy] = useState(false);
   const [meta, setMeta] = useState<MetaForm>({ titolo: "", descrizione: "", licenza: "", ente: "", tema: "", frequenza: "" });
+  const [schema, setSchema] = useState<SchemaResult | null>(null);
+  const [schemaBusy, setSchemaBusy] = useState(false);
+  const [tableName, setTableName] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -177,12 +190,42 @@ function QualitaInner() {
     _download(JSON.stringify(dcat, null, 2), "metadati-dcat-ap_it.json", "application/ld+json;charset=utf-8");
   }
 
+  // Da dato a schema: inferisce schema SQL + DDL (POST /quality/schema).
+  async function generaSchema() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setSchemaBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = tableName.trim() ? { table_name: tableName.trim() } : {};
+      const res = await apiFetch("/quality/schema", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setSchema((await res.json()) as SchemaResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSchemaBusy(false);
+    }
+  }
+
+  function scaricaSchema() {
+    if (!schema) return;
+    _download(schema.ddl + "\n", `${schema.table_name}.sql`, "application/sql;charset=utf-8");
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
     setReport(null);
     setFixChanges(null);
     setDcat(null);
+    setSchema(null);
     try {
       const body = _body();
       if (!body) {
@@ -264,7 +307,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); }}
               >
                 Pulisci
               </button>
@@ -417,6 +460,67 @@ function QualitaInner() {
                     <li><strong>Area coperta (bbox):</strong> <code>{geo.bbox.join(", ")}</code></li>
                   )}
                 </ul>
+              </div>
+            </div>
+          )}
+
+          {/* DA DATO A SCHEMA (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Da dato a schema (SQL)</h2>
+                <p className="text-muted small">
+                  Trasforma il file piatto in una tabella ben organizzata: tipi delle colonne, chiave
+                  primaria e indici utili (date, codici, categorie) suggeriti dal contenuto. Ottieni il
+                  comando <code>CREATE TABLE</code> pronto da eseguire.
+                </p>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <input
+                    className="form-control form-control-sm"
+                    style={{ maxWidth: 280 }}
+                    placeholder="Nome tabella (es. comuni_puglia)"
+                    value={tableName}
+                    onChange={(e) => setTableName(e.target.value)}
+                  />
+                  <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaSchema} disabled={schemaBusy}>
+                    {schemaBusy ? "Genero…" : "Genera schema + DDL"}
+                  </button>
+                </div>
+
+                {schema && (
+                  <div className="mt-3">
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <button type="button" className="btn btn-success btn-sm" onClick={scaricaSchema}>⬇ Scarica DDL (.sql)</button>
+                      <span className="text-muted small">
+                        Tabella <code>{schema.table_name}</code> · {schema.columns.length} colonne ·{" "}
+                        {schema.primary_key
+                          ? <>chiave primaria <code>{schema.primary_key}</code></>
+                          : schema.surrogate_key ? "chiave surrogata id" : "nessuna chiave"}
+                      </span>
+                    </div>
+
+                    {schema.notes.length > 0 && (
+                      <div className="alert alert-warning py-2 small mb-2">
+                        <ul className="mb-0">{schema.notes.map((n, i) => (<li key={i}>{n}</li>))}</ul>
+                      </div>
+                    )}
+
+                    <pre className="bg-light border rounded p-2 small mb-2" style={{ maxHeight: 320, overflow: "auto" }}>
+                      {schema.ddl}
+                    </pre>
+
+                    {schema.indexes.length > 0 && (
+                      <div className="small">
+                        <span className="fw-semibold">Indici suggeriti:</span>
+                        <ul className="mb-0 mt-1">
+                          {schema.indexes.map((ix) => (
+                            <li key={ix.column}><code>{ix.column}</code> — {ix.reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
