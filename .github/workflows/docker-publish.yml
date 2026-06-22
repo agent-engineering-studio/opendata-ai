@@ -8,6 +8,7 @@ on:
       - 'opendata_core/**'
       - 'ckan-mcp-server/**'
       - 'istat-mcp-server/**'
+      - 'ods-mcp-server/**'
       - 'osm-mcp/**'
       - 'web-mcp/**'
       - 'opendata-backend/**'
@@ -58,6 +59,9 @@ jobs:
           - name: ispra-mcp-server
             context: .
             dockerfile: ispra-mcp-server/Dockerfile
+          - name: ods-mcp-server
+            context: .
+            dockerfile: ods-mcp-server/Dockerfile
           - name: osm-mcp
             context: .
             dockerfile: osm-mcp/Dockerfile

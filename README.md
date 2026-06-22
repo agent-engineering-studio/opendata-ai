@@ -190,6 +190,7 @@ dedicato per ciascuno:
 | **osm-mcp** | Geocoding, POI, routing, zone + mappe Leaflet | [`osm-mcp/README.md`](osm-mcp/README.md) |
 | **opencoesione-mcp-server** | Progetti coesione: finanziato vs speso | [`opencoesione-mcp-server/README.md`](opencoesione-mcp-server/README.md) |
 | **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
+| **ods-mcp-server** | OpenDataSoft Explore API v2.1, `base_url` per-portale | [`ods-mcp-server/README.md`](ods-mcp-server/README.md) |
 | **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
 | **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
 
@@ -217,6 +218,7 @@ dedicato per ciascuno:
 | `opendata_core/` | Shared async clients (CKAN, SDMX, OSM render + Nominatim/Overpass/OSRM). Consumed by both the MCP wrappers and the backend |
 | `ckan-mcp-server/` | FastMCP wrapper exposing 11 CKAN Action API tools |
 | `istat-mcp-server/` | FastMCP wrapper for SDMX 2.1 — works for ISTAT/Eurostat/OECD via the `agency` arg |
+| `ods-mcp-server/` | FastMCP wrapper for the OpenDataSoft Explore API v2.1 (`base_url` per-portal) |
 | `osm-mcp/` | FastMCP wrapper that renders GeoJSON into self-contained Leaflet+OSM HTML |
 | `opendata-backend/` | FastAPI app — routers (`datasets/me/api_keys/webhooks`), Clerk auth, Postgres ORM, Redis cache + rate limit, Claude classify |
 | `opendata-ai-ui/` | Next.js 15 static-export frontend (Clerk + Leaflet) |
@@ -237,7 +239,11 @@ accepted interchangeably:
   [Authentication & API keys](#authentication--api-keys)).
 
 The same rule guards the A2A JSON-RPC endpoint (`/a2a/`); only the AgentCard
-discovery (`/.well-known/agent-card.json`) is public.
+discovery (`/.well-known/agent-card.json`) is public. Six skills are published
+(selected via `message.metadata.skill`): `search_open_data`, `find_geo_resources`,
+`classify_dataset`, `assess_maturity`, `analyze_territory` and `data_quality`
+(the Data Quality Lab — diagnosi, fix, schema, riepiloghi, scala, conversione
+GeoJSON, validazione DCAT-AP_IT + FAIR e pacchetto di pubblicazione).
 
 | Method | Path | Description |
 |---|---|---|
