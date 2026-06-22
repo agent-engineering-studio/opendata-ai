@@ -86,7 +86,7 @@ const ROADMAP: Punto[] = [
     wip: true,
     voci: [
       { titolo: "Controllo della scheda dati", stato: "wip", testo: "Verifica che la scheda del dato rispetti lo standard europeo (DCAT-AP_IT), segnala i campi obbligatori mancanti e calcola un punteggio FAIR (trovabile, accessibile, interoperabile, riutilizzabile). Disponibile, in fase di test." },
-      { titolo: "Pacchetto pronto da pubblicare", testo: "Dato pulito + descrizione + licenza: tutto insieme, pronto da caricare sul portale." },
+      { titolo: "Pacchetto pronto da pubblicare", stato: "wip", testo: "Scarichi in un clic un unico pacchetto (.zip) con dato pulito, scheda dei metadati, licenza e una guida con i passi per pubblicarlo sul portale. Disponibile, in fase di test." },
       { titolo: "I dati che “contano di più”", testo: "Verifica quali dei dataset più importanti (quelli indicati a livello europeo) l'ente già pubblica e quali mancano." },
       { titolo: "La licenza giusta", stato: "wip", testo: "Riconosce se la licenza dichiarata è davvero aperta e, in caso contrario, suggerisce quella corretta (es. CC-BY-4.0). Disponibile, in fase di test." },
     ],
