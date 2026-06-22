@@ -31,6 +31,7 @@ from .models import (
     is_open_license,
     odm_level,
 )
+from .gap import AzioneGap, GapAnalysis, analyze_gaps
 from .quality import assess_quality
 from .scoring import assess_entity, build_breakdown, build_recommendations, score_dimensions
 
@@ -64,4 +65,7 @@ __all__ = [
     "score_dimensions",
     "build_breakdown",
     "build_recommendations",
+    "analyze_gaps",
+    "GapAnalysis",
+    "AzioneGap",
 ]

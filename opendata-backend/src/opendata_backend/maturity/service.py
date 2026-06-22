@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from opendata_core.maturity import (
     MaturityResult,
+    analyze_gaps,
     assess_entity,
     build_guida_opendata,
     infer_entity_type,
@@ -133,6 +134,14 @@ def _details(result: MaturityResult, harvest: HarvestResult) -> dict[str, Any]:
         ],
         "dimension_breakdown": [b.as_dict() for b in result.breakdown],
         "coverage": result.coverage.as_dict() if result.coverage is not None else None,
+        # Gap analysis (#50): direzione verso il prossimo livello ODM — collo di
+        # bottiglia + roadmap quick-win/strategici. Vuota se dati insufficienti.
+        "gap": (
+            None if result.insufficient_data
+            else analyze_gaps(
+                result.scores, result.recommendations, weights=_weights()
+            ).as_dict()
+        ),
     }
 
 
@@ -289,6 +298,7 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "recommendations": details.get("recommendations", []),
         "dimension_breakdown": details.get("dimension_breakdown", []),
         "coverage": details.get("coverage"),
+        "gap": details.get("gap"),  # gap analysis (#50): direzione + roadmap
         "weights": _weights(),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
