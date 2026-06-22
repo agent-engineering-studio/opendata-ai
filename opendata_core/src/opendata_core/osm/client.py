@@ -458,6 +458,65 @@ async def overpass_transport_counts(
     return out
 
 
+# ── Sanità (lente Sanità) ───────────────────────────────────────────
+#
+# Presìdi sanitari mappati su OSM, complementari alle farmacie del Min. Salute:
+# ospedali e strutture territoriali (ambulatori/cliniche, studi medici). Misura
+# l'accessibilità geografica ai servizi sanitari dentro il confine del comune.
+_HEALTH_FILTERS: dict[str, str] = {
+    "ospedali": '["amenity"="hospital"]',
+    "ambulatori": '["amenity"="clinic"]',
+    "studi_medici": '["amenity"="doctors"]',
+}
+
+
+async def overpass_health_counts(
+    *,
+    around: tuple[float, float, int] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+    timeout: float = 30.0,
+) -> dict[str, int]:
+    """Conta i presìdi sanitari per categoria in UNA query (`out count`).
+
+    `around=(lat,lon,radius_m)` oppure `bbox=(s,w,n,e)`. Ritorna
+    `{categoria: n, ..., "totale": n}`. Mirror di `overpass_transport_counts`
+    con `_HEALTH_FILTERS`.
+    """
+    if around is not None:
+        lat, lon, radius_m = around
+        region = f"(around:{int(radius_m)},{lat},{lon})"
+    elif bbox is not None:
+        s, w, n, e = bbox
+        region = f"({s},{w},{n},{e})"
+    else:
+        raise ValueError("overpass_health_counts richiede `around` o `bbox`")
+
+    keys = list(_HEALTH_FILTERS)
+    set_lines = [
+        f"( node{flt}{region}; way{flt}{region}; )->.{key};"
+        for key, flt in _HEALTH_FILTERS.items()
+    ]
+    out_lines = [f".{key} out count;" for key in keys]
+    union = "( " + " ".join(f".{k};" for k in keys) + " )->.tot;"
+    query = "[out:json][timeout:25];\n" + "\n".join(set_lines) + "\n" + union + "\n" \
+        + "\n".join(out_lines) + "\n.tot out count;"
+
+    elements = await overpass_post(query, timeout=timeout, backoff_base=2.0)
+    counts_elems = [el for el in elements if el.get("type") == "count"]
+
+    def _total(el: dict[str, Any]) -> int:
+        try:
+            return int((el.get("tags") or {}).get("total", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    out: dict[str, int] = {}
+    for i, key in enumerate(keys):
+        out[key] = _total(counts_elems[i]) if i < len(counts_elems) else 0
+    out["totale"] = _total(counts_elems[len(keys)]) if len(counts_elems) > len(keys) else 0
+    return out
+
+
 # ── OSRM ────────────────────────────────────────────────────────────
 
 async def osrm_route(

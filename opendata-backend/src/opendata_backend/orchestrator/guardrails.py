@@ -98,8 +98,9 @@ _ISTRUZIONE_HOSTS = ("dati.istruzione.it",)
 # Host valido come premessa di AMBIENTE: pericolosità idrogeologica ISPRA IdroGEO
 # (host idrogeo.isprambiente.it ⊃ isprambiente.it).
 _AMBIENTE_HOSTS = ("isprambiente.it",)
-# Host valido come premessa di SANITÀ: anagrafe farmacie Ministero della Salute.
-_SANITA_HOSTS = ("dati.salute.gov.it",)
+# Host validi come premessa di SANITÀ: farmacie Ministero della Salute + presìdi
+# (ospedali/territoriali) mappati su OSM.
+_SANITA_HOSTS = ("dati.salute.gov.it", "openstreetmap.org", "overpass-api.de")
 
 
 def _evidence_hosts(evidenze: list) -> list[str]:

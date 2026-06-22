@@ -981,16 +981,29 @@ class OrchestratorSession:
 
     @staticmethod
     async def _resolve_sanita_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
-        """Ancora SANITÀ deterministica: dotazione di farmacie del comune (presidio
-        sanitario di prossimità) dall'anagrafe del Ministero della Salute (NSIS).
-        Le farmacie sono l'UNICA fonte sanitaria comunale con il codice ISTAT →
-        join deterministico (ospedali = solo nome; territoriali STS11 = non
-        pubblicate per comune → follow-up). Misura l'accessibilità ai servizi
-        sanitari di base. Best-effort: se l'anagrafe non risponde o il comune non
-        ha farmacie, la lente si salta (non si inventa). Solo idee/completa.
+        """Ancora SANITÀ deterministica: dotazione sanitaria del comune da DUE fonti
+        complementari — FARMACIE (Min. Salute/NSIS, join per codice ISTAT, presidio
+        di prossimità) + PRESÌDI OSM (ospedali e strutture territoriali — ambulatori,
+        studi medici — geo-join sul confine comunale). Misura l'accessibilità ai
+        servizi sanitari di base e ospedalieri. Best-effort su entrambe: la lente
+        esiste se almeno una fonte ha dati. Solo idee/completa.
         """
         if req.modalita not in ("idee", "completa"):
             return None
+        farmacie = await OrchestratorSession._sanita_farmacie(req)
+        osm = await OrchestratorSession._sanita_osm_strutture(req)
+        if not farmacie and not osm:
+            return None
+        result: dict[str, Any] = dict(farmacie) if farmacie else {
+            "trovato": True, "comune": req.cod_comune
+        }
+        if osm:
+            result.update(osm)
+        return result
+
+    @staticmethod
+    async def _sanita_farmacie(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Farmacie attive del comune (Min. Salute/NSIS, join per codice ISTAT)."""
         try:
             from opendata_core.salute import fetch_farmacie_comune
 
@@ -998,12 +1011,43 @@ class OrchestratorSession:
                 fetch_farmacie_comune(req.cod_comune), timeout=90.0
             )
         except Exception as exc:
-            _log_lens_skip("ancora sanità Min. Salute non risolta per %s — lente sanità assente",
-                           req.cod_comune, exc=exc)
+            _log_lens_skip("farmacie Min. Salute non risolte per %s", req.cod_comune, exc=exc)
             return None
-        if not (res and res.get("trovato")):
+        return res if (res and res.get("trovato")) else None
+
+    @staticmethod
+    async def _sanita_osm_strutture(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ospedali + strutture territoriali (ambulatori, studi medici) mappati su OSM,
+        contati dentro il bbox del comune. Best-effort (Nominatim/Overpass); richiede
+        `comune_nome` per il geocoding. None se nessun presidio o fonte giù."""
+        if not req.comune_nome:
             return None
-        return res
+        try:
+            from opendata_core.osm import client as osm_client
+
+            async def _work() -> dict[str, Any] | None:
+                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                if not hits:
+                    return None
+                bb = hits[0].get("boundingbox") or []
+                if len(bb) != 4:
+                    return None
+                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                counts = await osm_client.overpass_health_counts(bbox=(s, w, n, e))
+                if not counts or counts.get("totale", 0) == 0:
+                    return None
+                clat, clon = (s + n) / 2, (w + e) / 2
+                return {
+                    "ospedali": counts.get("ospedali", 0),
+                    "strutture_territoriali": counts.get("ambulatori", 0)
+                    + counts.get("studi_medici", 0),
+                    "osm_source_url": _osm_object_url(hits[0], clat, clon),
+                }
+
+            return await asyncio.wait_for(_work(), timeout=40.0)
+        except Exception as exc:
+            _log_lens_skip("presìdi sanitari OSM non risolti per %s", req.cod_comune, exc=exc)
+            return None
 
     async def _resolve_all_lenses(self, req: ProgrammaRequest) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
