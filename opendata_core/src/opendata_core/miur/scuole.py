@@ -181,9 +181,16 @@ async def _load_index(
     return None
 
 
-# Dataset alunni per corso/classe (statali, primaria + secondaria; NO infanzia,
-# NO paritarie). Convenzione data diversa dall'anagrafe: ref = {anno_fine}0831.
-_ALUNNI_SHORT = "ALUCORSOINDCLASTA"
+# Dataset alunni per plesso. Convenzione data diversa dall'anagrafe: ref =
+# {anno_fine}0831. Quattro dataset (statali/paritarie × primaria-secondaria/infanzia);
+# header diversi: ALU* → ALUNNIMASCHI/FEMMINE; INFANZIA* → BAMBINIMASCHI/FEMMINE.
+#   chiave logica → (SHORT, colonna_maschi, colonna_femmine, settore: statali|paritarie)
+_STUDENT_DATASETS: dict[str, tuple[str, str, str, str]] = {
+    "ps_statali": ("ALUCORSOINDCLASTA", "ALUNNIMASCHI", "ALUNNIFEMMINE", "statali"),
+    "ps_paritarie": ("ALUCORSOINDCLAPAR", "ALUNNIMASCHI", "ALUNNIFEMMINE", "paritarie"),
+    "inf_statali": ("INFANZIACLASTA", "BAMBINIMASCHI", "BAMBINIFEMMINE", "statali"),
+    "inf_paritarie": ("INFANZIACLAPAR", "BAMBINIMASCHI", "BAMBINIFEMMINE", "paritarie"),
+}
 
 
 def _to_int(raw: str | None) -> int:
@@ -204,9 +211,9 @@ def _alunni_years(start_year: int) -> list[tuple[str, str, str]]:
     return out
 
 
-def _parse_alunni(text: str) -> dict[str, int]:
-    """CSV ALUCORSOINDCLASTA → {codice_scuola: alunni_totali} (maschi + femmine,
-    sommati su tutte le classi/anni di corso del plesso)."""
+def _parse_counts(text: str, m_col: str, f_col: str) -> dict[str, int]:
+    """CSV alunni/bambini → {codice_scuola: totale} (maschi + femmine, sommati su
+    tutte le righe del plesso). m_col/f_col variano fra ALU* e INFANZIA*."""
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames or _HEADER_SENTINEL not in reader.fieldnames:
         return {}
@@ -215,32 +222,33 @@ def _parse_alunni(text: str) -> dict[str, int]:
         cod = (row.get("CODICESCUOLA") or "").strip().upper()
         if not cod:
             continue
-        out[cod] = out.get(cod, 0) + _to_int(row.get("ALUNNIMASCHI")) + _to_int(row.get("ALUNNIFEMMINE"))
+        out[cod] = out.get(cod, 0) + _to_int(row.get(m_col)) + _to_int(row.get(f_col))
     return out
 
 
-async def _load_students_index(
-    base: str, start_year: int
+async def _load_count_index(
+    key: str, base: str, start_year: int
 ) -> tuple[dict[str, int], str, str] | None:
-    """Indice nazionale alunni per plesso (cod. scuola → alunni), con anno e URL.
-    Cache module-level. Best-effort: gli alunni sono pubblicati con ritardo
-    rispetto all'anagrafe (anni a ritroso). None se nessun anno è disponibile."""
-    ck = ("alunni", base)
+    """Indice nazionale {cod. scuola → conteggio} per uno dei `_STUDENT_DATASETS`,
+    con anno e URL. Cache module-level. Best-effort (anni a ritroso): gli alunni sono
+    pubblicati con ritardo rispetto all'anagrafe. None se nessun anno disponibile."""
+    ck = ("students", key, base)
     if ck in _index_cache:
         return _index_cache[ck]
+    short, m_col, f_col, _settore = _STUDENT_DATASETS[key]
     async with httpx.AsyncClient(
         timeout=_HTTP_TIMEOUT, headers={"User-Agent": _USER_AGENT}, follow_redirects=True
     ) as client:
         for label, as_compact, ref in _alunni_years(start_year):
-            url = f"{base.rstrip('/')}/{_ALUNNI_SHORT}{as_compact}{ref}.csv"
+            url = f"{base.rstrip('/')}/{short}{as_compact}{ref}.csv"
             try:
                 resp = await client.get(url)
             except httpx.HTTPError as exc:
-                log.warning("MIUR alunni %s non raggiungibile: %s", label, exc)
+                log.warning("MIUR %s %s non raggiungibile: %s", short, label, exc)
                 continue
             if resp.status_code != 200 or not resp.text.lstrip().startswith(_HEADER_SENTINEL):
                 continue
-            idx = _parse_alunni(resp.text)
+            idx = _parse_counts(resp.text, m_col, f_col)
             if idx:
                 out = (idx, label, url)
                 _index_cache[ck] = out
@@ -292,7 +300,8 @@ async def fetch_scuole_comune(
 
     conteggi = {"infanzia": 0, "primaria": 0, "secondaria_i": 0, "secondaria_ii": 0}
     statali_tot = paritarie_tot = 0
-    statali_codici: list[str] = []  # CODICESCUOLA statali del comune → join alunni
+    # CODICESCUOLA del comune per settore → join coi dataset alunni.
+    codici: dict[str, list[str]] = {"statali": [], "paritarie": []}
 
     def _accumulate(loaded: tuple[dict, str, str] | None, is_statale: bool) -> None:
         nonlocal statali_tot, paritarie_tot
@@ -303,10 +312,10 @@ async def fetch_scuole_comune(
             conteggi[ordine] += 1
             if is_statale:
                 statali_tot += 1
-                if codice:
-                    statali_codici.append(codice)
             else:
                 paritarie_tot += 1
+            if codice:
+                codici["statali" if is_statale else "paritarie"].append(codice)
 
     _accumulate(statali, is_statale=True)
     _accumulate(paritarie, is_statale=False)
@@ -328,18 +337,33 @@ async def fetch_scuole_comune(
         _result_cache[ck] = result
         return result
 
-    # Alunni (best-effort): primaria + secondaria STATALI del comune, join per
-    # CODICESCUOLA con ALUCORSOINDCLASTA (no infanzia, no paritarie). Pubblicati
-    # con ritardo → l'anno è spesso diverso dall'anagrafe (riportato a parte).
-    alunni: int | None = None
+    # Alunni (best-effort): per i CODICESCUOLA del comune, somma i 4 dataset MIUR
+    # (statali/paritarie × primaria-secondaria/infanzia). Bucket disgiunti → totale
+    # senza doppi conteggi; "di cui infanzia"/"di cui paritarie" sono tagli trasversali.
+    # Pubblicati con ritardo → anno spesso diverso dall'anagrafe (riportato a parte).
+    buckets: dict[str, int] = {}
     alunni_anno: str | None = None
-    if statali_codici:
-        students = await _load_students_index(base, sy)
-        if students:
-            idx_al, alunni_anno, _au = students
-            tot_al = sum(idx_al.get(c, 0) for c in statali_codici)
-            if tot_al > 0:
-                alunni = tot_al
+    if statali_tot or paritarie_tot:
+        for key, (_short, _m, _f, settore) in _STUDENT_DATASETS.items():
+            comune_codici = codici[settore]
+            if not comune_codici:
+                continue
+            loaded = await _load_count_index(key, base, sy)
+            if not loaded:
+                continue
+            idx_al, lbl, _u = loaded
+            alunni_anno = alunni_anno or lbl
+            buckets[key] = sum(idx_al.get(c, 0) for c in comune_codici)
+
+    s_ps = buckets.get("ps_statali", 0)
+    p_ps = buckets.get("ps_paritarie", 0)
+    s_inf = buckets.get("inf_statali", 0)
+    p_inf = buckets.get("inf_paritarie", 0)
+    alunni_totali = s_ps + p_ps + s_inf + p_inf
+    has_alunni = alunni_totali > 0
+    alunni_infanzia = s_inf + p_inf
+    alunni_paritarie = p_ps + p_inf
+    alunni_statali = s_ps + s_inf  # statali, tutti gli ordini (compresa infanzia)
 
     note = (
         f"Anagrafe scuole MIUR (statali + paritarie), a.s. {anno}. {totale} plessi: "
@@ -348,10 +372,11 @@ async def fetch_scuole_comune(
         "Conteggio della dotazione scolastica sul territorio (esclusi gli aggregatori "
         "amministrativi: istituti comprensivi, CPIA)."
     )
-    if alunni is not None:
+    if has_alunni:
         note += (
-            f" Alunni nelle scuole statali (primaria + secondaria, a.s. {alunni_anno}): "
-            f"{alunni} — incrocia con la popolazione per il peso della popolazione scolastica."
+            f" Alunni totali (a.s. {alunni_anno}): {alunni_totali} — di cui {alunni_infanzia} "
+            f"nell'infanzia e {alunni_paritarie} nelle paritarie. Incrocia con la popolazione "
+            "per il peso della popolazione scolastica."
         )
 
     result = {
@@ -362,7 +387,10 @@ async def fetch_scuole_comune(
         "scuole_statali": statali_tot,
         "scuole_paritarie": paritarie_tot,
         "per_ordine": conteggi,
-        "alunni_statali": alunni,
+        "alunni_totali": alunni_totali if has_alunni else None,
+        "alunni_infanzia": alunni_infanzia if has_alunni else None,
+        "alunni_paritarie": alunni_paritarie if has_alunni else None,
+        "alunni_statali": alunni_statali if has_alunni else None,
         "alunni_anno": alunni_anno,
         "source_url": source_url,
         "sources": [

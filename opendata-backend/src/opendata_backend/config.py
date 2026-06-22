@@ -817,7 +817,7 @@ IDEE_INSTRUCTIONS = (
     "demografici nel bundle, NON forzare l'idea: saltala.\n"
     "  - istruzione — 'dove agire su offerta scolastica ed esiti formativi del "
     "territorio': il blocco 'LENTE ISTRUZIONE' ha due lati: (a) OFFERTA — scuole per "
-    "ordine (infanzia/primaria/sec. I/II) + alunni statali (MIUR); (b) GRADO DI "
+    "ordine (infanzia/primaria/sec. I/II) + alunni totali, di cui infanzia e paritarie (MIUR); (b) GRADO DI "
     "ISTRUZIONE della popolazione — % laureati/diplomati/sola licenza media/analfabeti/"
     "uscita precoce (ISTAT 8milaCensus, Censimento 2011). GAP da leggere: assenza di un "
     "ordine (→ pendolarismo), pochi plessi/alunni o calo iscritti (→ accorpamenti), MA "

@@ -157,7 +157,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-22c"
+PROMPT_VERSION = "2026-06-22d"
 
 
 class ProgrammaResponse(BaseModel):
@@ -433,10 +433,11 @@ def build_programma_task(
             fonti: list[str] = []
             if istruzione_info.get("scuole_totali") is not None:
                 ord_ = istruzione_info.get("per_ordine") or {}
-                alu = istruzione_info.get("alunni_statali")
+                alu = istruzione_info.get("alunni_totali")
                 alu_txt = (
-                    f" — alunni statali (primaria+secondaria, a.s. "
-                    f"{istruzione_info.get('alunni_anno')}): {alu}"
+                    f" — alunni totali (a.s. {istruzione_info.get('alunni_anno')}): {alu} "
+                    f"(di cui {istruzione_info.get('alunni_infanzia')} infanzia, "
+                    f"{istruzione_info.get('alunni_paritarie')} paritarie)"
                     if alu else ""
                 )
                 bits.append(
@@ -986,10 +987,11 @@ def build_programma_aggregator(
                 if src not in {r.url.strip() for r in all_resources}:
                     all_resources.append(ist_res)
                 ist_resources.append(ist_res)
-                alu = istruzione_info.get("alunni_statali")
+                alu = istruzione_info.get("alunni_totali")
                 alu_txt = (
-                    f" Alunni statali (primaria + secondaria, a.s. "
-                    f"{istruzione_info.get('alunni_anno')}): {alu}."
+                    f" Alunni totali (a.s. {istruzione_info.get('alunni_anno')}): {alu} "
+                    f"(di cui {istruzione_info.get('alunni_infanzia')} infanzia, "
+                    f"{istruzione_info.get('alunni_paritarie')} paritarie)."
                     if alu else ""
                 )
                 narrative_bits.append(
