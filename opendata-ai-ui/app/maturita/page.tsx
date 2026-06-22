@@ -65,6 +65,30 @@ type Coverage = {
   n_unclassified: number;
 };
 
+// Azione della gap analysis (#50): una raccomandazione classificata per sforzo.
+type AzioneGap = {
+  code: string;
+  dimension: string;
+  dimension_label: string;
+  severity: string;
+  tipo: "quick_win" | "strategico";
+  messaggio: string;
+  affected_count: number;
+  sul_collo_di_bottiglia: boolean;
+};
+
+// Gap analysis: prossimo livello + collo di bottiglia + azioni ordinate in roadmap.
+type Gap = {
+  livello_attuale: string;
+  prossimo_livello: string | null;
+  punti_al_prossimo: number | null;
+  collo_di_bottiglia: string;
+  collo_di_bottiglia_label: string;
+  azioni: AzioneGap[];
+  quick_win: AzioneGap[];
+  strategiche: AzioneGap[];
+};
+
 type Scorecard = {
   entity: { id: number; name: string; type: string | null; region: string | null };
   assessed_at: string;
@@ -75,6 +99,7 @@ type Scorecard = {
   recommendations: Recommendation[];
   dimension_breakdown?: DimensionBreakdown[];
   coverage?: Coverage | null;
+  gap?: Gap | null;
   n_datasets: number | null;
   truncated: boolean | null;
   insufficient_data?: boolean;
@@ -582,6 +607,100 @@ function CoverageView({ coverage }: { coverage: Coverage }) {
   );
 }
 
+/** Lista di azioni gap (quick-win o strategiche) con badge gravità + flag collo di bottiglia. */
+function AzioniList({ azioni }: { azioni: AzioneGap[] }) {
+  return (
+    <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+      {azioni.map((a) => (
+        <li key={a.code} className="d-flex align-items-start gap-2" style={{ fontSize: 13 }}>
+          <span
+            className="badge rounded-pill flex-shrink-0"
+            style={{ backgroundColor: SEVERITY_COLOR[a.severity] ?? "#64748b", color: "white" }}
+          >
+            {a.severity}
+          </span>
+          <span>
+            {a.messaggio}
+            <span className="text-slate-400"> · {a.dimension_label}</span>
+            {a.sul_collo_di_bottiglia ? (
+              <span className="badge bg-warning-subtle text-warning-emphasis ms-1 align-middle" style={{ fontSize: 11 }}>
+                ⚑ collo di bottiglia
+              </span>
+            ) : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Gap analysis (#50): "le mosse che contano di più". Consuma il campo `gap`
+ * autoritativo del backend — prossimo livello, collo di bottiglia e azioni
+ * divise tra quick-win (correzioni rapide sui dataset esistenti) e strategiche
+ * (richiedono di pubblicare nuovi dati). Complementare al radar "Come migliorare".
+ */
+function GapRoadmapView({ gap }: { gap: Gap }) {
+  if (gap.quick_win.length === 0 && gap.strategiche.length === 0) return null;
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Le mosse che contano di più</h3>
+      <p className="text-slate-600 mb-3" style={{ fontSize: 13 }}>
+        {gap.prossimo_livello && gap.punti_al_prossimo != null ? (
+          <>
+            Da <strong>{gap.livello_attuale}</strong> a{" "}
+            <strong>{gap.prossimo_livello}</strong> mancano{" "}
+            <strong>{Math.round(gap.punti_al_prossimo)} punti</strong>. Il{" "}
+            <strong>collo di bottiglia</strong> è <strong>{gap.collo_di_bottiglia_label}</strong>:
+            è lì che conviene concentrare gli interventi (segnalati con ⚑).
+          </>
+        ) : (
+          <>
+            Livello massimo (<strong>{gap.livello_attuale}</strong>). Il margine residuo più
+            ampio è su <strong>{gap.collo_di_bottiglia_label}</strong>.
+          </>
+        )}
+      </p>
+      <div className="row g-3">
+        <div className="col-md-6">
+          <div className="rounded border p-3 h-100">
+            <div className="fw-semibold mb-1" style={{ fontSize: 14 }}>
+              <span aria-hidden>⚡ </span>Facili e rapide
+            </div>
+            <p className="text-slate-500 mb-2" style={{ fontSize: 12 }}>
+              Si correggono sui dataset già pubblicati: licenza, metadati, formato, aggiornamento.
+            </p>
+            {gap.quick_win.length ? (
+              <AzioniList azioni={gap.quick_win} />
+            ) : (
+              <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
+                Nessuna correzione rapida in sospeso.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="col-md-6">
+          <div className="rounded border p-3 h-100">
+            <div className="fw-semibold mb-1" style={{ fontSize: 14 }}>
+              <span aria-hidden>🎯 </span>Strategiche
+            </div>
+            <p className="text-slate-500 mb-2" style={{ fontSize: 12 }}>
+              Richiedono di pubblicare nuovi dati o coprire settori e dataset ad alto valore.
+            </p>
+            {gap.strategiche.length ? (
+              <AzioniList azioni={gap.strategiche} />
+            ) : (
+              <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
+                Nessun intervento strategico in sospeso.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const radarRef = useRef<HTMLDivElement>(null);
@@ -717,6 +836,9 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
                 </p>
               </div>
             </div>
+
+            {/* Gap analysis (#50): mosse facili vs strategiche, collo di bottiglia */}
+            {scorecard.gap ? <GapRoadmapView gap={scorecard.gap} /> : null}
 
             {/* Spiegazione per dimensione (Fase B): cosa misura ogni punteggio */}
             {scorecard.dimension_breakdown && scorecard.dimension_breakdown.length ? (
