@@ -10,6 +10,7 @@ packages — it talks to them only over their MCP servers.
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 from pydantic import Field
@@ -524,6 +525,95 @@ SYNTH_INSTRUCTIONS = (
 # (SWOT + proposte). L'output è SOLO JSON: il parsing è in
 # orchestrator/programma.py, i guardrail deterministici in
 # orchestrator/guardrails.py (R5: aggiornare insieme contratto e validazioni).
+#
+# Few-shot COMPLETO (tutti e quattro i quadranti popolati, ogni voce è un OGGETTO
+# {testo, evidenze:[…]}). Serve soprattutto ai modelli locali (es. Ollama
+# qwen3): senza un esempio pieno tendono a rendere le voci come STRINGHE nude o a
+# lasciare i quadranti vuoti → il validatore le scarta e lo SWOT esce vuoto. Le
+# URL qui sono fittizie ma realistiche: a runtime il modello copia quelle vere
+# dal bundle. Costruito con json.dumps così è SEMPRE JSON valido.
+_PROGRAMMA_FEWSHOT_OK: dict = {
+    "sintesi": (
+        "Il comune (27.889 ab.) ha una base imprenditoriale diffusa e un "
+        "patrimonio culturale rilevante, a fronte di una ricettività "
+        "sottodimensionata e di una disoccupazione giovanile elevata; i progetti "
+        "di coesione censiti si concentrano sull'inclusione sociale, con uno "
+        "spend ratio nella media regionale."
+    ),
+    "swot": {
+        "forze": [{
+            "testo": (
+                "Base imprenditoriale solida: 569 unità locali attive, indice di "
+                "un commercio di prossimità diffuso che sostiene l'occupazione "
+                "locale."
+            ),
+            "evidenze": [{
+                "fonte": "istat",
+                "url": "https://esploradati.istat.it/databrowser/#/it/dw/183_285",
+                "dettaglio": "569 unità locali attive (ISTAT ASIA, ultimo anno disponibile)",
+            }],
+        }],
+        "debolezze": [{
+            "testo": (
+                "Disoccupazione giovanile al 36,5%, oltre il dato nazionale: "
+                "difficoltà strutturale di inserimento lavorativo degli under-30."
+            ),
+            "evidenze": [{
+                "fonte": "istat",
+                "url": "https://www.istat.it/it/files/8milaCensus/072021",
+                "dettaglio": "tasso di disoccupazione giovanile 36,5% (8milaCensus)",
+            }],
+        }],
+        "opportunita": [{
+            "testo": (
+                "Capacità ricettiva contenuta (570 posti letto) a fronte di una "
+                "domanda turistica regionale in crescita: margine per valorizzare "
+                "il patrimonio culturale esistente."
+            ),
+            "evidenze": [{
+                "fonte": "istat",
+                "url": "https://esploradati.istat.it/databrowser/#/it/dw/122_54",
+                "dettaglio": "570 posti letto, 14 esercizi ricettivi (ISTAT capacità ricettiva)",
+            }],
+        }],
+        "minacce": [{
+            "testo": (
+                "Pericolosità idraulica di scenario medio (P2) sul 3,8% del "
+                "territorio: vincolo da considerare per nuove espansioni edilizie "
+                "o insediamenti produttivi."
+            ),
+            "evidenze": [{
+                "fonte": "ispra",
+                "url": "https://idrogeo.isprambiente.it/app/api/comuni/072021",
+                "dettaglio": "aree a pericolosità idraulica P2 pari al 3,8% della superficie comunale",
+            }],
+        }],
+    },
+    "proposte": [{
+        "titolo": "Rete di valorizzazione del patrimonio culturale diffuso",
+        "descrizione": (
+            "Messa a sistema di musei e monumenti del centro storico in un "
+            "itinerario unico con segnaletica e orari coordinati. Si rivolge a "
+            "turisti e residenti; attuatore-tipo il Comune con gli operatori "
+            "culturali locali. Si aggancia alla domanda turistica regionale in "
+            "crescita e alla dotazione ricettiva esistente, da rafforzare."
+        ),
+        "evidenze": [{
+            "fonte": "istat",
+            "url": "https://esploradati.istat.it/databrowser/#/it/dw/122_54",
+            "dettaglio": "14 esercizi ricettivi, 570 posti letto a supporto dell'itinerario",
+        }],
+        "finanziamento": None,
+        "fattibilita": {
+            "livello": "da_verificare",
+            "motivazione": "nessun progetto di coesione censito sul tema turismo-cultura: capacità di spesa da verificare",
+            "spend_ratio_storico": None,
+        },
+    }],
+    "disclaimer": "Analisi automatica basata su dati pubblici citati; non costituisce materiale elettorale.",
+}
+_PROGRAMMA_FEWSHOT_JSON = json.dumps(_PROGRAMMA_FEWSHOT_OK, ensure_ascii=False, indent=2)
+
 PROGRAMMA_INSTRUCTIONS = (
     "Sei un analista di politiche pubbliche. Ricevi una RICHIESTA (comune ISTAT, "
     "eventuale zona/tema) e un blocco EVIDENZE RACCOLTE con sezioni per fonte "
@@ -551,6 +641,12 @@ PROGRAMMA_INSTRUCTIONS = (
     '  "disclaimer": str\n'
     "}\n\n"
     "REGOLE VINCOLANTI:\n"
+    "- FORMA (CRITICO): ogni voce delle quattro liste SWOT è un OGGETTO "
+    '{"testo": str, "evidenze": [{"fonte": str, "url": str, "dettaglio": str}]}, '
+    "MAI una stringa. Una lista di stringhe (es. "
+    '"forze": ["Patrimonio culturale (2 musei)"]) viene SCARTATA INTERAMENTE dal '
+    "validatore → SWOT vuoto. Vedi l'esempio completo in fondo e replicane "
+    "ESATTAMENTE la struttura per tutti e quattro i quadranti.\n"
     "- `sintesi`: 6-8 frasi di QUADRO DESCRITTIVO del territorio — è "
     "un'analisi GENERALE dell'INTERO COMUNE (non di una singola zona): "
     "popolazione, quanti progetti di coesione insistono e su quali temi (per "
@@ -634,13 +730,16 @@ PROGRAMMA_INSTRUCTIONS = (
     "nel bundle. Meglio una scheda corta e fondata che una lunga e fragile.\n"
     "- `disclaimer`: una frase che chiarisce che è un'analisi automatica su "
     "dati pubblici, non materiale elettorale.\n\n"
-    "Esempio minimo valido:\n"
-    '{"swot": {"forze": [{"testo": "Capacità attuativa nella media regionale: '
-    "spend ratio 0.38 sul totale dei progetti di coesione.\", \"evidenze\": "
-    '[{"fonte": "opencoesione", "url": "https://opencoesione.gov.it/it/api/aggregati/territori/barletta-comune.json", '
-    '"dettaglio": "pagamenti 224,5M€ su 584,6M€ finanziati (ratio 0.38), 2152 progetti conclusi su 2616"}]}], '
-    '"debolezze": [], "opportunita": [], "minacce": []}, "proposte": [], '
-    '"disclaimer": "Analisi automatica basata su dati pubblici citati; non costituisce materiale elettorale."}'
+    "ESEMPIO COMPLETO VALIDO — replica ESATTAMENTE questa struttura (tutti e "
+    "quattro i quadranti popolati; ogni voce è un OGGETTO con `testo` ed "
+    "`evidenze`; le URL vere le copi dal bundle):\n"
+    + _PROGRAMMA_FEWSHOT_JSON
+    + "\n\nDA NON FARE MAI (voci come stringa → l'intero quadrante viene "
+    "scartato):\n"
+    '{"swot": {"forze": ["Patrimonio culturale strutturato (2 musei, 14 monumenti)", '
+    '"Posizione strategica per il turismo"]}}\n'
+    "Ogni elemento delle liste forze/debolezze/opportunita/minacce deve invece "
+    "essere un oggetto {testo, evidenze:[…]} come nell'esempio sopra."
 )
 
 
