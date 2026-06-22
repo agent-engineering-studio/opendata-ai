@@ -35,6 +35,36 @@ type Recommendation = {
 
 type Dimensions = { policy: number; portal: number; quality: number; impact: number };
 
+type DimensionBreakdown = {
+  dimension: string;
+  label: string;
+  score: number;
+  description: string;
+  drivers: { label: string; value: number }[];
+  weakest: string[];
+};
+
+type Sector = {
+  code: string;
+  label: string;
+  n_datasets: number;
+  share: number;
+  is_core: boolean;
+  present: boolean;
+  priority: number | null;
+};
+
+type Coverage = {
+  entity_type: string;
+  coverage_score: number;
+  sectors: Sector[];
+  missing_core: Sector[];
+  hvd_present: string[];
+  hvd_missing: string[];
+  n_classified: number;
+  n_unclassified: number;
+};
+
 type Scorecard = {
   entity: { id: number; name: string; type: string | null; region: string | null };
   assessed_at: string;
@@ -43,11 +73,30 @@ type Scorecard = {
   dimensions: Dimensions;
   weights?: Partial<Dimensions>;
   recommendations: Recommendation[];
+  dimension_breakdown?: DimensionBreakdown[];
+  coverage?: Coverage | null;
   n_datasets: number | null;
   truncated: boolean | null;
   insufficient_data?: boolean;
   guida?: Guida | null;
   unmet_reuse_demand?: { count: number; items: string[]; penalty: number };
+};
+
+// Etichette leggibili delle 6 categorie HVD (Reg. UE 2023/138) — allineate a
+// opendata_core.maturity.coverage.HVD_LABELS.
+const HVD_LABELS: Record<string, string> = {
+  geospatial: "Geospaziale",
+  earth_observation_environment: "Osservazione della Terra e ambiente",
+  meteorological: "Meteorologici",
+  statistics: "Statistici",
+  companies_ownership: "Imprese e proprietà",
+  mobility: "Mobilità",
+};
+const ENTITY_TYPE_LABEL: Record<string, string> = {
+  comune: "comune",
+  regione: "Regione",
+  provincia: "Provincia",
+  ente: "ente",
 };
 
 type Portfolio = {
@@ -393,6 +442,146 @@ function ValoreCard({ pf }: { pf: Portfolio }) {
   );
 }
 
+/** Spiegazione per dimensione: cosa misura + sotto-metriche (dalla più debole). */
+function DimensionBreakdownView({ breakdown }: { breakdown: DimensionBreakdown[] }) {
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Come si legge il punteggio</h3>
+      <p className="text-slate-500 mb-3" style={{ fontSize: 13 }}>
+        Ogni dimensione è la media di alcune sotto-metriche. Qui sotto cosa misura e quali
+        voci la trainano in basso (le più deboli per prime).
+      </p>
+      <div className="row g-3">
+        {breakdown.map((b) => (
+          <div className="col-md-6" key={b.dimension}>
+            <div className="rounded border p-3 h-100">
+              <div className="d-flex align-items-baseline justify-content-between mb-1">
+                <strong style={{ fontSize: 14 }}>{b.label}</strong>
+                <span className="badge bg-primary">{Math.round(b.score)}/100</span>
+              </div>
+              <p className="text-slate-600 mb-2" style={{ fontSize: 12 }}>{b.description}</p>
+              <ul className="list-unstyled d-flex flex-column gap-1 mb-0">
+                {b.drivers.map((d) => {
+                  const weak = b.weakest.includes(d.label);
+                  return (
+                    <li key={d.label} className="d-flex align-items-center gap-2" style={{ fontSize: 12 }}>
+                      <span style={{ flex: 1, color: weak ? "#b45309" : "#475569" }}>
+                        {weak ? "⚠ " : ""}
+                        {d.label}
+                      </span>
+                      <div style={{ width: 90, height: 6, background: "#eef0f3", borderRadius: 3 }}>
+                        <div
+                          style={{
+                            width: `${Math.round(d.value)}%`,
+                            height: "100%",
+                            borderRadius: 3,
+                            background: d.value < 40 ? "#dc2626" : d.value < 70 ? "#d97706" : "#059669",
+                          }}
+                        />
+                      </div>
+                      <span className="text-slate-400" style={{ width: 30, textAlign: "right" }}>
+                        {Math.round(d.value)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Copertura tematica: settori coperti vs. collection ottimale + categorie HVD. */
+function CoverageView({ coverage }: { coverage: Coverage }) {
+  const etLabel = ENTITY_TYPE_LABEL[coverage.entity_type] ?? coverage.entity_type;
+  const core = coverage.sectors.filter((s) => s.is_core);
+  const extra = coverage.sectors.filter((s) => !s.is_core && s.present);
+  const maxN = Math.max(1, ...core.map((s) => s.n_datasets));
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Copertura per settore</h3>
+      <p className="text-slate-500 mb-3" style={{ fontSize: 13 }}>
+        Quanto il catalogo copre i settori attesi per un ente di tipo{" "}
+        <strong>{etLabel}</strong>: copertura{" "}
+        <strong>{Math.round(coverage.coverage_score)}%</strong> dei settori chiave
+        ({core.filter((s) => s.present).length}/{core.length}).
+      </p>
+      <div className="row g-3">
+        {/* Settori core: barra con conteggio, evidenza sugli assenti */}
+        <div className="col-lg-7">
+          <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+            {core.map((s) => (
+              <li key={s.code} className="d-flex align-items-center gap-2" style={{ fontSize: 13 }}>
+                <span style={{ flex: 1, color: s.present ? "#0f172a" : "#b45309" }}>
+                  {s.present ? "" : "⚠ "}
+                  {s.label}
+                </span>
+                <div style={{ width: 120, height: 8, background: "#eef0f3", borderRadius: 4 }}>
+                  <div
+                    style={{
+                      width: `${Math.round((s.n_datasets / maxN) * 100)}%`,
+                      height: "100%",
+                      borderRadius: 4,
+                      background: s.present ? "#2563eb" : "transparent",
+                    }}
+                  />
+                </div>
+                <span className="text-slate-500" style={{ width: 64, textAlign: "right" }}>
+                  {s.n_datasets} dataset
+                </span>
+              </li>
+            ))}
+          </ul>
+          {extra.length ? (
+            <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 12 }}>
+              Altri settori presenti: {extra.map((s) => s.label).join(", ")}.
+            </p>
+          ) : null}
+        </div>
+
+        {/* Categorie HVD (Reg. UE 2023/138) */}
+        <div className="col-lg-5">
+          <div className="text-slate-500 mb-1" style={{ fontSize: 12, fontWeight: 600 }}>
+            Dati ad elevato valore (HVD) · {coverage.hvd_present.length}/6
+          </div>
+          <div className="d-flex flex-wrap gap-1">
+            {coverage.hvd_present.map((h) => (
+              <span key={h} className="badge" style={{ background: "#059669", color: "white", fontSize: 11 }}>
+                ✓ {HVD_LABELS[h] ?? h}
+              </span>
+            ))}
+            {coverage.hvd_missing.map((h) => (
+              <span key={h} className="badge" style={{ background: "#f1f5f9", color: "#64748b", fontSize: 11 }}>
+                {HVD_LABELS[h] ?? h}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Cosa manca per una collection ottimale */}
+      {coverage.missing_core.length ? (
+        <div className="alert alert-warning mt-3 mb-0" role="note">
+          <strong>Cosa manca per una collection ottimale.</strong> Per il ruolo di questo ente
+          mancano dataset in {coverage.missing_core.length} settori chiave, in ordine di priorità:
+          <ol className="mb-0 mt-1" style={{ fontSize: 13 }}>
+            {coverage.missing_core.map((s) => (
+              <li key={s.code}>{s.label}</li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <p className="text-success mt-2 mb-0" style={{ fontSize: 13 }}>
+          Tutti i settori chiave per questo tipo di ente sono coperti.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const radarRef = useRef<HTMLDivElement>(null);
@@ -528,6 +717,14 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
                 </p>
               </div>
             </div>
+
+            {/* Spiegazione per dimensione (Fase B): cosa misura ogni punteggio */}
+            {scorecard.dimension_breakdown && scorecard.dimension_breakdown.length ? (
+              <DimensionBreakdownView breakdown={scorecard.dimension_breakdown} />
+            ) : null}
+
+            {/* Copertura tematica/settoriale (Fase A): collection ottimale */}
+            {scorecard.coverage ? <CoverageView coverage={scorecard.coverage} /> : null}
 
             {/* Valore del patrimonio (unito alla maturità) */}
             {portfolio && portfolio.count > 0 ? <ValoreCard pf={portfolio} /> : null}

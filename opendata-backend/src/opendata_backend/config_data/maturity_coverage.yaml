@@ -1,0 +1,45 @@
+# Template della "collection ottimale" per tipo di ente (Fase A copertura).
+# Per ogni tipo di ente: i settori tematici (vocabolario DCAT-AP_IT) attesi,
+# con una priorità (1 = più atteso). I settori elencati sono "core" e pesano
+# sul punteggio di copertura; gli altri restano valorizzati ma non penalizzano.
+# Iniettati in opendata_core.maturity.assess_entity(coverage_templates=...).
+# Allineati ai default di opendata_core.maturity (DEFAULT_COVERAGE_TEMPLATES).
+#
+# Codici settore: AGRI ECON EDUC ENVI ENER HEAL GOVE JUST REGI SOCI TECH TRAN INTR
+version: 1
+
+templates:
+  comune:
+    GOVE: 1   # governo/trasparenza: delibere, bilanci, atti, personale
+    TRAN: 2   # mobilità urbana, TPL, parcheggi, piste ciclabili
+    ENVI: 3   # rifiuti, raccolta differenziata, verde, qualità dell'aria
+    SOCI: 4   # popolazione, demografia, welfare
+    REGI: 5   # urbanistica, territorio, edilizia
+    ECON: 6   # tributi locali, attività produttive, commercio
+    EDUC: 7   # scuole, cultura, sport, biblioteche
+
+  regione:
+    HEAL: 1   # sanità regionale (competenza primaria)
+    TRAN: 2   # trasporto pubblico regionale
+    ENVI: 3   # ambiente, energia, dissesto
+    ECON: 4   # bilancio, appalti, sviluppo economico
+    AGRI: 5   # agricoltura, pesca
+    SOCI: 6   # popolazione, welfare
+    EDUC: 7   # istruzione, formazione, cultura
+    ENER: 8   # energia
+    GOVE: 9   # trasparenza, atti
+
+  provincia:
+    TRAN: 1   # viabilità, strade provinciali
+    EDUC: 2   # edilizia scolastica superiore
+    ENVI: 3   # ambiente, tutela del territorio
+    GOVE: 4   # trasparenza, atti
+    REGI: 5   # pianificazione territoriale
+
+  # Fallback per agenzie/enti generici: settori trasversali di base.
+  ente:
+    GOVE: 1
+    ECON: 2
+    SOCI: 3
+    ENVI: 4
+    TRAN: 5

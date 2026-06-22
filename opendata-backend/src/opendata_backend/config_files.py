@@ -58,4 +58,16 @@ def portali_regionali() -> dict[str, Any]:
     return _load_yaml("portali_regionali.yaml")
 
 
-__all__ = ["maturity_weights", "value_taxonomy", "civic_kpi", "portali_regionali"]
+@lru_cache(maxsize=None)
+def maturity_coverage() -> dict[str, Any]:
+    """Template collection ottimale per tipo di ente (maturity_coverage.yaml)."""
+    return _load_yaml("maturity_coverage.yaml")
+
+
+__all__ = [
+    "maturity_weights",
+    "value_taxonomy",
+    "civic_kpi",
+    "portali_regionali",
+    "maturity_coverage",
+]

@@ -98,6 +98,20 @@ async def test_run_assessment_persists_and_builds_scorecard(
     assert set(sc["dimensions"]) == {"policy", "portal", "quality", "impact"}
     assert any(r["code"] == "open_license" for r in sc["recommendations"])
 
+    # breakdown per dimensione (Fase B): una voce per dimensione, con drivers
+    bd = {b["dimension"]: b for b in sc["dimension_breakdown"]}
+    assert set(bd) == {"policy", "portal", "quality", "impact"}
+    assert bd["quality"]["drivers"] and "description" in bd["quality"]
+
+    # copertura tematica (Fase A): tipo ente dedotto = comune, con settori core
+    cov = sc["coverage"]
+    assert cov is not None and cov["entity_type"] == "comune"
+    assert 0.0 <= cov["coverage_score"] <= 100.0
+    assert len(cov["hvd_present"]) + len(cov["hvd_missing"]) == 6
+    # un comune con solo dataset statistici → settori core mancanti segnalati
+    assert cov["missing_core"]
+    assert any(r["code"] == "sector_gap" for r in sc["recommendations"])
+
     # persistenza snapshot
     dq = (await session.execute(select(func.count()).select_from(DatasetQuality))).scalar_one()
     ma = (await session.execute(select(func.count()).select_from(MaturityAssessment))).scalar_one()

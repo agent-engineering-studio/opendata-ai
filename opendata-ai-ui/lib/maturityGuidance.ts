@@ -6,7 +6,8 @@
  *     così ogni gap evidenziato dalla scorecard porta a "come ridurlo o eliminarlo".
  *
  * I `code` provengono dal motore di scoring (opendata_core/maturity/scoring.py):
- * no_open_data, open_license, open_format, freshness, dcat_ap_it, hvd.
+ * no_open_data, open_license, open_format, freshness, dcat_ap_it, hvd,
+ * sector_gap, hvd_coverage.
  */
 
 export const GUIDA_PATH = "/guida-open-data";
@@ -62,6 +63,18 @@ export const REC_GUIDE: Record<string, RecGuide> = {
     sezione: "Scegliere i dataset prioritari",
     consiglio:
       "Dai priorità ai dati di elevato valore (HVD): geospaziali, mobilità (GTFS), statistici, ambiente — quelli a maggior impatto per un Comune.",
+  },
+  sector_gap: {
+    anchor: "step-3",
+    sezione: "Scegliere i dataset prioritari",
+    consiglio:
+      "Pianifica la pubblicazione partendo dai settori chiave mancanti per il ruolo dell'ente, in ordine di priorità: sono gli ambiti a maggior domanda di riuso.",
+  },
+  hvd_coverage: {
+    anchor: "step-3",
+    sezione: "Scegliere i dataset prioritari",
+    consiglio:
+      "Completa le categorie HVD ancora scoperte: sono i dati a maggior ritorno di riuso e impatto economico secondo il Reg. UE 2023/138.",
   },
 };
 

@@ -29,6 +29,30 @@ export type Guida = {
   riferimenti: { label: string; url: string }[];
   nota?: string;
 };
+export type DimensionBreakdown = {
+  dimension: string;
+  label: string;
+  score: number;
+  description: string;
+  drivers: { label: string; value: number }[];
+  weakest: string[];
+};
+export type Sector = {
+  code: string;
+  label: string;
+  n_datasets: number;
+  is_core: boolean;
+  present: boolean;
+  priority: number | null;
+};
+export type Coverage = {
+  entity_type: string;
+  coverage_score: number;
+  sectors: Sector[];
+  missing_core: Sector[];
+  hvd_present: string[];
+  hvd_missing: string[];
+};
 export type ScorecardData = {
   entity: { name: string; type?: string | null; region?: string | null };
   level: string;
@@ -38,6 +62,18 @@ export type ScorecardData = {
   insufficient_data?: boolean;
   guida?: Guida | null;
   recommendations?: { severity: string; dimension: string; message: string }[];
+  dimension_breakdown?: DimensionBreakdown[];
+  coverage?: Coverage | null;
+};
+
+// Etichette HVD allineate a opendata_core.maturity.coverage.HVD_LABELS.
+const HVD_LABELS: Record<string, string> = {
+  geospatial: "Geospaziale",
+  earth_observation_environment: "Osservazione della Terra e ambiente",
+  meteorological: "Meteorologici",
+  statistics: "Statistici",
+  companies_ownership: "Imprese e proprietà",
+  mobility: "Mobilità",
 };
 
 async function loadPdfMake(): Promise<typeof import("pdfmake/build/pdfmake")> {
@@ -133,9 +169,11 @@ function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
       layout: "lightHorizontalLines",
       margin: [0, 0, 0, 10],
     },
+    ...breakdownContent(s.dimension_breakdown),
+    ...coverageContent(s.coverage),
     ...(s.recommendations && s.recommendations.length
       ? [
-          { text: "Raccomandazioni", bold: true, color: BRAND.primary900, margin: [0, 4, 0, 4] } as Content,
+          { text: "Raccomandazioni", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] } as Content,
           {
             ul: s.recommendations.map((r) => `[${r.severity}] ${r.message} — ${r.dimension}`),
             fontSize: 10,
@@ -144,6 +182,88 @@ function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
         ]
       : []),
   ];
+}
+
+/** Spiegazione per dimensione: cosa misura + sotto-metriche (dalla più debole). */
+function breakdownContent(breakdown?: DimensionBreakdown[]): Content[] {
+  if (!breakdown || !breakdown.length) return [];
+  const out: Content[] = [
+    { text: "Come si legge il punteggio", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+  ];
+  breakdown.forEach((b) => {
+    out.push({
+      text: [
+        { text: `${b.label} · ${Math.round(b.score)}/100`, bold: true, color: BRAND.text },
+        { text: `  ${b.description}`, color: BRAND.muted, fontSize: 9 },
+      ],
+      margin: [0, 4, 0, 1],
+      fontSize: 10,
+    });
+    out.push({
+      text: b.drivers
+        .map((d) => `${b.weakest.includes(d.label) ? "⚠ " : ""}${d.label} ${Math.round(d.value)}`)
+        .join("   ·   "),
+      color: BRAND.muted,
+      fontSize: 9,
+    });
+  });
+  return out;
+}
+
+/** Copertura per settore + categorie HVD + cosa manca per una collection ottimale. */
+function coverageContent(coverage?: Coverage | null): Content[] {
+  if (!coverage) return [];
+  const core = coverage.sectors.filter((sec) => sec.is_core);
+  const out: Content[] = [
+    { text: "Copertura per settore", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+    {
+      text: `Copertura ${Math.round(coverage.coverage_score)}% dei settori chiave attesi per un ente di tipo «${coverage.entity_type}» (${core.filter((sec) => sec.present).length}/${core.length}).`,
+      color: BRAND.muted,
+      fontSize: 10,
+      margin: [0, 0, 0, 4],
+    },
+    {
+      table: {
+        widths: ["*", 60, 40],
+        body: [
+          [
+            { text: "Settore", bold: true, fontSize: 9, color: BRAND.muted },
+            { text: "Dataset", bold: true, fontSize: 9, color: BRAND.muted },
+            { text: "", fontSize: 9 },
+          ],
+          ...core.map((sec) => [
+            { text: `${sec.present ? "" : "⚠ "}${sec.label}`, fontSize: 9, color: sec.present ? BRAND.text : "#b45309" },
+            { text: String(sec.n_datasets), fontSize: 9, alignment: "center" as const },
+            { text: sec.present ? "✓" : "—", fontSize: 9, alignment: "center" as const, color: sec.present ? BRAND.green : BRAND.muted },
+          ]),
+        ],
+      },
+      layout: "lightHorizontalLines",
+      margin: [0, 0, 0, 6],
+    },
+    {
+      text: `Dati ad elevato valore (HVD) · ${coverage.hvd_present.length}/6: ${
+        coverage.hvd_present.map((h) => HVD_LABELS[h] ?? h).join(", ") || "nessuna categoria coperta"
+      }.`,
+      fontSize: 9,
+      color: BRAND.muted,
+    },
+  ];
+  if (coverage.missing_core.length) {
+    out.push({
+      text: "Cosa manca per una collection ottimale (per priorità):",
+      bold: true,
+      color: BRAND.text,
+      fontSize: 10,
+      margin: [0, 6, 0, 2],
+    });
+    out.push({
+      ol: coverage.missing_core.map((sec) => sec.label),
+      fontSize: 9,
+      color: BRAND.text,
+    });
+  }
+  return out;
 }
 
 function buildDoc(s: ScorecardData, radarPng?: string): TDocumentDefinitions {

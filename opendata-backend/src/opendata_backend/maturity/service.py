@@ -13,13 +13,18 @@ from datetime import datetime, timezone
 from statistics import median
 from typing import Any, Callable
 
-from opendata_core.maturity import MaturityResult, assess_entity, build_guida_opendata
+from opendata_core.maturity import (
+    MaturityResult,
+    assess_entity,
+    build_guida_opendata,
+    infer_entity_type,
+)
 from opendata_core.maturity.harvest import HarvestResult, harvest_entity
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..cache.store import cache_get, cache_set
 from ..config import Settings
-from ..config_files import maturity_weights, portali_regionali
+from ..config_files import maturity_coverage, maturity_weights, portali_regionali
 from ..db.repositories import maturity as repo
 from .semantic import semantic_clarity_map
 
@@ -28,6 +33,15 @@ log = logging.getLogger("opendata-backend.maturity")
 
 def _weights() -> dict[str, float]:
     return maturity_weights()["weights"]
+
+
+def _coverage_templates() -> dict[str, dict[str, int]] | None:
+    """Template di copertura per tipo di ente (config); None → default del motore."""
+    try:
+        return maturity_coverage().get("templates")
+    except Exception:  # config assente/malformata: il motore usa i suoi default
+        log.warning("maturity: config copertura non caricabile, uso i default", exc_info=True)
+        return None
 
 
 def _regional_ckan(istat_code: str | None) -> str | None:
@@ -116,6 +130,8 @@ def _details(result: MaturityResult, harvest: HarvestResult) -> dict[str, Any]:
              "message": r.message, "affected_count": r.affected_count}
             for r in result.recommendations
         ],
+        "dimension_breakdown": [b.as_dict() for b in result.breakdown],
+        "coverage": result.coverage.as_dict() if result.coverage is not None else None,
     }
 
 
@@ -186,11 +202,17 @@ async def run_assessment(
     semantic, demand = await asyncio.gather(_semantic(harvest, settings), _demand())
     _emit({"event": "status", "phase": "analisi", "state": "end"})
 
-    # 3) Punteggio deterministico (4 dimensioni ODM) — veloce.
+    # 3) Punteggio deterministico (4 dimensioni ODM + copertura tematica) — veloce.
+    #    Il tipo di ente (comune/regione/provincia/ente) seleziona la collection
+    #    ottimale attesa: lo deduciamo da nome + presenza del codice ISTAT.
     _emit({"event": "status", "phase": "punteggio", "state": "start"})
+    entity_type = infer_entity_type(
+        harvest.org_title or comune_nome or entity, has_istat=bool(istat_code)
+    )
     result = assess_entity(
         list(harvest.datasets), weights=_weights(), semantic=semantic,
         reuse_demand_penalty=demand["penalty"],
+        entity_type=entity_type, coverage_templates=_coverage_templates(),
     )
     _emit({"event": "status", "phase": "punteggio", "state": "end"})
 
@@ -264,6 +286,8 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
             "impact": float(latest.score_impact or 0),
         },
         "recommendations": details.get("recommendations", []),
+        "dimension_breakdown": details.get("dimension_breakdown", []),
+        "coverage": details.get("coverage"),
         "weights": _weights(),
         "n_datasets": details.get("n_datasets"),
         "truncated": details.get("truncated"),
