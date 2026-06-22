@@ -71,7 +71,7 @@ const ROADMAP: Punto[] = [
     wip: true,
     voci: [
       { titolo: "Mettere ordine", stato: "wip", testo: "Dal file ricava una tabella ben organizzata: tipi delle colonne, chiave primaria e indici utili, con il comando pronto da eseguire (CREATE TABLE). Disponibile, in fase di test." },
-      { titolo: "Riepiloghi pronti", testo: "Crea sintesi utili: andamenti nel tempo, totali per categoria, viste pronte da consultare o pubblicare." },
+      { titolo: "Riepiloghi pronti", stato: "wip", testo: "Crea sintesi utili dal file: statistiche delle colonne numeriche, totali per categoria e andamenti nel tempo, pronti da consultare o pubblicare. Disponibile, in fase di test." },
       { titolo: "Veloce anche quando è grande", testo: "Consigli pratici per gestire dataset voluminosi senza rallentamenti, e per servirli online in modo fluido." },
       { titolo: "Cambio formato con un clic", stato: "wip", testo: "Trasforma una tabella con coordinate in una mappa (GeoJSON) pronta da pubblicare, riconoscendo da solo le colonne di latitudine e longitudine. Disponibile, in fase di test." },
     ],

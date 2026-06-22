@@ -22,6 +22,7 @@ from opendata_core.quality import (
     json_to_geojson,
     profile_csv,
     profile_geojson,
+    summarize_csv,
 )
 
 from ..auth import ClerkUser
@@ -130,6 +131,27 @@ async def quality_profile(
         user.subject, "geojson" if geo else "csv", "url" if body.url else "content", len(text),
     )
     return profile_geojson(text) if geo else profile_csv(text)
+
+
+@router.post("/quality/summary")
+async def quality_summary(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Riepiloghi pronti da un CSV: statistiche numeriche, totali per categoria,
+    andamenti nel tempo (conteggi per anno). Deterministico. Solo CSV → GeoJSON 415.
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="I riepiloghi tabellari valgono per i CSV; per i GeoJSON usa la diagnosi geografica.",
+        )
+    log.info(
+        "/quality/summary subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return summarize_csv(text)
 
 
 @router.post("/quality/fix")

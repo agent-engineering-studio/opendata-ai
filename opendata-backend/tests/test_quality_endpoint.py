@@ -155,3 +155,19 @@ def test_to_geojson_json_array() -> None:
     })
     assert res.status_code == 200
     assert res.json()["n_features"] == 1
+
+
+def test_summary_csv_ok() -> None:
+    res = _client().post("/quality/summary", json={
+        "content": "provincia;popolazione;anno\nBA;320000;2021\nLE;95000;2022\n",
+    })
+    assert res.status_code == 200
+    s = res.json()
+    assert s["righe"] == 2
+    assert any(n["column"] == "popolazione" for n in s["numeric"])
+    assert any(t["column"] == "anno" for t in s["serie_temporali"])
+
+
+def test_summary_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    assert _client().post("/quality/summary", json={"content": gj, "format": "geojson"}).status_code == 415
