@@ -93,8 +93,9 @@ _TRASPORTI_HOSTS = ("openstreetmap.org", "overpass-api.de")
 # Host valido come premessa di WELFARE: indici demografici ISTAT DCIS_POPRES1
 # (host esploradati.istat.it ⊃ istat.it).
 _WELFARE_HOSTS = ("istat.it",)
-# Host valido come premessa di ISTRUZIONE: anagrafe scuole MIUR Open Data.
-_ISTRUZIONE_HOSTS = ("dati.istruzione.it",)
+# Host validi come premessa di ISTRUZIONE: anagrafe scuole MIUR (offerta) +
+# grado di istruzione ISTAT 8milaCensus (esiti, host ottomilacensus.istat.it).
+_ISTRUZIONE_HOSTS = ("dati.istruzione.it", "ottomilacensus.istat.it")
 # Host valido come premessa di AMBIENTE: pericolosità idrogeologica ISPRA IdroGEO
 # (host idrogeo.isprambiente.it ⊃ isprambiente.it).
 _AMBIENTE_HOSTS = ("isprambiente.it",)
