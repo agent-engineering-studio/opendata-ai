@@ -50,6 +50,13 @@ type ConvertResult = {
   candidate_columns?: string[];
   warnings?: string[];
 };
+type SummaryResult = {
+  righe: number;
+  numeric: { column: string; conteggio: number; min: number; max: number; media: number; somma: number }[];
+  categorie: { column: string; distinti: number; altri: number; top: { valore: string; conteggio: number; quota_pct: number }[] }[];
+  serie_temporali: { column: string; periodo: string; punti: { periodo: string; conteggio: number }[] }[];
+  note: string[];
+};
 const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
   { k: "titolo", label: "Titolo", ph: "Es. Popolazione residente per comune" },
   { k: "descrizione", label: "Descrizione", ph: "A cosa serve il dato, cosa contiene…" },
@@ -94,6 +101,8 @@ function QualitaInner() {
   const [convertBusy, setConvertBusy] = useState(false);
   const [latField, setLatField] = useState("");
   const [lonField, setLonField] = useState("");
+  const [summary, setSummary] = useState<SummaryResult | null>(null);
+  const [summaryBusy, setSummaryBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -265,6 +274,29 @@ function QualitaInner() {
     _download(JSON.stringify(convert.geojson), "dati.geojson", "application/geo+json;charset=utf-8");
   }
 
+  // Riepiloghi pronti: statistiche, totali per categoria, andamenti (POST /quality/summary).
+  async function generaSummary() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setSummaryBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/summary", { method: "POST", token, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setSummary((await res.json()) as SummaryResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSummaryBusy(false);
+    }
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
@@ -273,6 +305,7 @@ function QualitaInner() {
     setDcat(null);
     setSchema(null);
     setConvert(null);
+    setSummary(null);
     try {
       const body = _body();
       if (!body) {
@@ -354,7 +387,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setSchema(null); setConvert(null); setSummary(null); }}
               >
                 Pulisci
               </button>
@@ -636,6 +669,108 @@ function QualitaInner() {
                         {convert.warnings.map((w, i) => (<li key={i}>{w}</li>))}
                       </ul>
                     )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* RIEPILOGHI PRONTI (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Riepiloghi pronti</h2>
+                <p className="text-muted small">
+                  Sintesi automatiche del contenuto: statistiche delle colonne numeriche,
+                  <strong> totali per categoria</strong> e <strong>andamenti nel tempo</strong> —
+                  pronti da consultare o pubblicare. Tutto calcolato sul file, nessun numero inventato.
+                </p>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaSummary} disabled={summaryBusy}>
+                  {summaryBusy ? "Calcolo…" : "Genera riepiloghi"}
+                </button>
+
+                {summary && (
+                  <div className="mt-3 d-flex flex-column gap-3">
+                    {summary.note.map((n, i) => (
+                      <div key={i} className="alert alert-warning py-2 small mb-0">{n}</div>
+                    ))}
+
+                    {summary.numeric.length > 0 && (
+                      <div>
+                        <h3 className="h6 text-muted">Colonne numeriche</h3>
+                        <div className="table-responsive">
+                          <table className="table table-sm align-middle mb-0">
+                            <thead>
+                              <tr className="text-muted small text-uppercase">
+                                <th>Colonna</th><th className="text-end">Conteggio</th>
+                                <th className="text-end">Min</th><th className="text-end">Media</th>
+                                <th className="text-end">Max</th><th className="text-end">Somma</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {summary.numeric.map((n) => (
+                                <tr key={n.column}>
+                                  <td className="fw-semibold">{n.column}</td>
+                                  <td className="text-end">{n.conteggio.toLocaleString("it-IT")}</td>
+                                  <td className="text-end">{n.min.toLocaleString("it-IT")}</td>
+                                  <td className="text-end">{n.media.toLocaleString("it-IT")}</td>
+                                  <td className="text-end">{n.max.toLocaleString("it-IT")}</td>
+                                  <td className="text-end fw-semibold">{n.somma.toLocaleString("it-IT")}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {summary.categorie.map((c) => {
+                      const maxC = Math.max(...c.top.map((t) => t.conteggio), 1);
+                      return (
+                        <div key={c.column}>
+                          <h3 className="h6 text-muted mb-1">
+                            Totali per <code>{c.column}</code>
+                            <span className="text-muted fw-normal small"> · {c.distinti} valori{c.altri > 0 ? ` (primi ${c.top.length})` : ""}</span>
+                          </h3>
+                          <ul className="list-unstyled mb-0">
+                            {c.top.map((t) => (
+                              <li key={t.valore} className="d-flex align-items-center gap-2 small" style={{ lineHeight: 1.8 }}>
+                                <span className="text-truncate" style={{ width: 160 }} title={t.valore}>{t.valore}</span>
+                                <div style={{ flex: 1, height: 8, background: "#eef0f3", borderRadius: 4, maxWidth: 280 }}>
+                                  <div style={{ width: `${Math.round((t.conteggio / maxC) * 100)}%`, height: "100%", borderRadius: 4, background: "#2563eb" }} />
+                                </div>
+                                <span style={{ width: 90, textAlign: "right" }}>
+                                  {t.conteggio.toLocaleString("it-IT")} <span className="text-muted">({t.quota_pct}%)</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+
+                    {summary.serie_temporali.map((s) => {
+                      const maxP = Math.max(...s.punti.map((p) => p.conteggio), 1);
+                      return (
+                        <div key={s.column}>
+                          <h3 className="h6 text-muted mb-2">Andamento nel tempo · <code>{s.column}</code> (per {s.periodo})</h3>
+                          <div className="d-flex align-items-end gap-1" style={{ height: 120 }}>
+                            {s.punti.map((p) => (
+                              <div key={p.periodo} className="text-center" style={{ flex: 1, minWidth: 24 }} title={`${p.periodo}: ${p.conteggio}`}>
+                                <div
+                                  style={{
+                                    height: `${Math.round((p.conteggio / maxP) * 96)}px`,
+                                    background: "#2563eb",
+                                    borderRadius: "3px 3px 0 0",
+                                  }}
+                                />
+                                <div className="text-muted" style={{ fontSize: 10, marginTop: 2 }}>{p.periodo}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
