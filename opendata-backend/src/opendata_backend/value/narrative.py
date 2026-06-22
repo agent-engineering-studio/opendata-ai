@@ -1,15 +1,18 @@
-"""Narrazione di valore via Claude Sonnet: problema → dato → servizio → beneficiario.
+"""Narrazione di valore: problema → dato → servizio → beneficiario.
 
-Standalone (niente orchestratore). Fail-safe: senza ANTHROPIC_API_KEY ritorna una
-narrazione-template deterministica → endpoint e test funzionano offline.
+Standalone (niente orchestratore). Usa il provider LLM risolto. Fail-safe:
+senza provider configurato ritorna una narrazione-template deterministica →
+endpoint e test funzionano offline.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
+
+from ..config import Settings
+from ..llm import complete
 
 log = logging.getLogger("opendata-backend.value.narrative")
 
@@ -28,25 +31,15 @@ def _fallback(context: dict[str, Any]) -> str:
         f"Dato: {title} fornisce una base riutilizzabile. "
         f"Servizio: può alimentare cruscotti, mappe o app di pubblica utilità. "
         f"Beneficiario: cittadini, imprese e amministrazione. "
-        f"(Narrazione sintetica: ANTHROPIC_API_KEY non configurata.)"
+        f"(Narrazione sintetica: provider LLM non configurato.)"
     )
 
 
-async def generate_narrative(*, model: str, context: dict[str, Any]) -> str:
-    """Narrazione di valore. Usa Sonnet se la chiave è presente, altrimenti template."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return _fallback(context)
-    try:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic()
-        msg = await client.messages.create(
-            model=model,
-            max_tokens=512,
-            messages=[{"role": "user", "content": _PROMPT + json.dumps(context, ensure_ascii=False)}],
-        )
-        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        return text.strip() or _fallback(context)
-    except Exception as exc:  # noqa: BLE001 — narrazione best-effort
-        log.warning("narrativa Sonnet non disponibile: %s", exc)
-        return _fallback(context)
+async def generate_narrative(settings: Settings, *, context: dict[str, Any]) -> str:
+    """Narrazione di valore via il provider LLM risolto; template se assente."""
+    text = await complete(
+        settings,
+        prompt=_PROMPT + json.dumps(context, ensure_ascii=False),
+        max_tokens=512,
+    )
+    return text or _fallback(context)

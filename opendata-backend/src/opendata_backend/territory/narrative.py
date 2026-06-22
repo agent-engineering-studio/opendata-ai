@@ -1,11 +1,13 @@
-"""Narrazione del report territoriale via Claude Sonnet (fail-safe offline)."""
+"""Narrazione del report territoriale via il provider LLM risolto (fail-safe offline)."""
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
+
+from ..config import Settings
+from ..llm import complete
 
 log = logging.getLogger("opendata-backend.territory.narrative")
 
@@ -25,24 +27,14 @@ def _fallback(context: dict[str, Any]) -> str:
     parts = [f"Profilo: {name}" + (f", popolazione {pop}." if pop else ".")]
     if inv:
         parts.append(f"Investimenti pubblici tracciati: € {inv:,.0f}.")
-    parts.append("Sintesi generata in modalità offline (ANTHROPIC_API_KEY non configurata).")
+    parts.append("Sintesi generata in modalità offline (provider LLM non configurato).")
     return " ".join(parts)
 
 
-async def generate_report_narrative(*, model: str, context: dict[str, Any]) -> str:
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return _fallback(context)
-    try:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic()
-        msg = await client.messages.create(
-            model=model,
-            max_tokens=700,
-            messages=[{"role": "user", "content": _PROMPT + json.dumps(context, ensure_ascii=False)}],
-        )
-        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        return text.strip() or _fallback(context)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("narrativa territorio non disponibile: %s", exc)
-        return _fallback(context)
+async def generate_report_narrative(settings: Settings, *, context: dict[str, Any]) -> str:
+    text = await complete(
+        settings,
+        prompt=_PROMPT + json.dumps(context, ensure_ascii=False),
+        max_tokens=700,
+    )
+    return text or _fallback(context)

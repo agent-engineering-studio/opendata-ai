@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import MetaData
@@ -117,5 +118,6 @@ async def test_portfolio_empty(session: AsyncSession) -> None:
 
 
 async def test_narrative_fallback_without_key() -> None:
-    text = await generate_narrative(model="claude-sonnet-4-6", context={"title": "Dataset mobilità"})
+    settings = SimpleNamespace(llm_provider="claude", anthropic_api_key=None)
+    text = await generate_narrative(settings, context={"title": "Dataset mobilità"})
     assert "Problema" in text and "Beneficiario" in text

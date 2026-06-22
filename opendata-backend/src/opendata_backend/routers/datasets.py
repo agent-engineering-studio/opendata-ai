@@ -28,6 +28,7 @@ from ..cache import by_category as by_category_cache
 from ..cache import fetch as fetch_cache
 from ..classify import classify_dataset
 from ..classify.anthropic_client import Classifier
+from ..llm import llm_configured
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..factory import DATASET_SOURCES as _DATASET_SOURCES
@@ -312,22 +313,21 @@ async def classify(
     user: ClerkUser = Depends(enforce_rate_limit),
     access: LLMAccess = Depends(require_llm_access),  # noqa: ARG001 — gate only
 ) -> ClassifyResponse:
-    """Score a dataset against a caller-supplied taxonomy with Claude Haiku 4.5.
+    """Score a dataset against a caller-supplied taxonomy via the resolved LLM provider.
 
-    Order of resolution: Redis cache (24h) → Postgres durable cache → Anthropic.
+    Order of resolution: Redis cache (24h) → Postgres durable cache → LLM.
+    The LLM is whatever `resolve_provider` selects (Claude Haiku by default;
+    Ollama local/cloud or Azure when configured).
     """
-    if not settings.anthropic_api_key:
+    if not llm_configured(settings):
         raise HTTPException(
             status_code=503,
-            detail="classify requires ANTHROPIC_API_KEY",
+            detail="classify requires a configured LLM provider",
         )
     if not req.taxonomy:
         raise HTTPException(status_code=400, detail="taxonomy must be non-empty")
 
-    classifier = Classifier(
-        api_key=settings.anthropic_api_key,
-        model=settings.claude_classify_model,
-    )
+    classifier = Classifier(settings=settings)
     result = await classify_dataset(
         session,
         classifier,

@@ -66,7 +66,7 @@ async def test_run_apriqui_with_explanation(session: AsyncSession) -> None:
     session.add(ComuneAnagrafica(cod_comune="072021", nome="Gioia del Colle", popolazione=27889))
     await session.commit()
 
-    out = await run_apriqui(session, istat_codes=["072021"], settings=SimpleNamespace(claude_model="claude-sonnet-4-6"))
+    out = await run_apriqui(session, istat_codes=["072021"], settings=SimpleNamespace(claude_model="claude-sonnet-4-6", llm_provider="claude", anthropic_api_key=None))
     assert len(out["locations"]) == 1
     loc = out["locations"][0]
     assert loc["name"] == "Gioia del Colle"
@@ -84,5 +84,5 @@ async def test_run_apriqui_comparison(session: AsyncSession) -> None:
         )
     await session.commit()
     out = await run_apriqui(session, istat_codes=["072021", "072006"],
-                            settings=SimpleNamespace(claude_model="claude-sonnet-4-6"))
+                            settings=SimpleNamespace(claude_model="claude-sonnet-4-6", llm_provider="claude", anthropic_api_key=None))
     assert len(out["locations"]) == 2

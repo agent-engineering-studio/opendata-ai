@@ -29,6 +29,7 @@ _ORG = {"id": "org-gdc", "name": "comune-di-gioia-del-colle", "title": "Comune d
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
         anthropic_api_key=None,
+        llm_provider="claude",  # provider=claude + no key → semantico saltato (offline)
         claude_classify_model="claude-haiku-4-5-20251001",
         maturity_max_datasets=50,
         maturity_cache_ttl_seconds=3600,

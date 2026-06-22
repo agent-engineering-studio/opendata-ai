@@ -20,7 +20,13 @@ def _strip_schema(metadata: MetaData) -> None:
 
 
 def _settings() -> SimpleNamespace:
-    return SimpleNamespace(claude_model="claude-sonnet-4-6")
+    # provider=claude + no key → llm non configurato → narrativa fallback (offline,
+    # deterministico anche se un Ollama locale è in ascolto).
+    return SimpleNamespace(
+        claude_model="claude-sonnet-4-6",
+        llm_provider="claude",
+        anthropic_api_key=None,
+    )
 
 
 @pytest.fixture(autouse=True)

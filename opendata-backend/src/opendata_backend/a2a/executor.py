@@ -248,19 +248,17 @@ class OpenDataAgentExecutor(AgentExecutor):
         from ..classify import classify_dataset
         from ..classify.anthropic_client import Classifier
         from ..db.session import get_session_factory
+        from ..llm import llm_configured
 
         settings = session_holder.settings
-        if settings is None or not settings.anthropic_api_key:
+        if settings is None or not llm_configured(settings):
             await task_updater.update_status(
                 state=TaskState.TASK_STATE_FAILED,
-                message=new_text_message("ANTHROPIC_API_KEY non configurata."),
+                message=new_text_message("Provider LLM non configurato."),
             )
             return
 
-        classifier = Classifier(
-            api_key=settings.anthropic_api_key,
-            model=settings.claude_classify_model,
-        )
+        classifier = Classifier(settings=settings)
         try:
             factory = get_session_factory()
         except RuntimeError:

@@ -26,6 +26,7 @@ from ..cache.store import cache_get, cache_set
 from ..config import Settings
 from ..config_files import maturity_coverage, maturity_weights, portali_regionali
 from ..db.repositories import maturity as repo
+from ..llm import llm_configured
 from .semantic import semantic_clarity_map
 
 log = logging.getLogger("opendata-backend.maturity")
@@ -136,13 +137,13 @@ def _details(result: MaturityResult, harvest: HarvestResult) -> dict[str, Any]:
 
 
 async def _semantic(harvest: HarvestResult, settings: Settings) -> dict[str, float]:
-    if not settings.anthropic_api_key:
+    if not llm_configured(settings):
         return {}
     items = [
         {"id": d.id, "title": d.title or "", "description": d.description or ""}
         for d in harvest.datasets
     ]
-    return await semantic_clarity_map(items, model=settings.claude_classify_model)
+    return await semantic_clarity_map(items, settings=settings)
 
 
 async def run_assessment(

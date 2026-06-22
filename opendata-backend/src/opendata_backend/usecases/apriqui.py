@@ -115,7 +115,7 @@ async def run_apriqui(
             + ". Punteggio = opportunità (bassa saturazione) + domanda + accessibilità."
         )
         explanation = await explain(
-            model=settings.claude_model,
+            settings,
             instructions=(
                 "Sei un consulente per l'apertura di attività commerciali. Spiega in italiano "
                 "(~120 parole) perché le categorie in cima alla classifica sono attrattive per "

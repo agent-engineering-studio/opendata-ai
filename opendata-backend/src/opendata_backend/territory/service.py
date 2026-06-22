@@ -111,7 +111,7 @@ async def build_report(
         "investimenti": inv_summary,
         "gap_dato": sezioni["gap_dato"],
     }
-    narrativa = await generate_report_narrative(model=settings.claude_model, context=context)
+    narrativa = await generate_report_narrative(settings, context=context)
 
     payload = {
         "place": {"id": place.id, "istat_code": istat_code, "name": name},

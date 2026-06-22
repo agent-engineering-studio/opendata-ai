@@ -35,7 +35,7 @@ async def value_narrative(
     context = body.context or {
         "title": body.title, "description": body.description, "theme": body.theme,
     }
-    narrative = await generate_narrative(model=settings.claude_model, context=context)
+    narrative = await generate_narrative(settings, context=context)
     return {"narrative": narrative}
 
 

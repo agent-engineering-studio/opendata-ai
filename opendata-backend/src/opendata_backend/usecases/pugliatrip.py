@@ -108,7 +108,7 @@ async def run_pugliatrip(
         f"{n_stops} fermate TPL note per gli spostamenti."
     )
     explanation = await explain(
-        model=settings.claude_model,
+        settings,
         instructions=(
             "Sei una guida turistica locale del comune indicato (qualunque regione italiana). "
             "Spiega in italiano (~120 parole) l'itinerario proposto, evidenziando come è stato "

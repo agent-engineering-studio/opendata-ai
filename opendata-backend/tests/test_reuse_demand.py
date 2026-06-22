@@ -34,7 +34,8 @@ def _strip_schema(metadata: MetaData) -> None:
 
 
 def _settings() -> SimpleNamespace:
-    return SimpleNamespace(anthropic_api_key=None, claude_classify_model="m",
+    return SimpleNamespace(anthropic_api_key=None, llm_provider="claude",
+                           claude_classify_model="m",
                            maturity_max_datasets=50, maturity_cache_ttl_seconds=3600)
 
 

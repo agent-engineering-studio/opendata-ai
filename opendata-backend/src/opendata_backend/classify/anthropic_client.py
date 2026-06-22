@@ -1,9 +1,11 @@
-"""Minimal Anthropic wrapper for the classify endpoint.
+"""Classifier wrapper for the classify endpoint.
 
-A `Classifier` instance owns one `AsyncAnthropic` client and re-uses it
-across requests. The system prompt is constant within a deployment, so we
-mark it with `cache_control: ephemeral` to amortise tokens across calls
-inside the same 5-minute prompt-cache window.
+Follows the resolved system provider: on Claude it keeps a dedicated
+`AsyncAnthropic` client with `cache_control: ephemeral` on the (constant)
+system prompt — amortising tokens across calls inside the same 5-minute
+prompt-cache window — and reports token usage. On any other provider
+(Ollama local/cloud, Azure) it routes through the shared one-shot helper;
+usage is unavailable there so it reports zeros.
 """
 
 from __future__ import annotations
@@ -15,6 +17,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from anthropic import AsyncAnthropic
+
+from ..config import Settings, resolve_provider
+from ..llm import complete
 
 log = logging.getLogger("opendata-backend.classify")
 
@@ -40,9 +45,23 @@ class ClassifierResponse:
 
 
 class Classifier:
-    def __init__(self, *, api_key: str, model: str) -> None:
-        self._client = AsyncAnthropic(api_key=api_key)
-        self._model = model
+    """Provider-aware dataset classifier.
+
+    On Claude it owns a dedicated `AsyncAnthropic` client (prompt caching +
+    usage accounting). On any other provider it delegates to `llm.complete`.
+    """
+
+    def __init__(self, *, settings: Settings) -> None:
+        self._settings = settings
+        self._provider = resolve_provider(settings)
+        if self._provider == "claude":
+            self._client: AsyncAnthropic | None = AsyncAnthropic(
+                api_key=settings.anthropic_api_key
+            )
+            self._model = settings.claude_classify_model
+        else:
+            self._client = None
+            self._model = _provider_model(settings, self._provider)
 
     async def classify(
         self,
@@ -57,28 +76,56 @@ class Classifier:
             f"Taxonomy (assign a score to EACH): {json.dumps(sorted(taxonomy))}\n"
             "Return only the JSON object."
         )
-        msg = await self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": _SYSTEM,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_block}],
-        )
+        if self._client is not None:
+            msg = await self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                system=[
+                    {
+                        "type": "text",
+                        "text": _SYSTEM,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[{"role": "user", "content": user_block}],
+            )
+            text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+            scores = _parse_scores(text, taxonomy)
+            usage = {
+                "input_tokens": getattr(msg.usage, "input_tokens", 0),
+                "output_tokens": getattr(msg.usage, "output_tokens", 0),
+                "cache_creation_input_tokens": getattr(msg.usage, "cache_creation_input_tokens", 0) or 0,
+                "cache_read_input_tokens": getattr(msg.usage, "cache_read_input_tokens", 0) or 0,
+            }
+            return ClassifierResponse(scores=scores, raw=text, model=self._model, usage=usage)
 
-        text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+        # Non-Claude provider: one-shot via the shared helper (no usage data).
+        text = await complete(
+            self._settings,
+            prompt=user_block,
+            system=_SYSTEM,
+            max_tokens=1024,
+        )
+        text = text or ""
         scores = _parse_scores(text, taxonomy)
         usage = {
-            "input_tokens": getattr(msg.usage, "input_tokens", 0),
-            "output_tokens": getattr(msg.usage, "output_tokens", 0),
-            "cache_creation_input_tokens": getattr(msg.usage, "cache_creation_input_tokens", 0) or 0,
-            "cache_read_input_tokens": getattr(msg.usage, "cache_read_input_tokens", 0) or 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
         }
         return ClassifierResponse(scores=scores, raw=text, model=self._model, usage=usage)
+
+
+def _provider_model(settings: Settings, provider: str) -> str:
+    """Best-effort human-readable model id for the resolved non-Claude provider."""
+    if provider == "ollama":
+        return settings.ollama_llm_model
+    if provider == "ollama_cloud":
+        return settings.ollama_cloud_model
+    if provider == "azure_foundry":
+        return settings.azure_ai_model_deployment_name or "azure"
+    return provider
 
 
 def _parse_scores(text: str, taxonomy: list[str]) -> dict[str, float]:

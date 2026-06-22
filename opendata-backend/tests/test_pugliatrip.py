@@ -85,7 +85,7 @@ async def test_run_pugliatrip_mocked(session: AsyncSession, monkeypatch) -> None
     await session.commit()
 
     out = await pt.run_pugliatrip(session, istat_code="072021", days=2,
-                                  settings=SimpleNamespace(claude_model="claude-sonnet-4-6"))
+                                  settings=SimpleNamespace(claude_model="claude-sonnet-4-6", llm_provider="claude", anthropic_api_key=None))
     assert out["place"]["name"] == "Gioia del Colle"
     assert out["n_pois"] == 4
     assert len(out["itinerary"]) == 2

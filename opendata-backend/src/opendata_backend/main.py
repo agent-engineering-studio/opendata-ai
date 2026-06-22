@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 import redis.asyncio as redis
 
 from .cache.state import set_redis
-from .config import get_settings
+from .config import get_settings, resolve_provider
 from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
 from .routers import (
@@ -51,13 +51,37 @@ log = logging.getLogger("opendata-backend")
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     session_holder.settings = settings
+    effective_provider = resolve_provider(settings)
     log.info(
-        "Starting opendata-backend | provider=%s ckan_mcp=%s istat_mcp=%s db=%s",
+        "Starting opendata-backend | provider=%s (configured=%s) ckan_mcp=%s istat_mcp=%s db=%s",
+        effective_provider,
         settings.llm_provider,
         settings.ckan_mcp_url,
         settings.istat_mcp_url,
         "configured" if settings.database_url else "off",
     )
+
+    # Ambiguous provider: with LLM_PROVIDER=auto and more than one credential
+    # present, `resolve_provider` silently picks Claude over Ollama Cloud/Azure
+    # (see its priority order). Warn so a deploy that *meant* to run on Ollama
+    # doesn't end up calling Anthropic everywhere by accident. Set LLM_PROVIDER
+    # explicitly to silence this.
+    if settings.llm_provider == "auto":
+        creds = [
+            name for name, present in (
+                ("anthropic", bool(settings.anthropic_api_key)),
+                ("azure", bool(settings.azure_ai_project_endpoint
+                               and settings.azure_ai_model_deployment_name)),
+                ("ollama_cloud", bool(settings.ollama_cloud_api_key)),
+            ) if present
+        ]
+        if len(creds) > 1:
+            log.warning(
+                "LLM_PROVIDER=auto with multiple credentials present (%s) → resolved to %r. "
+                "Every LLM path (synth, classify, semantic-maturità, narratives) will use it. "
+                "To run on Ollama instead, set LLM_PROVIDER=ollama_cloud (or ollama) explicitly.",
+                ", ".join(creds), effective_provider,
+            )
 
     # Database — optional at boot (endpoints that need it will return 503 when
     # it's missing, see `db.session.get_session_factory`).

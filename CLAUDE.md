@@ -66,9 +66,11 @@ Colle (ISTAT 072021).
   expected shape so `alembic upgrade head` works even when the submodule
   is not initialised.
 - **Three-layer cache for classify.** `Redis (24h)` → `Postgres
-  opendata.classifications` (durable) → `Anthropic Haiku`. Cache key is
+  opendata.classifications` (durable) → `LLM (resolved provider)`. Cache key is
   `(source, dataset_id, sha256(sorted(taxonomy)))` so the order of the
-  taxonomy doesn't change the cache hit.
+  taxonomy doesn't change the cache hit. The LLM tier follows
+  `resolve_provider` (Claude Haiku with prompt-caching + usage by default;
+  Ollama local/cloud or Azure when configured).
 - **Clerk app `app_3EMALiLi0UTULl89JPMKtaLENoy`** is pinned in
   `.clerk/config.md`. Anytime you run `clerk init`, pass
   `--app app_3EMALiLi0UTULl89JPMKtaLENoy`. The backend verifies JWTs via
@@ -123,9 +125,13 @@ opendata-backend-api    # http://localhost:8000
 `LLM_PROVIDER = ollama | azure_foundry | claude | auto` resolved by
 `opendata_backend.config.resolve_provider`. `auto` (default) picks
 `claude` if `ANTHROPIC_API_KEY` is set, `azure_foundry` if the Azure
-endpoint + deployment name are set, else `ollama`. The **classify**
-endpoint always uses `CLAUDE_CLASSIFY_MODEL` (Haiku 4.5 by default)
-regardless of the synth provider — keep them separate.
+endpoint + deployment name are set, else `ollama`. **Every** LLM path —
+synth, classify, semantic-maturità, narratives, use-case `explain` — now
+follows the resolved provider. The auxiliary paths route through the shared
+one-shot helper `opendata_backend.llm.complete()` (provider-agnostic);
+classify keeps a dedicated Anthropic client (prompt-caching + token usage)
+**only** when the resolved provider is `claude`, and falls back to
+`CLAUDE_CLASSIFY_MODEL` for the model name in that case.
 
 ## Production layout
 
@@ -264,15 +270,24 @@ a **How to apply** (when it kicks in).
   the image via `make build-ollama OLLAMA_BASE_MODEL=...
   OLLAMA_MODEL=...`.
 
-### R11 — Classify model is separate from the synth provider
+### R11 — All LLM paths follow the resolved provider (incl. classify)
 
-- **Why:** the classify endpoint always calls `CLAUDE_CLASSIFY_MODEL`
-  (Haiku 4.5) regardless of `LLM_PROVIDER`. Three-layer cache
-  (Redis 24h → `opendata.classifications` → Anthropic) means classify
-  cost is bounded.
-- **How to apply:** when tuning provider plumbing in `config.py` /
-  `factory.py`, do not touch the classify path. When bumping classify
-  models, update `CLAUDE_CLASSIFY_MODEL` only.
+- **Why:** `make up-host-ollama` (and any `LLM_PROVIDER=ollama` deploy) must
+  mean "Ollama everywhere" — no surprise Anthropic calls. The auxiliary LLM
+  paths (classify, semantic-maturità, territory/value narratives, use-case
+  `explain`) used to hardcode `anthropic.AsyncAnthropic()`; they now route
+  through `opendata_backend.llm.complete()`, which resolves the provider via
+  `resolve_provider`. Classify still uses a dedicated Anthropic client (for
+  prompt-caching + usage accounting) **only** when the provider is `claude`.
+  The three-layer cache (Redis 24h → `opendata.classifications` → LLM) still
+  bounds cost; the cache key does not include the model.
+- **How to apply:** new auxiliary LLM call → go through `llm.complete()` and
+  gate availability with `llm.llm_configured(settings)` (never raise on a
+  missing `ANTHROPIC_API_KEY` directly — a configured Ollama provider has no
+  key). Keep every such path fail-safe with a deterministic offline fallback.
+  In tests, pin `llm_provider="claude"` + `anthropic_api_key=None` on the
+  settings stub to force the offline path deterministically (so a locally
+  running Ollama can't leak into assertions).
 
 ### R12 — Before commit: `make lint && make test`
 
