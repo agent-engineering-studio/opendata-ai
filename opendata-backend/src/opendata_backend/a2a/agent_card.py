@@ -103,14 +103,16 @@ def _skills() -> list[AgentSkill]:
                 "Data Quality Lab, scelta con `azione`: profile (diagnosi, default), fix "
                 "(CSV corretto), schema (CREATE TABLE), summary (riepiloghi), scale "
                 "(consigli per dataset grandi), to-geojson (tabella→mappa), validate "
-                "(DCAT-AP_IT + FAIR + licenza). Deterministico, nessun LLM."
+                "(DCAT-AP_IT + FAIR + licenza), package (publish-assistant: dato pulito + "
+                "metadati + licenza + README). Deterministico, nessun LLM."
             ),
             input_modes=["application/json"],
             output_modes=["application/json"],
-            tags=["quality", "dcat-ap_it", "fair", "csv", "geojson"],
+            tags=["quality", "dcat-ap_it", "fair", "csv", "geojson", "publish"],
             examples=[
                 '{"azione":"profile","content":"comune,popolazione\\nBari,320475\\n"}',
                 '{"azione":"validate","content":"...","licenza":"CC-BY-4.0","titolo":"…"}',
+                '{"azione":"package","content":"...","licenza":"CC-BY-4.0","ente":"…"}',
             ],
         ),
         AgentSkill(
