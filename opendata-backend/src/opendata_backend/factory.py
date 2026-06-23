@@ -1272,6 +1272,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                idee_chunking=self._settings.idee_chunking,
             )
             task_text = build_programma_task(
                 req, lenses["zona"], lenses["zone_comm"], lenses["commercio"],
@@ -1467,6 +1468,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                idee_chunking=self._settings.idee_chunking,
             )
             workflow = build_workflow(self._participants, aggregator)
             events = await workflow.run(

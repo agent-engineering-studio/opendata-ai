@@ -41,6 +41,24 @@ FonteEvidenza = Literal[
 
 SWOT_KEYS = ("forze", "debolezze", "opportunita", "minacce")
 
+# Chunking idee (Fase 1): mappa il nome della sezione-ancora deterministica al
+# generatore della sua lente (vedi guardrails.GENERATORI). Una chiamata LLM per
+# voce → contesto minimo → citazione dell'URL affidabile. Le sezioni dei
+# partecipanti (fan-out grezzo) alimentano invece i generatori finanziari.
+_LENS_GENERATORE: dict[str, str] = {
+    "commercio": "commercio_duc",
+    "turismo": "turismo_cultura",
+    "lavoro": "lavoro",
+    "trasporti": "trasporti",
+    "welfare": "welfare",
+    "istruzione": "istruzione",
+    "ambiente": "ambiente",
+    "sanita": "sanita",
+}
+_COMPARATIVO_GENERATORI = (
+    "gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
+)
+
 
 # ─────────────────────────── contratto dati (spec 04 §6) ───────────────────
 
@@ -633,6 +651,83 @@ def _salvage_voce_swot(item: Any) -> VoceSwot | None:
     return None
 
 
+_FATT_LIVELLI = {"alta", "media", "bassa", "da_verificare"}
+
+
+def _salvage_fattibilita(raw: Any) -> Fattibilita:
+    """Ricostruisce una `Fattibilita` da forme lasche, senza mai fallire.
+
+    I modelli piccoli rendono spesso il campo come stringa nuda ("alta") invece
+    dell'oggetto {livello, motivazione}, o usano un `livello` fuori vocabolario.
+    Mappiamo sul valore prudente "da_verificare" — che è anche dove il guardrail
+    degraderebbe una proposta senza finanziamento — invece di scartare l'intera
+    proposta per un dettaglio di forma.
+    """
+    if isinstance(raw, dict):
+        try:
+            return Fattibilita.model_validate(raw)
+        except ValidationError:
+            liv = raw.get("livello")
+            mot = raw.get("motivazione")
+            livello = liv.strip().lower() if isinstance(liv, str) else ""
+            return Fattibilita(
+                livello=livello if livello in _FATT_LIVELLI else "da_verificare",
+                motivazione=mot.strip() if isinstance(mot, str) else "",
+            )
+    if isinstance(raw, str):
+        liv = raw.strip().lower()
+        return Fattibilita(livello=liv if liv in _FATT_LIVELLI else "da_verificare", motivazione="")
+    return Fattibilita(livello="da_verificare", motivazione="")
+
+
+def _salvage_proposta(item: Any) -> Proposta | None:
+    """Recupera una proposta che non valida alla forma stretta.
+
+    Speculare a `_salvage_voce_swot`: una proposta ben argomentata non deve
+    sparire perché il modello ha reso `fattibilita` come stringa ("alta"),
+    omesso `descrizione`, o messo `evidenze` non-lista — visto in produzione
+    ("proposta malformata scartata", report con sezione Proposte vuota). NON è
+    un bypass del contratto: l'obbligo di ≥1 citazione risolvibile e i requisiti
+    del generatore restano imposti dai guardrail a valle (una proposta troncata
+    senza evidenza valida viene comunque rimossa lì). Ritorna None se manca anche
+    solo il titolo.
+    """
+    if not isinstance(item, dict):
+        return None
+    raw_titolo = item.get("titolo") or item.get("title") or item.get("nome")
+    titolo = raw_titolo.strip() if isinstance(raw_titolo, str) else ""
+    if not titolo:
+        return None
+    raw_desc = item.get("descrizione") or item.get("description") or item.get("testo")
+    descrizione = raw_desc.strip() if isinstance(raw_desc, str) else ""
+    evidenze: list[Evidenza] = []
+    for e in item.get("evidenze") if isinstance(item.get("evidenze"), list) else []:
+        try:
+            evidenze.append(Evidenza.model_validate(e))
+        except ValidationError:
+            continue
+    finanziamento: Finanziamento | None = None
+    if isinstance(item.get("finanziamento"), dict):
+        try:
+            finanziamento = Finanziamento.model_validate(item["finanziamento"])
+        except ValidationError:
+            finanziamento = None
+    gen = item.get("generatore")
+    lente = item.get("lente")
+    try:
+        return Proposta(
+            titolo=titolo,
+            descrizione=descrizione,
+            evidenze=evidenze,
+            finanziamento=finanziamento,
+            fattibilita=_salvage_fattibilita(item.get("fattibilita")),
+            generatore=gen if isinstance(gen, str) else None,
+            lente=lente if isinstance(lente, str) else None,
+        )
+    except ValidationError:
+        return None
+
+
 def _parse_llm_json(raw: str) -> _LlmProgramma:
     """Estrae il JSON della scheda; tollera fence markdown e preamboli.
 
@@ -698,7 +793,17 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
     for item in proposte_raw:
         try:
             out.proposte.append(Proposta.model_validate(item))
+            continue
         except ValidationError:
+            pass
+        # Forma non standard (fattibilità come stringa, descrizione mancante,
+        # evidenze non-lista): recupera la proposta invece di buttarla — i
+        # guardrail restano il gate su citazione e premesse del generatore.
+        salvaged = _salvage_proposta(item)
+        if salvaged is not None:
+            log.warning("proposta recuperata da forma non standard: %.80s", item)
+            out.proposte.append(salvaged)
+        else:
             log.warning("proposta malformata scartata: %.80s", item)
     return out
 
@@ -744,6 +849,7 @@ def build_programma_aggregator(
     istruzione_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
+    idee_chunking: bool = False,
 ) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
 
@@ -768,6 +874,18 @@ def build_programma_aggregator(
         log.info("programma aggregator: %d participant results", len(results))
         sections: list[str] = []
         all_resources: list[Resource] = []
+        # Chunking idee (Fase 1): tracciamo le sezioni delle ANCORE deterministiche
+        # per-lente (welfare/turismo/…) separate dalle narrative dei partecipanti.
+        # In modalità chunked l'idee_agent riceve UNA sezione per chiamata (contesto
+        # ridotto → l'URL viene citato verbatim molto più affidabilmente), invece di
+        # un unico bundle gigante dove le citazioni si perdono e i guardrail le falciano.
+        lens_sections: dict[str, str] = {}
+        participant_sections: list[str] = []
+
+        def _add_anchor(name: str, narrative: str, res: list[Resource]) -> None:
+            sec = _bundle_section(name, narrative, res)
+            sections.append(sec)
+            lens_sections[name] = sec
 
         for result in results:
             exec_id = _executor_id(result)
@@ -796,7 +914,9 @@ def build_programma_aggregator(
                 unique.append(r)
             resources = unique
             all_resources.extend(resources)
-            sections.append(_bundle_section(str(source), narrative, resources))
+            sec = _bundle_section(str(source), narrative, resources)
+            sections.append(sec)
+            participant_sections.append(sec)
 
         # Ancora COMMERCIO deterministica (ISTAT ASIA): iniettata come sezione di
         # evidenza + risorsa citabile così l'idee_agent può ancorare un'idea-DUC e
@@ -827,7 +947,7 @@ def build_programma_aggregator(
                 f"{tot.get('addetti')} addetti. Usa questi numeri per valutare se il "
                 "commercio è sottodimensionato; un'idea-DUC DEVE citare questa fonte."
             )
-            sections.append(_bundle_section("commercio", narrative, [com_res]))
+            _add_anchor("commercio", narrative, [com_res])
 
         # Ancora TURISMO/CULTURA deterministica: due fonti citabili complementari —
         # asset culturali OSM (poli nominati, host openstreetmap.org) e capacità
@@ -879,7 +999,7 @@ def build_programma_aggregator(
                     "popolazione); un'idea turismo_cultura DEVE nominare un polo (se "
                     "disponibile) e citare una di queste fonti."
                 )
-                sections.append(_bundle_section("turismo", narrative, tur_res))
+                _add_anchor("turismo", narrative, tur_res)
 
         # Ancora LAVORO/COMPETENZE deterministica (8milaCensus, censimento 2011):
         # Resource citabile (host ottomilacensus.istat.it ⊃ istat.it → _LAVORO_HOSTS)
@@ -907,7 +1027,7 @@ def build_programma_aggregator(
                 f"commercio: {st.get('commercio')}%. Un'idea 'lavoro' ancori su questi numeri "
                 "(specie disoccupazione giovanile/NEET) e citi questa fonte; etichetta 'Censimento 2011'."
             )
-            sections.append(_bundle_section("lavoro", narrative, [lav_res]))
+            _add_anchor("lavoro", narrative, [lav_res])
 
         # Ancora TRASPORTI/MOBILITÀ deterministica (OSM public-transport): Resource
         # citabile (host openstreetmap.org → _TRASPORTI_HOSTS) + sezione evidenza.
@@ -931,7 +1051,7 @@ def build_programma_aggregator(
                 "assenza di nodo ferroviario, dipendenza dall'auto); un'idea 'trasporti' "
                 "ancori su questi numeri e citi questa fonte."
             )
-            sections.append(_bundle_section("trasporti", narrative, [tra_res]))
+            _add_anchor("trasporti", narrative, [tra_res])
 
         # Ancora WELFARE/COESIONE SOCIALE deterministica (ISTAT DCIS_POPRES1): indici
         # demografici di fragilità come Resource citabile (host esploradati.istat.it ⊃
@@ -979,7 +1099,7 @@ def build_programma_aggregator(
                     f"{inv.get('finanziato_totale')} €, pagato {inv.get('pagamenti_totali')} €, "
                     f"spend ratio {inv.get('spend_ratio')}, {inv.get('progetti_totali')} progetti."
                 )
-            sections.append(_bundle_section("welfare", narrative, wel_resources))
+            _add_anchor("welfare", narrative, wel_resources)
 
         # Ancora ISTRUZIONE deterministica da DUE fonti: OFFERTA (MIUR, anagrafe scuole +
         # alunni; host dati.istruzione.it) + GRADO DI ISTRUZIONE della popolazione (ISTAT
@@ -1038,7 +1158,7 @@ def build_programma_aggregator(
                     "(bassa quota laureati/diplomati, analfabetismo = capitale umano da rafforzare); "
                     "un'idea 'istruzione' ancori su questi numeri e citi la fonte."
                 )
-                sections.append(_bundle_section("istruzione", narrative, ist_resources))
+                _add_anchor("istruzione", narrative, ist_resources)
 
         # Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica (ISPRA IdroGEO):
         # pericolosità frane (P3+P4) e idraulica (alluvioni P3/P2) come Resource
@@ -1067,7 +1187,7 @@ def build_programma_aggregator(
                 "localizzata altrove o include mitigazione; quote ~0 = assenza di vincolo "
                 "(anch'essa evidenza). Un'idea 'ambiente' ancori su questi numeri e citi questa fonte."
             )
-            sections.append(_bundle_section("ambiente", narrative, [amb_res]))
+            _add_anchor("ambiente", narrative, [amb_res])
 
         # Ancora SANITÀ deterministica da DUE fonti: farmacie (Min. Salute, host
         # dati.salute.gov.it, citabile) + presìdi OSM (ospedali/territoriali; host
@@ -1123,7 +1243,7 @@ def build_programma_aggregator(
                     "mobilità sanitaria; aree scoperte). Un'idea 'sanita' ancori su questi "
                     "numeri e citi la fonte."
                 )
-                sections.append(_bundle_section("sanita", narrative, san_resources))
+                _add_anchor("sanita", narrative, san_resources)
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)
@@ -1140,28 +1260,109 @@ def build_programma_aggregator(
             "marketing": "Cerco spunti di marketing territoriale",
         }
 
-        async def _run(agent: Agent, label: str) -> _LlmProgramma:
+        async def _run(
+            agent: Agent, label: str, prompt_text: str | None = None, *, stream: bool = True,
+        ) -> _LlmProgramma:
+            # `prompt_text` consente al chunking idee di passare un prompt focalizzato
+            # su UNA lente; `stream=False` salta il feed live (le chiamate dei chunk
+            # girano in parallelo: i loro token interlacciati garbleerebbero il feed).
+            prompt_local = prompt_text if prompt_text is not None else prompt
             fase = _PHASE_LABEL.get(label, label)
             try:
-                if emit is not None:
+                if emit is not None and stream:
                     # L3: streaming dei token della sintesi → feed "thinking" live.
                     emit({"event": "status", "source": fase, "phase": "start"})
-                    stream = agent.run(prompt, stream=True)
-                    async for update in stream:
+                    stream_resp = agent.run(prompt_local, stream=True)
+                    async for update in stream_resp:
                         if getattr(update, "text", None):
                             emit({"event": "thinking", "source": fase, "delta": update.text})
-                    final = await stream.get_final_response()
+                    final = await stream_resp.get_final_response()
                     raw = (getattr(final, "text", None) or str(final)).strip()
                     emit({"event": "status", "source": fase, "phase": "end"})
                 else:
-                    llm_result = await agent.run(prompt)
+                    llm_result = await agent.run(prompt_local)
                     raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
                 return _parse_llm_json(raw)
             except Exception:
                 log.exception("%s agent failed; sezione vuota", label)
-                if emit is not None:
+                if emit is not None and stream:
                     emit({"event": "status", "source": fase, "phase": "error"})
                 return _LlmProgramma()
+
+        async def _run_idee(agent: Agent, label: str) -> _LlmProgramma:
+            """Genera le idee: chunked per-lente se abilitato, altrimenti standard.
+
+            Chunked (Fase 1): UNA chiamata per ancora-lente (welfare/turismo/…) +
+            una chiamata "comparativo" sulle narrative dei partecipanti (generatori
+            finanziari). Ogni chiamata ha contesto ridotto → cita l'URL verbatim in
+            modo affidabile → più idee superano i guardrail. I chunk girano in
+            parallelo (emit OFF per non garbleare il feed); le proposte sono fuse e
+            deduplicate per titolo; una chiamata finale leggera produce la sintesi
+            d'insieme dai soli titoli."""
+            if not idee_chunking:
+                return await _run(agent, label)
+            chunks: list[tuple[str, tuple[str, ...], str]] = []
+            if participant_sections:
+                chunks.append(
+                    ("comparativo", _COMPARATIVO_GENERATORI, "\n\n".join(participant_sections))
+                )
+            for name, sec in lens_sections.items():
+                gen = _LENS_GENERATORE.get(name)
+                if gen:
+                    chunks.append((name, (gen,), sec))
+            if not chunks:  # nessuna evidenza per-lente → comportamento standard
+                return await _run(agent, label)
+            fase = _PHASE_LABEL.get(label, label)
+            if emit is not None:
+                emit({"event": "status", "source": fase, "phase": "start"})
+            parsed_chunks = await asyncio.gather(*[
+                _run(agent, label, _chunk_idee_prompt(gens, sec), stream=False)
+                for _, gens, sec in chunks
+            ])
+            merged = _LlmProgramma()
+            seen_titoli: set[str] = set()
+            for pc in parsed_chunks:
+                for p in pc.proposte:
+                    key = p.titolo.strip().lower()
+                    if key and key not in seen_titoli:
+                        seen_titoli.add(key)
+                        merged.proposte.append(p)
+            # Sintesi d'insieme: una chiamata finale leggera sui soli titoli (niente
+            # bundle → niente problema di citazione/contesto). Best-effort.
+            if merged.proposte:
+                merged.sintesi = (await _run(
+                    agent, label, _sintesi_idee_prompt(merged.proposte), stream=False,
+                )).sintesi
+            if emit is not None:
+                emit({"event": "status", "source": fase, "phase": "end"})
+            return merged
+
+        def _chunk_idee_prompt(generatori: tuple[str, ...], section: str) -> str:
+            parts = [_request_header(req)]
+            if instructions_hint:
+                parts.append(instructions_hint)
+            parts.append(
+                "GENERA AL MASSIMO 2 IDEE usando ESCLUSIVAMENTE "
+                f"{'i generatori' if len(generatori) > 1 else 'il generatore'}: "
+                f"{', '.join(generatori)}. Usa SOLO le evidenze qui sotto e CITA "
+                "VERBATIM l'URL delle RISORSE CITABILI in OGNI `evidenze`. Se le "
+                "evidenze non bastano per un intervento specifico e ancorato, "
+                'restituisci "proposte": []. Lascia `sintesi` e `swot` vuoti.'
+            )
+            parts.append("EVIDENZE RACCOLTE:\n\n" + section)
+            return "\n\n".join(parts)
+
+        def _sintesi_idee_prompt(proposte: list[Proposta]) -> str:
+            righe = "\n".join(f"- {p.titolo}: {p.descrizione[:160]}" for p in proposte)
+            return "\n\n".join([
+                _request_header(req),
+                "Hai generato queste IDEE per il territorio:\n" + righe,
+                "Scrivi SOLO il campo `sintesi` (2-4 frasi): la lettura d'insieme "
+                "che inquadra le 2-3 leve principali del territorio e quali idee "
+                "sono più promettenti (impatto × fattibilità). Emetti un JSON "
+                '{"sintesi": str, "swot": {"forze":[],"debolezze":[],'
+                '"opportunita":[],"minacce":[]}, "proposte": [], "disclaimer": ""}.',
+            ])
 
         def _build(parsed: _LlmProgramma, modalita: str) -> ProgrammaResponse:
             resp = ProgrammaResponse(
@@ -1183,7 +1384,7 @@ def build_programma_aggregator(
             # marketing territoriale. Ogni parte è validata con le regole della
             # propria modalità, poi le proposte sono FUSE in un'unica lista
             # (la categoria resta nel `generatore`/`lente`).
-            runs = [_run(programma_agent, "programma"), _run(idee_agent, "idee")]
+            runs = [_run(programma_agent, "programma"), _run_idee(idee_agent, "idee")]
             if marketing_agent is not None:
                 runs.append(_run(marketing_agent, "marketing"))
             parsed = await asyncio.gather(*runs)
@@ -1212,8 +1413,11 @@ def build_programma_aggregator(
             response.idee_sintesi = response.sintesi
             response.sintesi = ""
         else:
-            agent = idee_agent if (req.modalita == "idee" and idee_agent) else programma_agent
-            response = _build(await _run(agent, req.modalita), req.modalita)
+            if req.modalita == "idee" and idee_agent:
+                parsed_idee = await _run_idee(idee_agent, req.modalita)
+            else:
+                parsed_idee = await _run(programma_agent, req.modalita)
+            response = _build(parsed_idee, req.modalita)
             # In modalità "idee" pura la sintesi prodotta è la lettura delle
             # idee: spostala nel campo dedicato così il frontend la rende in
             # cima alla sezione idee (e non come quadro territoriale).
