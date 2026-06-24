@@ -66,6 +66,11 @@ _COMPARATIVO_GENERATORI = (
 _IDEE_PER_LENS = 1
 _IDEE_MAX = 10
 _IDEE_FATT_RANK = {"alta": 3, "media": 2, "bassa": 1, "da_verificare": 0}
+# Le lenti (fino a 8) vengono RAGGRUPPATE in al più _IDEE_LENS_CHUNKS chiamate
+# invece di una per lente: su provider seriale (Ollama/CPU) ogni chiamata-modello
+# costa ~100s, quindi 8 chiamate = ~lentissimo. Con 3 gruppi (~3 lenti ciascuno) il
+# contesto per chiamata resta ridotto (citazioni affidabili) ma le chiamate crollano.
+_IDEE_LENS_CHUNKS = 3
 
 
 # ─────────────────────────── contratto dati (spec 04 §6) ───────────────────
@@ -1346,15 +1351,16 @@ def build_programma_aggregator(
                 return _LlmProgramma()
 
         async def _run_idee(agent: Agent, label: str) -> _LlmProgramma:
-            """Genera le idee: chunked per-lente se abilitato, altrimenti standard.
+            """Genera le idee: chunked a GRUPPI di lenti se abilitato, altrimenti standard.
 
-            Chunked (Fase 1): UNA chiamata per ancora-lente (welfare/turismo/…) +
-            una chiamata "comparativo" sulle narrative dei partecipanti (generatori
-            finanziari). Ogni chiamata ha contesto ridotto → cita l'URL verbatim in
-            modo affidabile → più idee superano i guardrail. I chunk girano in
-            parallelo (emit OFF per non garbleare il feed); le proposte sono fuse e
-            deduplicate per titolo; una chiamata finale leggera produce la sintesi
-            d'insieme dai soli titoli."""
+            Chunked (Fase 1): le lenti (welfare/turismo/…) sono raggruppate in al più
+            _IDEE_LENS_CHUNKS chiamate + una chiamata "comparativo" sulle narrative dei
+            partecipanti (generatori finanziari). Contesto per chiamata ridotto → cita
+            l'URL verbatim in modo affidabile → più idee superano i guardrail; ma le
+            chiamate restano poche (latenza su provider seriale). Girano in parallelo
+            (emit OFF per non garbleare il feed); proposte fuse e deduplicate per titolo
+            (max ~1 per lente/generatore del gruppo); una chiamata finale leggera
+            produce la sintesi d'insieme dai soli titoli."""
             if not idee_chunking:
                 return await _run(agent, label)
             chunks: list[tuple[str, tuple[str, ...], str]] = []
@@ -1362,10 +1368,19 @@ def build_programma_aggregator(
                 chunks.append(
                     ("comparativo", _COMPARATIVO_GENERATORI, "\n\n".join(participant_sections))
                 )
-            for name, sec in lens_sections.items():
-                gen = _LENS_GENERATORE.get(name)
-                if gen:
-                    chunks.append((name, (gen,), sec))
+            lens_items = [
+                (name, gen, sec)
+                for name, sec in lens_sections.items()
+                if (gen := _LENS_GENERATORE.get(name))
+            ]
+            # Raggruppa le lenti in ≤ _IDEE_LENS_CHUNKS gruppi (round-robin = bilanciati).
+            n_groups = min(_IDEE_LENS_CHUNKS, len(lens_items))
+            for i in range(n_groups):
+                group = lens_items[i::n_groups]
+                gens = tuple(g for _, g, _ in group)
+                sec = "\n\n".join(s for _, _, s in group)
+                names = "+".join(n for n, _, _ in group)
+                chunks.append((names, gens, sec))
             if not chunks:  # nessuna evidenza per-lente → comportamento standard
                 return await _run(agent, label)
             fase = _PHASE_LABEL.get(label, label)
@@ -1377,14 +1392,17 @@ def build_programma_aggregator(
             ])
             merged = _LlmProgramma()
             seen_titoli: set[str] = set()
-            for pc in parsed_chunks:
+            for (_, gens, _), pc in zip(chunks, parsed_chunks):
+                # max ~1 idea per lente/generatore del gruppo (no doppioni; il chunk
+                # le lista per priorità → teniamo le prime).
+                cap = _IDEE_PER_LENS * len(gens)
                 kept_from_chunk = 0
                 for p in pc.proposte:
                     key = p.titolo.strip().lower()
                     if not key or key in seen_titoli:
                         continue
-                    if kept_from_chunk >= _IDEE_PER_LENS:
-                        break  # 1 idea per lente (la più promettente): no doppioni
+                    if kept_from_chunk >= cap:
+                        break
                     seen_titoli.add(key)
                     merged.proposte.append(p)
                     kept_from_chunk += 1
@@ -1412,13 +1430,18 @@ def build_programma_aggregator(
             parts = [_request_header(req)]
             if instructions_hint:
                 parts.append(instructions_hint)
+            n = len(generatori)
+            quanti = (
+                "UNA IDEA per CIASCUNO di questi generatori dove le evidenze lo "
+                f"permettono (massimo {n} idee)"
+                if n > 1 else "AL MASSIMO 2 IDEE col generatore"
+            )
             parts.append(
-                "GENERA AL MASSIMO 2 IDEE usando ESCLUSIVAMENTE "
-                f"{'i generatori' if len(generatori) > 1 else 'il generatore'}: "
-                f"{', '.join(generatori)}. Usa SOLO le evidenze qui sotto e CITA "
-                "VERBATIM l'URL delle RISORSE CITABILI in OGNI `evidenze`. Se le "
-                "evidenze non bastano per un intervento specifico e ancorato, "
-                'restituisci "proposte": []. Lascia `sintesi` e `swot` vuoti.'
+                f"GENERA {quanti}: {', '.join(generatori)}. Usa SOLO le evidenze qui "
+                "sotto e CITA VERBATIM l'URL delle RISORSE CITABILI in OGNI `evidenze`. "
+                "Per un generatore le cui evidenze non bastano per un intervento "
+                "specifico e ancorato, NON forzare l'idea (saltalo). Se nessuna idea "
+                'è difendibile, restituisci "proposte": []. Lascia `sintesi` e `swot` vuoti.'
             )
             parts.append("EVIDENZE RACCOLTE:\n\n" + section)
             return "\n\n".join(parts)

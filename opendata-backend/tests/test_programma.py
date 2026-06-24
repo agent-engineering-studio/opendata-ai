@@ -640,6 +640,36 @@ async def test_empty_chunk_output_is_graceful_not_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_idee_chunking_groups_lenses_into_few_calls() -> None:
+    """Latenza: le lenti sono RAGGRUPPATE in ≤ _IDEE_LENS_CHUNKS chiamate (+1
+    comparativo), non 1 per lente → poche chiamate-modello su provider seriale."""
+    from opendata_backend.orchestrator.programma import _IDEE_LENS_CHUNKS
+
+    class _Counter:
+        def __init__(self) -> None:
+            self.chunk_calls = 0
+
+        async def run(self, prompt: str, **_kw) -> _StubAgentResponse:  # noqa: ANN003
+            if "EVIDENZE RACCOLTE" in prompt:
+                self.chunk_calls += 1
+            return _StubAgentResponse(json.dumps({"swot": {}, "proposte": []}))
+
+    agent = _Counter()
+    req = ProgrammaRequest(cod_comune="072021", modalita="idee")
+    u = "https://esploradati.istat.it/x"
+    aggregate = build_programma_aggregator(
+        agent, req, idee_agent=agent, idee_chunking=True,  # type: ignore[arg-type]
+        welfare_info={"source_url": u, "anno": 2011},
+        turismo_info={"counts": {"musei": 2}, "source_url": u, "landmarks": []},
+        lavoro_info={"source_url": u},
+        trasporti_info={"source_url": u, "counts": {}},
+    )
+    await aggregate(_participants())
+    # 4 lenti → 3 gruppi + 1 comparativo = 4 chunk (NON 4+1 per-lente)
+    assert agent.chunk_calls <= _IDEE_LENS_CHUNKS + 1
+
+
+@pytest.mark.asyncio
 async def test_idee_chunking_off_uses_single_call() -> None:
     """Flag OFF (default): comportamento invariato — UNA sola chiamata idee."""
     agent = _ChunkAwareIdeeAgent()
