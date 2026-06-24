@@ -330,6 +330,40 @@ def test_validate_keeps_funded_proposal_level() -> None:
     assert out.proposte[0].finanziamento is not None
 
 
+_OC_PROGETTO_URL = "https://opencoesione.gov.it/it/progetti/1miseooo123/"
+
+
+def test_validate_degrades_fabricated_comparable() -> None:
+    """Comparabile inventato: cita un 'CLP' in prosa ma nessuna evidenza punta a un
+    progetto OpenCoesione (`/progetti/`) → fattibilità declassata a da_verificare."""
+    prop = Proposta(
+        titolo="Polo turistico",
+        descrizione="Sul modello del progetto X (CLP 2021, 1,2M€, +25% pernottamenti).",
+        evidenze=[Evidenza(fonte="opencoesione", url=_OC_URL, dettaglio="aggregati")],
+        finanziamento=Finanziamento(linea="PR FESR", fonte_url=_OC_URL, stato="aperto"),
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([prop]), {_OC_URL})
+    assert out.proposte[0].fattibilita.livello == "da_verificare"
+
+
+def test_validate_keeps_real_cited_comparable() -> None:
+    """Comparabile reale: il CLP è in prosa E un'evidenza cita il progetto
+    OpenCoesione (`/progetti/{clp}`) → fattibilità preservata."""
+    prop = Proposta(
+        titolo="Polo turistico",
+        descrizione="Sul modello del progetto X (CLP 1miseooo123, 1,2M€).",
+        evidenze=[
+            Evidenza(fonte="opencoesione", url=_OC_URL, dettaglio="aggregati"),
+            Evidenza(fonte="opencoesione", url=_OC_PROGETTO_URL, dettaglio="progetto comparabile"),
+        ],
+        finanziamento=Finanziamento(linea="PR FESR", fonte_url=_OC_URL, stato="aperto"),
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([prop]), {_OC_URL, _OC_PROGETTO_URL})
+    assert out.proposte[0].fattibilita.livello == "alta"
+
+
 def test_validate_task_builder_mentions_zona_and_tema() -> None:
     task = build_programma_task(_REQ)
     assert "110002" in task and "area industriale" in task and "energia" in task

@@ -195,6 +195,22 @@ def _generatore_marketing_ok(prop) -> bool:
     return has_local and has_external
 
 
+# Riferimento a un PROGETTO comparabile (le istruzioni chiedono il CLP per nome).
+# Se compare un "CLP" nel testo ma nessuna evidenza cita un progetto OpenCoesione
+# (`/progetti/{clp}`), il comparabile è NON verificabile → quasi sempre inventato
+# dall'LLM (visto in produzione: "CLP 2022", esiti "+25%" senza fonte). Backstop
+# all'istruzione che già lo vieta: declassiamo la fattibilità e logghiamo, senza
+# riscrivere la prosa (mutazione fragile). Solo `\bCLP\b` → falsi positivi rari.
+_CLP_PATTERN = re.compile(r"\bCLP\b", re.IGNORECASE)
+
+
+def _uncited_comparable(prop) -> bool:
+    text = f"{prop.titolo} {prop.descrizione} {prop.fattibilita.motivazione}"
+    if not _CLP_PATTERN.search(text):
+        return False
+    return not any("/progetti/" in (e.url or "").lower() for e in prop.evidenze)
+
+
 def validate_programma(
     resp: "ProgrammaResponse", evidence_urls: set[str], *, modalita: str = "scheda"
 ) -> "ProgrammaResponse":
@@ -299,6 +315,17 @@ def validate_programma(
                 prop.titolo[:40],
             )
             prop.fattibilita.livello = "media"
+        # Comparabile fabbricato: "CLP" nel testo senza progetto OpenCoesione citato
+        # → la fattibilità non può poggiare su un precedente inventato. Declassa a
+        # "da_verificare" e logga (misura quanto il modello ancora inventa nonostante
+        # l'istruzione). Non riscriviamo la prosa: la riduzione di confidenza è il segnale.
+        if _uncited_comparable(prop) and prop.fattibilita.livello != "da_verificare":
+            log.warning(
+                "guardrail: proposta %r cita un comparabile (CLP) senza progetto "
+                "OpenCoesione risolvibile → fattibilità da_verificare (comparabile non verificato)",
+                prop.titolo[:40],
+            )
+            prop.fattibilita.livello = "da_verificare"
         kept_proposte.append(prop)
     resp.proposte = kept_proposte
 
