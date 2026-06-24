@@ -195,18 +195,31 @@ def _generatore_marketing_ok(prop) -> bool:
     return has_local and has_external
 
 
-# Riferimento a un PROGETTO comparabile (le istruzioni chiedono il CLP per nome).
-# Se compare un "CLP" nel testo ma nessuna evidenza cita un progetto OpenCoesione
-# (`/progetti/{clp}`), il comparabile è NON verificabile → quasi sempre inventato
-# dall'LLM (visto in produzione: "CLP 2022", esiti "+25%" senza fonte). Backstop
-# all'istruzione che già lo vieta: declassiamo la fattibilità e logghiamo, senza
-# riscrivere la prosa (mutazione fragile). Solo `\bCLP\b` → falsi positivi rari.
+# Claim di un comparabile NON verificabile. Due firme:
+#  (a) un "CLP" nel testo senza progetto OpenCoesione citato (`/progetti/{clp}`);
+#  (b) un ESITO QUANTIFICATO attribuito a un precedente generico ("comuni simili /
+#      interventi analoghi … hanno ridotto/aumentato … del N%") senza progetto citato
+#      — la fabbricazione residua vista in validazione ("ridotto del 40%", "−15% in
+#      2 anni") che sfuggiva al solo controllo su "CLP".
+# Backstop all'istruzione che già lo vieta: declassiamo la fattibilità e logghiamo,
+# senza riscrivere la prosa. La firma (b) richiede precedente + verbo d'effetto + %
+# nella stessa frase → falsi positivi rari (le % di dato del comune non hanno il
+# precedente + verbo d'effetto vicino).
 _CLP_PATTERN = re.compile(r"\bCLP\b", re.IGNORECASE)
+_FABRICATED_OUTCOME = re.compile(
+    r"(comuni\s+simil|interventi\s+analog|progetti\s+(?:simil|comparabil)|"
+    r"esperienze\s+(?:regional|simil)|casi\s+analog|comuni\s+vicin)"
+    r"[^.]{0,140}\b(?:ridot|riduc|aument|increment|miglior|dimostrat|registrat|"
+    r"portat|cresciut|incrementat)\w*"
+    r"[^.]{0,40}\d+(?:[.,]\d+)?\s?%",
+    re.IGNORECASE,
+)
 
 
-def _uncited_comparable(prop) -> bool:
+def _unverified_comparable(prop) -> bool:
     text = f"{prop.titolo} {prop.descrizione} {prop.fattibilita.motivazione}"
-    if not _CLP_PATTERN.search(text):
+    claims = bool(_CLP_PATTERN.search(text)) or bool(_FABRICATED_OUTCOME.search(text))
+    if not claims:
         return False
     return not any("/progetti/" in (e.url or "").lower() for e in prop.evidenze)
 
@@ -319,10 +332,11 @@ def validate_programma(
         # → la fattibilità non può poggiare su un precedente inventato. Declassa a
         # "da_verificare" e logga (misura quanto il modello ancora inventa nonostante
         # l'istruzione). Non riscriviamo la prosa: la riduzione di confidenza è il segnale.
-        if _uncited_comparable(prop) and prop.fattibilita.livello != "da_verificare":
+        if _unverified_comparable(prop) and prop.fattibilita.livello != "da_verificare":
             log.warning(
-                "guardrail: proposta %r cita un comparabile (CLP) senza progetto "
-                "OpenCoesione risolvibile → fattibilità da_verificare (comparabile non verificato)",
+                "guardrail: proposta %r cita un comparabile non verificabile (CLP o "
+                "esito %% di un precedente generico) senza progetto OpenCoesione "
+                "risolvibile → fattibilità da_verificare",
                 prop.titolo[:40],
             )
             prop.fattibilita.livello = "da_verificare"
