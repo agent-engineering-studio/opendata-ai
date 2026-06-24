@@ -955,11 +955,17 @@ class OrchestratorSession:
             _log_lens_skip("comparabili peer OpenCoesione non risolti per provincia %s",
                            cod_prov, exc=exc)
             return None
-        nome = (req.comune_nome or "").strip().lower()
+        # I `territori` di OpenCoesione sono SLUG ("gioia-del-colle-comune"), non
+        # codici ISTAT né nome con spazi (verificato live): slugifichiamo il nome
+        # (spazi/apostrofi → trattino) per escludere davvero i progetti del comune
+        # stesso, altrimenti rientrerebbero tra i "comparabili".
+        nome_slug = (
+            (req.comune_nome or "").strip().lower().replace("'", "-").replace(" ", "-")
+        )
 
         def _is_self(p: dict[str, Any]) -> bool:
             terr = " ".join(str(t) for t in (p.get("territori") or [])).lower()
-            return (nome and nome in terr) or (cod in terr)
+            return bool(nome_slug) and nome_slug in terr
 
         peers = [
             p for p in (res.get("results") or [])

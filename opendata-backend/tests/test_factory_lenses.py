@@ -76,3 +76,34 @@ async def test_resolve_all_lenses_isolates_exceptions() -> None:
     assert out["istruzione"] == {"ok": True}
     assert out["ambiente"] == {"ok": True}
     assert out["sanita"] == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_resolve_comparabili_excludes_self_by_slug(monkeypatch) -> None:
+    """Fase B: i comparabili peer escludono i progetti del comune stesso — i
+    `territori` OpenCoesione sono slug ('gioia-del-colle-comune'), quindi il match
+    self usa il nome slugificato. Sopravvivono solo i peer, con URL /progetti/."""
+    import opendata_core.opencoesione as ocmod
+
+    class _FakeOC:
+        async def __aenter__(self):  # noqa: ANN204
+            return self
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+        async def search_projects(self, **_):  # noqa: ANN003, ANN201
+            return {"results": [
+                {"clp": "SELF1", "titolo": "Progetto locale", "tema": "x",
+                 "finanziamento_totale": 9_000_000.0, "territori": ["gioia-del-colle-comune"]},
+                {"clp": "PEER1", "titolo": "Hub Altamura", "tema": "trasporti",
+                 "finanziamento_totale": 2_100_000.0, "territori": ["altamura-comune"]},
+            ]}
+
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _FakeOC)
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_comparabili_uncached(req)
+    assert out is not None
+    clps = {p["clp"] for p in out["progetti"]}
+    assert clps == {"PEER1"}  # SELF1 escluso via slug
+    assert out["progetti"][0]["url"].endswith("/progetti/peer1/")
