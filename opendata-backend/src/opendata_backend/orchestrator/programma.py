@@ -1286,6 +1286,12 @@ def build_programma_aggregator(
                 participant_sections.append(sec)
 
         evidence_urls = {r.url.strip() for r in all_resources}
+        # Il marketing territoriale (Pezzo 10) esige per ogni spunto un'ispirazione
+        # ESTERNA (fonte web). Se il web specialist non ha portato evidenza (SearXNG
+        # irraggiungibile), TUTTI gli spunti verrebbero scartati dal guardrail A+B:
+        # inutile pagare la chiamata LLM e rumoreggiare i log con scarti. Lo
+        # eseguiamo solo se c'è almeno una risorsa web nel bundle.
+        has_web_evidence = any((r.source or "").strip().lower() == "web" for r in all_resources)
         bundle = "\n\n".join(sections)
         prompt_parts = [_request_header(req)]
         if instructions_hint:
@@ -1424,8 +1430,14 @@ def build_programma_aggregator(
             # marketing territoriale. Ogni parte è validata con le regole della
             # propria modalità, poi le proposte sono FUSE in un'unica lista
             # (la categoria resta nel `generatore`/`lente`).
+            run_marketing = marketing_agent is not None and has_web_evidence
+            if marketing_agent is not None and not has_web_evidence:
+                log.info(
+                    "marketing saltato: nessuna evidenza web nel bundle "
+                    "(gli spunti verrebbero scartati dal guardrail A+B)"
+                )
             runs = [_run(programma_agent, "programma"), _run_idee(idee_agent, "idee")]
-            if marketing_agent is not None:
+            if run_marketing:
                 runs.append(_run(marketing_agent, "marketing"))
             parsed = await asyncio.gather(*runs)
             response = _build(parsed[0], "scheda")
@@ -1440,7 +1452,7 @@ def build_programma_aggregator(
                 ]
 
             _merge(response_idee)
-            if marketing_agent is not None:
+            if run_marketing:
                 _merge(_build(parsed[2], "marketing"))
             if not response.disclaimer.strip() and response_idee.disclaimer.strip():
                 response.disclaimer = response_idee.disclaimer
