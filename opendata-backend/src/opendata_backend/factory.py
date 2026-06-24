@@ -136,6 +136,15 @@ _LENS_SOURCES: dict[str, str] = {
     "comparabili": "Comparabili · progetti peer (OpenCoesione)",
 }
 
+# Comparabili (Fase B): selezione RILEVANTE dei progetti peer. Prima si prendeva il
+# top-per-importo provinciale → mega-infrastrutture (autostrade/ferrovie da 100M+€)
+# proposte come modello per un piccolo comune (assurdo). Ora: (1) tetto di importo
+# che esclude le opere fuori scala municipale, (2) diversità per tema (max N per
+# tema) così l'idee_agent trova un comparabile pertinente per più lenti.
+_COMPARABILE_IMPORTO_MAX = 15_000_000.0  # €: sopra → opera fuori scala comunale, esclusa
+_COMPARABILE_PER_TEMA = 2
+_COMPARABILE_TOP_N = 6
+
 
 async def _lens_cached(parts: tuple[str, ...], producer):  # noqa: ANN001, ANN202
     """Cache-aside su Redis per un'ancora best-effort. `producer` è una factory
@@ -934,10 +943,12 @@ class OrchestratorSession:
         i 'comuni simili l'hanno fatto' del generatore gap_comparativo. Senza questa
         iniezione il bundle ha solo i dati del comune in esame e l'LLM INVENTAVA i
         comparabili (CLP/importi/esiti — visto in produzione). Prendiamo i progetti
-        della provincia (escluso il comune stesso, best-effort per nome/codice),
-        ordinati per importo decrescente, top 5, con URL `/progetti/{clp}` citabile.
-        Fail-safe: se OpenCoesione non risponde, niente comparabili (l'idea resta
-        generica, niente invenzioni). Solo idee/completa.
+        della provincia (escluso il comune stesso, best-effort per nome/codice) che
+        siano DI SCALA MUNICIPALE (importo ≤ tetto: le mega-infrastrutture da 100M+€
+        non sono un modello sensato per un piccolo comune) e DIVERSI PER TEMA (max N
+        per tema), con URL `/progetti/{clp}` citabile. Fail-safe: se OpenCoesione non
+        risponde, niente comparabili (l'idea resta generica, niente invenzioni).
+        Solo idee/completa.
         """
         cod = (req.cod_comune or "").strip()
         if len(cod) < 3:
@@ -948,7 +959,7 @@ class OrchestratorSession:
 
             async with OpenCoesioneClient() as c:
                 res = await asyncio.wait_for(
-                    c.search_projects(cod_provincia=cod_prov, limit=50),
+                    c.search_projects(cod_provincia=cod_prov, limit=200),
                     timeout=30.0,
                 )
         except Exception as exc:
@@ -967,21 +978,33 @@ class OrchestratorSession:
             terr = " ".join(str(t) for t in (p.get("territori") or [])).lower()
             return bool(nome_slug) and nome_slug in terr
 
+        # Scala municipale: importo nel range (0, tetto]; esclude l'autostrada da 300M€.
         peers = [
             p for p in (res.get("results") or [])
-            if p.get("clp") and (p.get("finanziamento_totale") or 0) > 0 and not _is_self(p)
+            if p.get("clp")
+            and 0 < (p.get("finanziamento_totale") or 0) <= _COMPARABILE_IMPORTO_MAX
+            and not _is_self(p)
         ]
         peers.sort(key=lambda p: p.get("finanziamento_totale") or 0, reverse=True)
-        progetti = [
-            {
-                "clp": str(p["clp"]).strip(),
+        # Diversità per tema: max _COMPARABILE_PER_TEMA per tema, totale ≤ _COMPARABILE_TOP_N,
+        # così l'idee_agent trova un comparabile pertinente per più lenti (non 6 strade).
+        per_tema: dict[str, int] = {}
+        progetti: list[dict[str, Any]] = []
+        for p in peers:
+            tema = (p.get("tema") or "").strip().lower() or "altro"
+            if per_tema.get(tema, 0) >= _COMPARABILE_PER_TEMA:
+                continue
+            per_tema[tema] = per_tema.get(tema, 0) + 1
+            clp = str(p["clp"]).strip()
+            progetti.append({
+                "clp": clp,
                 "titolo": p.get("titolo") or "(senza titolo)",
                 "tema": p.get("tema"),
                 "importo": p.get("finanziamento_totale"),
-                "url": f"https://opencoesione.gov.it/it/progetti/{str(p['clp']).strip().lower()}/",
-            }
-            for p in peers[:5]
-        ]
+                "url": f"https://opencoesione.gov.it/it/progetti/{clp.lower()}/",
+            })
+            if len(progetti) >= _COMPARABILE_TOP_N:
+                break
         return {"cod_provincia": cod_prov, "progetti": progetti} if progetti else None
 
     @staticmethod
