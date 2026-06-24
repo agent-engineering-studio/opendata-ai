@@ -515,6 +515,33 @@ class _ChunkAwareIdeeAgent:
 
 
 @pytest.mark.asyncio
+async def test_comparabili_info_injects_citable_peer_projects() -> None:
+    """Fase B: i progetti peer (OpenCoesione, stessa provincia) vengono iniettati
+    come Resource citabili con URL /progetti/{clp} + sezione COMPARABILI nel bundle,
+    così gap_comparativo cita un progetto REALE invece di inventarlo."""
+    agent = _StubProgrammaAgent(_llm_json())
+    comp = {
+        "cod_provincia": "072",
+        "progetti": [
+            {"clp": "1MISE123", "titolo": "Hub logistico Altamura", "tema": "trasporti",
+             "importo": 2100000.0,
+             "url": "https://opencoesione.gov.it/it/progetti/1mise123/"},
+        ],
+    }
+    aggregate = build_programma_aggregator(
+        agent, _REQ, comparabili_info=comp,  # type: ignore[arg-type]
+    )
+    out = await aggregate(_participants())
+    # il prompt passato all'LLM contiene la sezione COMPARABILI con titolo+CLP+URL
+    assert agent.last_prompt is not None
+    assert "COMPARABILI" in agent.last_prompt
+    assert "1MISE123" in agent.last_prompt
+    assert "/progetti/1mise123/" in agent.last_prompt
+    # la risorsa peer è citabile (entra in citazioni dopo il display-clean)
+    assert any("/progetti/1mise123/" in (r.url or "") for r in out.response.citazioni)
+
+
+@pytest.mark.asyncio
 async def test_idee_chunking_runs_one_call_per_lens() -> None:
     """Fase 1: con idee_chunking l'idee_agent riceve UNA chiamata per lente
     (prompt focalizzato), ognuna cita l'URL della sua ancora → l'idea supera il
@@ -596,7 +623,7 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
         "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
         "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti",
         "_resolve_welfare", "_resolve_istruzione", "_resolve_ambiente",
-        "_resolve_sanita",
+        "_resolve_sanita", "_resolve_comparabili",
     ):
         setattr(sess, name, _none)
 
@@ -604,14 +631,14 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
                            modalita="completa")
     out = await OrchestratorSession._resolve_all_lenses(sess, req, emit=events.append)
 
-    # ritorno invariato: le 10 chiavi presenti, tutte None
+    # ritorno invariato: le 11 chiavi presenti, tutte None
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-        "welfare", "istruzione", "ambiente", "sanita",
+        "welfare", "istruzione", "ambiente", "sanita", "comparabili",
     }
     starts = [e for e in events if e["phase"] == "start"]
     ends = [e for e in events if e["phase"] == "end"]
-    assert len(starts) == 10 and len(ends) == 10
+    assert len(starts) == 11 and len(ends) == 11
     assert {e["source"] for e in starts} == set(_LENS_SOURCES.values())
     assert all("elapsed_ms" in e for e in ends)
     assert all(e.get("error") == "nessun dato" for e in ends)  # None ⇒ saltata
