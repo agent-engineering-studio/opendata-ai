@@ -230,6 +230,54 @@ async function captureNode(node: HTMLElement): Promise<string | null> {
   }
 }
 
+/** Cattura un nodo e lo scarica come PNG (usato dal pulsante "Esporta immagine" dei grafici). */
+async function exportNodePng(node: HTMLElement | null, slug: string) {
+  if (!node) return;
+  const data = await captureNode(node);
+  if (!data) return;
+  const a = document.createElement("a");
+  a.href = data;
+  a.download = `${slug}.png`;
+  a.click();
+}
+
+/**
+ * Cornice di un grafico: titolo + pulsante "Esporta immagine" (cattura solo il
+ * grafico, non il pulsante) + un'eventuale nota esplicativa sopra il grafico.
+ */
+function ChartFrame({
+  title,
+  fileSlug,
+  hint,
+  children,
+}: {
+  title: string;
+  fileSlug: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div>
+      <div className="d-flex align-items-center justify-content-between gap-2 mb-1">
+        <h3 className="h6 text-slate-500 mb-0">{title}</h3>
+        <button
+          type="button"
+          className="btn btn-link btn-sm p-0 text-decoration-none"
+          style={{ fontSize: 12 }}
+          onClick={() => exportNodePng(ref.current, fileSlug)}
+        >
+          ⬇ Esporta immagine
+        </button>
+      </div>
+      {hint}
+      <div ref={ref} className="bg-white" style={{ padding: 4 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function MaturitaInner() {
   const { getToken } = useAuth();
   const params = useSearchParams();
@@ -720,29 +768,32 @@ function PeerComparisonView({
   pc,
   dimensions,
   entityName,
+  fileSlug,
 }: {
   pc: PeerComparison;
   dimensions: Dimensions;
   entityName: string;
+  fileSlug: string;
 }) {
+  const hint = (
+    <p className="text-slate-600 mb-3" style={{ fontSize: 13 }}>
+      Tra i <strong>{pc.count} {pc.cluster_label}</strong> valutati,{" "}
+      <strong>{entityName}</strong>
+      {pc.rank != null ? (
+        <>
+          {" "}è al <strong>{pc.rank}° posto</strong>
+          {pc.better_than_pct != null ? (
+            <> — fa meglio del <strong>{pc.better_than_pct}%</strong> degli enti simili</>
+          ) : null}
+          . Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.
+        </>
+      ) : (
+        <>. Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.</>
+      )}
+    </p>
+  );
   return (
-    <div>
-      <h3 className="h6 text-slate-500">Confronto con enti simili</h3>
-      <p className="text-slate-600 mb-3" style={{ fontSize: 13 }}>
-        Tra i <strong>{pc.count} {pc.cluster_label}</strong> valutati,{" "}
-        <strong>{entityName}</strong>
-        {pc.rank != null ? (
-          <>
-            {" "}è al <strong>{pc.rank}° posto</strong>
-            {pc.better_than_pct != null ? (
-              <> — fa meglio del <strong>{pc.better_than_pct}%</strong> degli enti simili</>
-            ) : null}
-            . Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.
-          </>
-        ) : (
-          <>. Mediana del gruppo: <strong>{Math.round(pc.median_overall)}/100</strong>.</>
-        )}
-      </p>
+    <ChartFrame title="Confronto con enti simili" fileSlug={fileSlug} hint={hint}>
       <ul className="list-unstyled d-flex flex-column gap-2 mb-0" style={{ maxWidth: 640 }}>
         {DIM_KEYS.map((k) => {
           const mine = dimensions[k];
@@ -786,12 +837,78 @@ function PeerComparisonView({
       <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 11 }}>
         La tacca verticale è la mediana degli enti dello stesso tipo; il numero a destra il loro valore.
       </p>
+    </ChartFrame>
+  );
+}
+
+/** "Come migliorare": leve ordinate per impatto sul punteggio complessivo. */
+function ImproveView({
+  leve,
+  nextLevel,
+}: {
+  leve: ReturnType<typeof buildImprovements>["leve"];
+  nextLevel: ReturnType<typeof buildImprovements>["nextLevel"];
+}) {
+  return (
+    <div>
+      <h3 className="h6 text-slate-500">Come migliorare</h3>
+      {nextLevel ? (
+        <p className="mb-2" style={{ fontSize: 14 }}>
+          Mancano <strong>{Math.round(nextLevel.gap)} punti</strong> per raggiungere il livello{" "}
+          <strong>{nextLevel.name}</strong>. Gli interventi a maggiore impatto sul punteggio
+          complessivo:
+        </p>
+      ) : (
+        <p className="mb-2" style={{ fontSize: 14 }}>
+          Livello massimo raggiunto. Margini di consolidamento per dimensione:
+        </p>
+      )}
+      {leve.length === 0 ? (
+        <p className="text-slate-500" style={{ fontSize: 14 }}>
+          Tutte le dimensioni sono già al massimo: nessun intervento prioritario.
+        </p>
+      ) : (
+        <ul className="list-unstyled d-flex flex-column gap-3 mb-0">
+          {leve.map((l, i) => (
+            <li key={l.key}>
+              <div className="d-flex align-items-baseline gap-2 flex-wrap mb-1">
+                <span className="badge bg-primary">fino a +{Math.round(l.potential)} pti</span>
+                <strong style={{ fontSize: 14 }}>
+                  {RANK_LEAD[i] ?? "Inoltre"}: {l.label}
+                </strong>
+                <span className="text-slate-400" style={{ fontSize: 12 }}>
+                  oggi {Math.round(l.score)}/100
+                </span>
+              </div>
+              <p className="text-slate-600 mb-1" style={{ fontSize: 13 }}>
+                Riguarda la {DIM_DESC[l.key]}. Portarla verso 100 vale fino a{" "}
+                {Math.round(l.potential)} punti sul punteggio complessivo.
+              </p>
+              {l.recs.length ? (
+                <ul className="text-slate-600 mb-0" style={{ fontSize: 13, paddingLeft: 20 }}>
+                  {l.recs.map((r) => (
+                    <li key={r.code}>{r.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
+                  Nessun intervento puntuale rilevato qui: si tratta di consolidare e mantenere i
+                  risultati già raggiunti su questa dimensione.
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 11 }}>
+        Il potenziale è il guadagno massimo sul punteggio complessivo portando la dimensione a 100
+        (pesata secondo il modello ODM).
+      </p>
     </div>
   );
 }
 
 function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const radarRef = useRef<HTMLDivElement>(null);
   const slug = (scorecard.entity.name || "ente").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const insufficient = scorecard.insufficient_data && scorecard.guida;
@@ -800,19 +917,9 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
   const levelColor = LEVEL_COLOR[level] ?? "#334155";
   const { leve, nextLevel } = buildImprovements(scorecard);
 
-  async function exportPng() {
-    if (!cardRef.current) return;
-    const data = await captureNode(cardRef.current);
-    if (!data) return;
-    const a = document.createElement("a");
-    a.href = data;
-    a.download = `maturita-${slug || "ente"}.png`;
-    a.click();
-  }
-
   async function exportPdf() {
     const radarPng = radarRef.current ? (await captureNode(radarRef.current)) ?? undefined : undefined;
-    await downloadScorecardPdf(scorecard, radarPng);
+    await downloadScorecardPdf(scorecard, { radarPng, portfolio, improvements: { leve, nextLevel } });
   }
 
   return (
@@ -822,12 +929,9 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
         <button type="button" className="btn btn-primary btn-sm" onClick={exportPdf}>
           Esporta PDF
         </button>
-        <button type="button" className="btn btn-outline-primary btn-sm" onClick={exportPng}>
-          Esporta PNG
-        </button>
       </div>
 
-      <div ref={cardRef} className="d-flex flex-column gap-4 bg-white p-3 rounded">
+      <div className="d-flex flex-column gap-4 bg-white p-3 rounded">
         {/* Header */}
         <div className="d-flex flex-wrap align-items-center gap-3">
           <div>
@@ -851,92 +955,40 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
           <GuidaView guida={scorecard.guida!} />
         ) : (
           <>
+            {/* GRAFICI in alto: radar 4 dimensioni + confronto con enti simili */}
             <div className="row g-4">
-              {/* Radar 4 dimensioni */}
               <div className="col-lg-6">
-                <h3 className="h6 text-slate-500">Dimensioni</h3>
-                <div ref={radarRef} style={{ height: 320, backgroundColor: "#ffffff" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData} outerRadius="70%">
-                      <PolarGrid />
-                      <PolarAngleAxis dataKey="dim" tick={{ fontSize: 12 }} />
-                      <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
-                      <Radar dataKey="value" stroke="#2563eb" fill="#2563eb" fillOpacity={0.4} />
-                      <Tooltip />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
+                <ChartFrame title="Dimensioni" fileSlug={`maturita-${slug || "ente"}-dimensioni`}>
+                  <div ref={radarRef} style={{ height: 320, backgroundColor: "#ffffff" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={radarData} outerRadius="70%">
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="dim" tick={{ fontSize: 12 }} />
+                        <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+                        <Radar dataKey="value" stroke="#2563eb" fill="#2563eb" fillOpacity={0.4} />
+                        <Tooltip />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartFrame>
               </div>
 
-              {/* Come salire di livello (al posto del trend) */}
-              <div className="col-lg-6">
-                <h3 className="h6 text-slate-500">Come migliorare</h3>
-                {nextLevel ? (
-                  <p className="mb-2" style={{ fontSize: 14 }}>
-                    Mancano <strong>{Math.round(nextLevel.gap)} punti</strong> per raggiungere il
-                    livello <strong>{nextLevel.name}</strong>. Gli interventi a maggiore impatto
-                    sul punteggio complessivo:
-                  </p>
-                ) : (
-                  <p className="mb-2" style={{ fontSize: 14 }}>
-                    Livello massimo raggiunto. Margini di consolidamento per dimensione:
-                  </p>
-                )}
-                {leve.length === 0 ? (
-                  <p className="text-slate-500" style={{ fontSize: 14 }}>
-                    Tutte le dimensioni sono già al massimo: nessun intervento prioritario.
-                  </p>
-                ) : (
-                  <ul className="list-unstyled d-flex flex-column gap-3 mb-0">
-                    {leve.map((l, i) => (
-                      <li key={l.key}>
-                        <div className="d-flex align-items-baseline gap-2 flex-wrap mb-1">
-                          <span className="badge bg-primary">fino a +{Math.round(l.potential)} pti</span>
-                          <strong style={{ fontSize: 14 }}>
-                            {RANK_LEAD[i] ?? "Inoltre"}: {l.label}
-                          </strong>
-                          <span className="text-slate-400" style={{ fontSize: 12 }}>
-                            oggi {Math.round(l.score)}/100
-                          </span>
-                        </div>
-                        <p className="text-slate-600 mb-1" style={{ fontSize: 13 }}>
-                          Riguarda la {DIM_DESC[l.key]}. Portarla verso 100 vale fino a{" "}
-                          {Math.round(l.potential)} punti sul punteggio complessivo.
-                        </p>
-                        {l.recs.length ? (
-                          <ul className="text-slate-600 mb-0" style={{ fontSize: 13, paddingLeft: 20 }}>
-                            {l.recs.map((r) => (
-                              <li key={r.code}>{r.message}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
-                            Nessun intervento puntuale rilevato qui: si tratta di consolidare e
-                            mantenere i risultati già raggiunti su questa dimensione.
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-slate-400 mt-2 mb-0" style={{ fontSize: 11 }}>
-                  Il potenziale è il guadagno massimo sul punteggio complessivo portando la
-                  dimensione a 100 (pesata secondo il modello ODM).
-                </p>
-              </div>
+              {/* Confronto con enti simili (#50): posizione nel cluster + per dimensione */}
+              {scorecard.peer_comparison ? (
+                <div className="col-lg-6">
+                  <PeerComparisonView
+                    pc={scorecard.peer_comparison}
+                    dimensions={scorecard.dimensions}
+                    entityName={scorecard.entity.name}
+                    fileSlug={`maturita-${slug || "ente"}-confronto`}
+                  />
+                </div>
+              ) : null}
             </div>
 
+            {/* CARD: mosse, spiegazione punteggio, copertura, valore */}
             {/* Gap analysis (#50): mosse facili vs strategiche, collo di bottiglia */}
             {scorecard.gap ? <GapRoadmapView gap={scorecard.gap} /> : null}
-
-            {/* Confronto con enti simili (#50): posizione nel cluster + per dimensione */}
-            {scorecard.peer_comparison ? (
-              <PeerComparisonView
-                pc={scorecard.peer_comparison}
-                dimensions={scorecard.dimensions}
-                entityName={scorecard.entity.name}
-              />
-            ) : null}
 
             {/* Spiegazione per dimensione (Fase B): cosa misura ogni punteggio */}
             {scorecard.dimension_breakdown && scorecard.dimension_breakdown.length ? (
@@ -948,6 +1000,9 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
 
             {/* Valore del patrimonio (unito alla maturità) */}
             {portfolio && portfolio.count > 0 ? <ValoreCard pf={portfolio} /> : null}
+
+            {/* IN BASSO: come migliorare (leve) + raccomandazioni su come colmarle */}
+            <ImproveView leve={leve} nextLevel={nextLevel} />
 
             {/* Raccomandazioni complete: ogni gap rimanda alla sezione della guida che lo risolve */}
             <div>

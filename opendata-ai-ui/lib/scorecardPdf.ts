@@ -53,17 +53,79 @@ export type Coverage = {
   hvd_present: string[];
   hvd_missing: string[];
 };
+type Dimensions = { policy: number; portal: number; quality: number; impact: number };
+
+export type AzioneGap = {
+  code: string;
+  dimension_label: string;
+  severity: string;
+  messaggio: string;
+  sul_collo_di_bottiglia: boolean;
+};
+export type Gap = {
+  livello_attuale: string;
+  prossimo_livello: string | null;
+  punti_al_prossimo: number | null;
+  collo_di_bottiglia_label: string;
+  quick_win: AzioneGap[];
+  strategiche: AzioneGap[];
+};
+export type PeerComparison = {
+  cluster_label: string;
+  count: number;
+  rank: number | null;
+  better_than_pct: number | null;
+  median_overall: number;
+  median_dimensions: Dimensions;
+};
+export type Portfolio = {
+  count: number;
+  pct_hvd: number | null;
+  pct_open_license: number | null;
+  avg_freshness_days: number | null;
+  avg_stars: number | null;
+  avg_reuse: number | null;
+};
+export type ImprovementLeva = {
+  key: string;
+  label: string;
+  score: number;
+  potential: number;
+  recs: { code: string; message: string }[];
+};
+export type Improvements = {
+  leve: ImprovementLeva[];
+  nextLevel: { name: string; gap: number } | null;
+};
+
 export type ScorecardData = {
   entity: { name: string; type?: string | null; region?: string | null };
   level: string;
   overall: number;
-  dimensions: { policy: number; portal: number; quality: number; impact: number };
+  dimensions: Dimensions;
   n_datasets: number | null;
   insufficient_data?: boolean;
   guida?: Guida | null;
   recommendations?: { severity: string; dimension: string; message: string }[];
   dimension_breakdown?: DimensionBreakdown[];
   coverage?: Coverage | null;
+  gap?: Gap | null;
+  peer_comparison?: PeerComparison | null;
+  unmet_reuse_demand?: { count: number; items: string[]; penalty: number };
+};
+
+const DIM_LABEL: Record<string, string> = {
+  policy: "Policy",
+  portal: "Portale",
+  quality: "Qualità",
+  impact: "Impatto",
+};
+
+/** Opzioni dell'export: immagine del radar + dati ausiliari resi sulla pagina HTML. */
+export type ScorecardPdfExtras = {
+  radarPng?: string;
+  portfolio?: Portfolio | null;
+  improvements?: Improvements;
 };
 
 // Etichette HVD allineate a opendata_core.maturity.coverage.HVD_LABELS.
@@ -122,8 +184,9 @@ const LEVEL_FILL: Record<string, string> = {
   "Trend-setter": "#00cf86",
 };
 
-function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
+function scorecardContent(s: ScorecardData, extras: ScorecardPdfExtras): Content[] {
   const dim = s.dimensions;
+  const { radarPng, portfolio, improvements } = extras;
   return [
     { text: s.entity.name, fontSize: 16, bold: true, color: BRAND.primary900, margin: [0, 4, 0, 4] },
     // Badge livello colorato (es. "Fast-tracker · 67/100") — riprodotto come cella riempita.
@@ -169,11 +232,15 @@ function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
       layout: "lightHorizontalLines",
       margin: [0, 0, 0, 10],
     },
+    ...peerComparisonContent(s.peer_comparison, dim),
+    ...gapContent(s.gap),
     ...breakdownContent(s.dimension_breakdown),
     ...coverageContent(s.coverage),
+    ...portfolioContent(portfolio),
+    ...improvementsContent(improvements),
     ...(s.recommendations && s.recommendations.length
       ? [
-          { text: "Raccomandazioni", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] } as Content,
+          { text: "Raccomandazioni e come colmarle", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] } as Content,
           {
             ul: s.recommendations.map((r) => `[${r.severity}] ${r.message} — ${r.dimension}`),
             fontSize: 10,
@@ -181,6 +248,156 @@ function scorecardContent(s: ScorecardData, radarPng?: string): Content[] {
           } as Content,
         ]
       : []),
+    ...unmetReuseContent(s.unmet_reuse_demand),
+  ];
+}
+
+/** Confronto con enti simili: posizione nel cluster + per dimensione vs mediana. */
+function peerComparisonContent(pc: PeerComparison | null | undefined, dim: Dimensions): Content[] {
+  if (!pc) return [];
+  const pos =
+    pc.rank != null
+      ? `${pc.rank}° posto su ${pc.count}${pc.better_than_pct != null ? ` (meglio del ${pc.better_than_pct}% dei pari)` : ""}`
+      : `gruppo di ${pc.count} enti`;
+  return [
+    { text: "Confronto con enti simili", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+    {
+      text: `Tra i «${pc.cluster_label}»: ${pos}. Mediana del gruppo: ${Math.round(pc.median_overall)}/100.`,
+      color: BRAND.muted,
+      fontSize: 10,
+      margin: [0, 0, 0, 4],
+    },
+    {
+      table: {
+        widths: ["*", 50, 60, 50],
+        body: [
+          [
+            { text: "Dimensione", bold: true, fontSize: 9, color: BRAND.muted },
+            { text: "Ente", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Mediana", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Δ", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+          ],
+          ...(["policy", "portal", "quality", "impact"] as const).map((k) => {
+            const delta = Math.round(dim[k] - pc.median_dimensions[k]);
+            return [
+              { text: DIM_LABEL[k], fontSize: 9, color: BRAND.text },
+              { text: String(Math.round(dim[k])), fontSize: 9, alignment: "center" as const },
+              { text: String(Math.round(pc.median_dimensions[k])), fontSize: 9, alignment: "center" as const, color: BRAND.muted },
+              {
+                text: delta > 0 ? `+${delta}` : String(delta),
+                fontSize: 9,
+                alignment: "center" as const,
+                color: delta > 0 ? BRAND.green : delta < 0 ? "#dc2626" : BRAND.muted,
+              },
+            ];
+          }),
+        ],
+      },
+      layout: "lightHorizontalLines",
+      margin: [0, 0, 0, 6],
+    },
+  ];
+}
+
+/** Le mosse che contano di più: prossimo livello, collo di bottiglia, quick-win vs strategiche. */
+function gapContent(gap: Gap | null | undefined): Content[] {
+  if (!gap || (gap.quick_win.length === 0 && gap.strategiche.length === 0)) return [];
+  const intro =
+    gap.prossimo_livello && gap.punti_al_prossimo != null
+      ? `Da ${gap.livello_attuale} a ${gap.prossimo_livello} mancano ${Math.round(gap.punti_al_prossimo)} punti. Collo di bottiglia: ${gap.collo_di_bottiglia_label}.`
+      : `Livello massimo (${gap.livello_attuale}). Margine residuo più ampio su ${gap.collo_di_bottiglia_label}.`;
+  const azione = (a: AzioneGap) =>
+    `[${a.severity}] ${a.messaggio} — ${a.dimension_label}${a.sul_collo_di_bottiglia ? " ⚑" : ""}`;
+  const out: Content[] = [
+    { text: "Le mosse che contano di più", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+    { text: intro, color: BRAND.muted, fontSize: 10, margin: [0, 0, 0, 4] },
+  ];
+  if (gap.quick_win.length) {
+    out.push({ text: "Facili e rapide", bold: true, color: BRAND.text, fontSize: 10, margin: [0, 2, 0, 2] });
+    out.push({ ul: gap.quick_win.map(azione), fontSize: 9, color: BRAND.text });
+  }
+  if (gap.strategiche.length) {
+    out.push({ text: "Strategiche", bold: true, color: BRAND.text, fontSize: 10, margin: [0, 4, 0, 2] });
+    out.push({ ul: gap.strategiche.map(azione), fontSize: 9, color: BRAND.text });
+  }
+  return out;
+}
+
+/** Valore del patrimonio: KPI sintetici dei dataset valutati. */
+function portfolioContent(pf: Portfolio | null | undefined): Content[] {
+  if (!pf || pf.count <= 0) return [];
+  const pct = (v: number | null) => (v != null ? `${Math.round(v)}%` : "—");
+  const num = (v: number | null) => (v != null ? v.toFixed(1) : "—");
+  return [
+    { text: "Valore del patrimonio", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+    {
+      table: {
+        widths: ["*", "*", "*", "*", "*"],
+        body: [
+          [
+            { text: "Dataset", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Alto valore (HVD)", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Licenza aperta", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Stelle medie", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+            { text: "Riuso medio", bold: true, fontSize: 9, color: BRAND.muted, alignment: "center" as const },
+          ],
+          [
+            { text: String(pf.count), fontSize: 11, alignment: "center" as const, color: BRAND.primary },
+            { text: pct(pf.pct_hvd), fontSize: 11, alignment: "center" as const, color: BRAND.primary },
+            { text: pct(pf.pct_open_license), fontSize: 11, alignment: "center" as const, color: BRAND.primary },
+            { text: num(pf.avg_stars), fontSize: 11, alignment: "center" as const, color: BRAND.primary },
+            { text: num(pf.avg_reuse), fontSize: 11, alignment: "center" as const, color: BRAND.primary },
+          ],
+        ],
+      },
+      layout: "lightHorizontalLines",
+      margin: [0, 0, 0, 6],
+    },
+  ];
+}
+
+/** Come migliorare: leve ordinate per impatto sul punteggio complessivo. */
+function improvementsContent(imp: Improvements | undefined): Content[] {
+  if (!imp || imp.leve.length === 0) return [];
+  const out: Content[] = [
+    { text: "Come migliorare", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+  ];
+  if (imp.nextLevel) {
+    out.push({
+      text: `Mancano ${Math.round(imp.nextLevel.gap)} punti per il livello ${imp.nextLevel.name}. Interventi a maggiore impatto:`,
+      color: BRAND.muted,
+      fontSize: 10,
+      margin: [0, 0, 0, 4],
+    });
+  }
+  imp.leve.forEach((l) => {
+    out.push({
+      text: [
+        { text: `+${Math.round(l.potential)} pti · ${l.label}`, bold: true, color: BRAND.text },
+        { text: `  (oggi ${Math.round(l.score)}/100)`, color: BRAND.muted, fontSize: 9 },
+      ],
+      fontSize: 10,
+      margin: [0, 4, 0, 1],
+    });
+    if (l.recs.length) {
+      out.push({ ul: l.recs.map((r) => r.message), fontSize: 9, color: BRAND.text });
+    }
+  });
+  return out;
+}
+
+/** Domanda di riuso non soddisfatta (anello valore⇄maturità). */
+function unmetReuseContent(unmet: ScorecardData["unmet_reuse_demand"]): Content[] {
+  if (!unmet || unmet.count <= 0) return [];
+  return [
+    { text: "Domanda di riuso non soddisfatta", bold: true, color: BRAND.primary900, margin: [0, 8, 0, 4] },
+    {
+      text: "Le analisi di Territorio segnalano dati richiesti ma non ancora pubblicati: questi gap riducono l'Impatto.",
+      color: BRAND.muted,
+      fontSize: 10,
+      margin: [0, 0, 0, 4],
+    },
+    { ul: unmet.items, fontSize: 9, color: BRAND.text },
   ];
 }
 
@@ -266,9 +483,9 @@ function coverageContent(coverage?: Coverage | null): Content[] {
   return out;
 }
 
-function buildDoc(s: ScorecardData, radarPng?: string): TDocumentDefinitions {
+function buildDoc(s: ScorecardData, extras: ScorecardPdfExtras): TDocumentDefinitions {
   const body: Content[] =
-    s.insufficient_data && s.guida ? guidaContent(s.guida) : scorecardContent(s, radarPng);
+    s.insufficient_data && s.guida ? guidaContent(s.guida) : scorecardContent(s, extras);
   return {
     pageSize: "A4",
     pageMargins: [48, 48, 48, 56],
@@ -288,12 +505,15 @@ function buildDoc(s: ScorecardData, radarPng?: string): TDocumentDefinitions {
   };
 }
 
-export async function downloadScorecardPdf(s: ScorecardData, radarPng?: string): Promise<void> {
+export async function downloadScorecardPdf(
+  s: ScorecardData,
+  extras: ScorecardPdfExtras = {},
+): Promise<void> {
   const pdfMake = await loadPdfMake();
   const slug = (s.entity.name || "ente")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (pdfMake as any).createPdf(buildDoc(s, radarPng)).download(`maturita-${slug || "ente"}.pdf`);
+  (pdfMake as any).createPdf(buildDoc(s, extras)).download(`maturita-${slug || "ente"}.pdf`);
 }
