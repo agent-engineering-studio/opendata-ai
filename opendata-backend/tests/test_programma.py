@@ -390,6 +390,135 @@ def test_salvage_voce_swot_recovers_text_from_loose_shapes() -> None:
     assert _salvage_voce_swot("   ") is None
 
 
+def test_salvage_proposta_recovers_from_loose_shapes() -> None:
+    """I modelli rendono spesso `fattibilita` come stringa nuda ("alta") o
+    omettono `descrizione`: il salvage NON perde la proposta (prima veniva
+    scartata col log "proposta malformata"), recupera titolo/descrizione/
+    evidenze valide con una fattibilità prudente. L'obbligo di citazione resta
+    ai guardrail (qui evidenze può uscire vuota)."""
+    from opendata_backend.orchestrator.programma import _salvage_proposta
+
+    # fattibilita come stringa nuda + descrizione mancante → recuperata
+    loose = _salvage_proposta(
+        {
+            "titolo": "Assistenza domiciliare anziani",
+            "fattibilita": "alta",
+            "evidenze": [{"fonte": "istat", "url": "https://x", "dettaglio": "vecchiaia"}],
+        }
+    )
+    assert loose is not None
+    assert loose.titolo == "Assistenza domiciliare anziani"
+    assert loose.fattibilita.livello == "alta"
+    assert len(loose.evidenze) == 1
+
+    # livello fuori vocabolario → degrada a da_verificare, non fallisce
+    weird = _salvage_proposta({"titolo": "X", "fattibilita": {"livello": "boh"}})
+    assert weird is not None and weird.fattibilita.livello == "da_verificare"
+
+    # senza titolo → nessun recupero
+    assert _salvage_proposta({"descrizione": "senza titolo"}) is None
+    assert _salvage_proposta("stringa nuda") is None
+
+
+@pytest.mark.asyncio
+async def test_loose_proposta_survives_parse_then_guardrail_gates() -> None:
+    """Regressione del report con "Nessuna proposta": una proposta con
+    `fattibilita` stringa sopravvive al parse (prima azzerava la sezione), e se
+    cita un'evidenza risolvibile supera anche il guardrail."""
+    from opendata_backend.orchestrator.programma import _parse_llm_json
+
+    raw = _llm_json(proposte=[
+        {
+            "titolo": "Estensione assistenza domiciliare per anziani",
+            "descrizione": "Servizi a domicilio dove la vecchiaia è alta.",
+            "evidenze": [{"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "ratio 0.38"}],
+            "fattibilita": "media",  # stringa nuda invece dell'oggetto
+        }
+    ])
+    parsed = _parse_llm_json(raw)
+    assert len(parsed.proposte) == 1  # prima: scartata → 0
+
+    agent = _StubProgrammaAgent(raw)
+    aggregate = build_programma_aggregator(agent, _REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(_participants())).response
+    assert resp is not None
+    # cita _OC_URL (risorsa raccolta dai partecipanti) → supera il guardrail.
+    # Senza finanziamento, la fattibilità degrada a da_verificare.
+    assert len(resp.proposte) == 1
+    assert resp.proposte[0].fattibilita.livello == "da_verificare"
+
+
+_WELFARE_URL = "https://esploradati.istat.it/SDMXWS/rest/data/DCIS_POPRES1/welfare"
+_TUR_OSM_URL = "https://www.openstreetmap.org/relation/999999"
+
+
+class _ChunkAwareIdeeAgent:
+    """idee_agent che risponde in base alla LENTE chiesta nel prompt: con il
+    chunking riceve una chiamata per lente, ognuna con un prompt focalizzato."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    async def run(self, prompt: str) -> _StubAgentResponse:
+        self.prompts.append(prompt)
+        if "Scrivi SOLO il campo `sintesi`" in prompt:  # chiamata finale di sintesi
+            return _StubAgentResponse(json.dumps(
+                {"sintesi": "Le leve sono welfare e cultura.", "swot": {},
+                 "proposte": [], "disclaimer": ""}))
+        if "turismo_cultura" in prompt:
+            return _StubAgentResponse(json.dumps({"swot": {}, "proposte": [{
+                "titolo": "Percorso culturale diffuso", "descrizione": "d",
+                "generatore": "turismo_cultura",
+                "evidenze": [{"fonte": "osm", "url": _TUR_OSM_URL, "dettaglio": "2 musei"}],
+                "fattibilita": {"livello": "media", "motivazione": "m"}}]}))
+        if "welfare" in prompt:
+            return _StubAgentResponse(json.dumps({"swot": {}, "proposte": [{
+                "titolo": "Assistenza domiciliare anziani", "descrizione": "d",
+                "generatore": "welfare",
+                "evidenze": [{"fonte": "istat", "url": _WELFARE_URL, "dettaglio": "vecchiaia 157"}],
+                "fattibilita": {"livello": "media", "motivazione": "m"}}]}))
+        return _StubAgentResponse(json.dumps({"swot": {}, "proposte": []}))  # comparativo → vuoto
+
+
+@pytest.mark.asyncio
+async def test_idee_chunking_runs_one_call_per_lens() -> None:
+    """Fase 1: con idee_chunking l'idee_agent riceve UNA chiamata per lente
+    (prompt focalizzato), ognuna cita l'URL della sua ancora → l'idea supera il
+    guardrail. Le proposte dei chunk sono fuse; una chiamata finale fa la sintesi."""
+    agent = _ChunkAwareIdeeAgent()
+    req = ProgrammaRequest(cod_comune="072021", modalita="idee")
+    aggregate = build_programma_aggregator(
+        agent, req, idee_agent=agent, idee_chunking=True,  # type: ignore[arg-type]
+        welfare_info={"source_url": _WELFARE_URL, "anno": 2011, "indice_vecchiaia": 157.1},
+        turismo_info={"counts": {"musei": 2, "monumenti_siti": 14}, "source_url": _TUR_OSM_URL,
+                      "landmarks": []},
+    )
+    resp = (await aggregate(_participants())).response
+    assert resp is not None
+    titoli = {p.titolo for p in resp.proposte}
+    assert "Assistenza domiciliare anziani" in titoli
+    assert "Percorso culturale diffuso" in titoli
+    assert resp.idee_sintesi == "Le leve sono welfare e cultura."
+    # ≥1 chiamata per lente (welfare, turismo) + comparativo + sintesi finale
+    assert len(agent.prompts) >= 4
+    # ogni chunk è FOCALIZZATO: nessun prompt contiene più di una sezione "==="
+    lens_prompts = [p for p in agent.prompts if "EVIDENZE RACCOLTE" in p]
+    assert lens_prompts and all(p.count("=== ") <= 2 for p in lens_prompts)
+
+
+@pytest.mark.asyncio
+async def test_idee_chunking_off_uses_single_call() -> None:
+    """Flag OFF (default): comportamento invariato — UNA sola chiamata idee."""
+    agent = _ChunkAwareIdeeAgent()
+    req = ProgrammaRequest(cod_comune="072021", modalita="idee")
+    aggregate = build_programma_aggregator(
+        agent, req, idee_agent=agent,  # idee_chunking default False  # type: ignore[arg-type]
+        welfare_info={"source_url": _WELFARE_URL, "anno": 2011, "indice_vecchiaia": 157.1},
+    )
+    await aggregate(_participants())
+    assert len(agent.prompts) == 1  # nessun fan-out per-lente
+
+
 @pytest.mark.asyncio
 async def test_string_swot_voci_survive_parse_then_guardrail_gates() -> None:
     """Regressione del caso Ollama: SWOT come liste di STRINGHE non azzera la

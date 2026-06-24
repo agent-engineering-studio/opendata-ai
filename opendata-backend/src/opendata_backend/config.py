@@ -1231,9 +1231,21 @@ class Settings(BaseSettings):
     # mappa su num_predict).
     # L1 (perf sintesi): 16384 permetteva generazioni JSON enormi (sintesi lunga +
     # 6 proposte da 5-10 frasi) → i token di OUTPUT erano il costo dominante della
-    # fase di sintesi. Tetto a 8192 + istruzioni più strette (max 5 proposte, frasi
-    # 5-7). Override via env SYNTH_MAX_TOKENS.
-    synth_max_tokens: int = Field(default=8192)
+    # fase di sintesi. Era stato abbassato a 8192 + istruzioni più strette (max 5
+    # proposte, frasi 5-7). Ma con molte lenti attive (fino a 8: commercio, turismo,
+    # lavoro, trasporti, welfare, istruzione, ambiente, sanità) il JSON sintesi +
+    # SWOT arriva al tetto PRIMA delle proposte, che restavano troncate → report
+    # senza idee. Riportato a 16384 per dare margine alle proposte; chi vuole
+    # contenere il costo abbassa via env SYNTH_MAX_TOKENS.
+    synth_max_tokens: int = Field(default=16384)
+    # Chunking idee per-lente (Fase 1, dietro flag): invece di UNA chiamata
+    # idee_agent sul bundle di TUTTE le lenti — dove con molte lenti l'LLM perde
+    # l'aggancio dell'URL e i guardrail falciano le idee orfane — genera le idee
+    # con UNA chiamata per lente (contesto ridotto → cita l'URL verbatim in modo
+    # affidabile → più idee superano i guardrail). Le chiamate girano in parallelo.
+    # Off di default: A/B con "Rigenera" prima di renderlo lo standard. Override
+    # via env IDEE_CHUNKING.
+    idee_chunking: bool = Field(default=False)
     # Timeout (s) PER SINGOLO specialista del fan-out. Senza, uno specialista
     # lento (es. CKAN che ritenta download 404) blocca l'intero report fino al
     # timeout totale. Scaduto, quello specialista viene escluso e gli altri
