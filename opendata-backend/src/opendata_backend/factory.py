@@ -146,14 +146,19 @@ _COMPARABILE_PER_TEMA = 2
 _COMPARABILE_TOP_N = 6
 
 
-async def _lens_cached(parts: tuple[str, ...], producer):  # noqa: ANN001, ANN202
+async def _lens_cached(parts: tuple[str, ...], producer, *, force: bool = False):  # noqa: ANN001, ANN202
     """Cache-aside su Redis per un'ancora best-effort. `producer` è una factory
     che ritorna la coroutine da eseguire al cache-miss. Fail-open: se Redis non
-    c'è, `cache_get`/`cache_set` sono no-op e si esegue sempre il producer."""
+    c'è, `cache_get`/`cache_set` sono no-op e si esegue sempre il producer.
+
+    `force=True` (Rigenera/force_refresh) SALTA la lettura della cache e ri-esegue
+    il producer, poi RISCRIVE il valore fresco: altrimenti "Rigenera" bypassava la
+    cache F1 del report ma serviva lenti stale per 24h (es. comparabili pre-fix)."""
     key = "od:lens:" + ":".join(p for p in parts if p)
-    cached = await cache_get(key)
-    if cached is not None:
-        return cached
+    if not force:
+        cached = await cache_get(key)
+        if cached is not None:
+            return cached
     result = await producer()
     if result is not None:
         await cache_set(key, result, ttl_seconds=_LENS_TTL)
@@ -568,6 +573,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("zona", req.zona_osm_id),
             lambda: OrchestratorSession._resolve_zona_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -625,6 +631,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("zone_commerciali", req.cod_comune, req.comune_nome or ""),
             lambda: OrchestratorSession._resolve_zone_commerciali_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -679,6 +686,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("commercio", req.cod_comune),
             lambda: OrchestratorSession._resolve_commercio_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -715,6 +723,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("turismo2", req.cod_comune, req.comune_nome or ""),
             lambda: OrchestratorSession._resolve_turismo_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -794,6 +803,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("lavoro", req.cod_comune),
             lambda: OrchestratorSession._resolve_lavoro_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -821,6 +831,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("trasporti", req.cod_comune, req.comune_nome or ""),
             lambda: OrchestratorSession._resolve_trasporti_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -867,6 +878,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("welfare", req.cod_comune),
             lambda: OrchestratorSession._resolve_welfare_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -935,6 +947,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("comparabili", req.cod_comune),
             lambda: OrchestratorSession._resolve_comparabili_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -1015,6 +1028,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("istruzione", req.cod_comune),
             lambda: OrchestratorSession._resolve_istruzione_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -1072,6 +1086,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("ambiente", req.cod_comune),
             lambda: OrchestratorSession._resolve_ambiente_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod
@@ -1137,6 +1152,7 @@ class OrchestratorSession:
         return await _lens_cached(
             ("sanita", req.cod_comune),
             lambda: OrchestratorSession._resolve_sanita_uncached(req),
+            force=req.force_refresh,
         )
 
     @staticmethod

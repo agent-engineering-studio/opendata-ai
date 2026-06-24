@@ -146,3 +146,34 @@ async def test_resolve_comparabili_filters_scale_and_theme(monkeypatch) -> None:
     assert "MEGA" not in clps  # fuori scala (>15M) escluso
     assert clps.count("T3") == 0  # 3° trasporti scartato (max 2 per tema)
     assert set(clps) == {"T1", "T2", "C1"}  # 2 trasporti (i più grandi) + 1 cultura
+
+
+@pytest.mark.asyncio
+async def test_lens_cached_force_skips_read_rewrites(monkeypatch) -> None:
+    """force_refresh: `_lens_cached(force=True)` salta la lettura cache (riesegue il
+    producer anche con valore in cache) e riscrive il valore fresco; force=False
+    serve il valore in cache."""
+    import opendata_backend.factory as fac
+
+    calls = {"producer": 0, "set": 0}
+
+    async def _fake_get(_key):  # noqa: ANN001, ANN202
+        return "CACHED"
+
+    async def _fake_set(_key, _val, ttl_seconds=None):  # noqa: ANN001, ANN202
+        calls["set"] += 1
+
+    async def _producer():  # noqa: ANN202
+        calls["producer"] += 1
+        return "FRESH"
+
+    monkeypatch.setattr(fac, "cache_get", _fake_get)
+    monkeypatch.setattr(fac, "cache_set", _fake_set)
+
+    # force=False → serve la cache, producer non chiamato
+    assert await fac._lens_cached(("x", "1"), _producer) == "CACHED"
+    assert calls["producer"] == 0
+
+    # force=True → salta la cache, riesegue il producer e riscrive
+    assert await fac._lens_cached(("x", "1"), _producer, force=True) == "FRESH"
+    assert calls["producer"] == 1 and calls["set"] == 1
