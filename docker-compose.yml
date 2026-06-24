@@ -383,6 +383,8 @@ services:
       ENABLE_WEB: ${ENABLE_WEB:-false}
       WEB_MCP_URL: ${WEB_MCP_URL:-http://web-mcp:8080/mcp}
       WEB_AGENT_NAME: ${WEB_AGENT_NAME:-web}
+      # Chunking idee per-lente (più idee citate; vedi config.idee_chunking).
+      IDEE_CHUNKING: ${IDEE_CHUNKING:-false}
       # Ambito territoriale (vuoto = nessun limite; prod = Puglia).
       TERRITORIO_PROVINCE: ${TERRITORIO_PROVINCE:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
