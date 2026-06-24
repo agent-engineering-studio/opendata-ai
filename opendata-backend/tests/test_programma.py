@@ -347,6 +347,36 @@ def test_validate_degrades_fabricated_comparable() -> None:
     assert out.proposte[0].fattibilita.livello == "da_verificare"
 
 
+def test_validate_degrades_fabricated_outcome_percent() -> None:
+    """Esito quantificato attribuito a un precedente generico ('comuni simili hanno
+    ridotto … del 15%') senza progetto OpenCoesione citato → fattibilità declassata.
+    È la fabbricazione residua che sfuggiva al solo controllo su 'CLP'."""
+    prop = Proposta(
+        titolo="Formazione NEET",
+        descrizione=("Interventi analoghi avviati da comuni simili hanno ridotto "
+                     "la disoccupazione giovanile del 15% in 2 anni."),
+        evidenze=[Evidenza(fonte="istat", url=_ISTAT_URL, dettaglio="NEET 23%")],
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([prop]), {_ISTAT_URL})
+    assert out.proposte[0].fattibilita.livello == "da_verificare"
+
+
+def test_validate_keeps_comune_own_percentages() -> None:
+    """Le % di DATO DEL COMUNE (senza precedente + verbo d'effetto vicino) non sono
+    un esito fabbricato → fattibilità preservata (niente falso positivo)."""
+    prop = Proposta(
+        titolo="Servizi anziani",
+        descrizione=("Indice di vecchiaia 157.1 e dipendenza anziani 31.8%: il 10.8% "
+                     "della popolazione ha più di 75 anni."),
+        evidenze=[Evidenza(fonte="istat", url=_ISTAT_URL, dettaglio="vecchiaia 157")],
+        finanziamento=Finanziamento(linea="Inclusione", fonte_url=_ISTAT_URL, stato="x"),
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([prop]), {_ISTAT_URL})
+    assert out.proposte[0].fattibilita.livello == "alta"
+
+
 def test_validate_keeps_real_cited_comparable() -> None:
     """Comparabile reale: il CLP è in prosa E un'evidenza cita il progetto
     OpenCoesione (`/progetti/{clp}`) → fattibilità preservata."""
@@ -595,6 +625,43 @@ async def test_idee_chunking_off_uses_single_call() -> None:
     )
     await aggregate(_participants())
     assert len(agent.prompts) == 1  # nessun fan-out per-lente
+
+
+@pytest.mark.asyncio
+async def test_idee_chunking_caps_one_idea_per_lens() -> None:
+    """Cap: un chunk-lente che produce 2 idee contribuisce con 1 sola (la più
+    promettente) → niente coppie quasi-duplicate per lente."""
+
+    class _TwoPerLens:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def run(self, prompt: str) -> _StubAgentResponse:
+            self.prompts.append(prompt)
+            if "Scrivi SOLO il campo `sintesi`" in prompt:
+                return _StubAgentResponse(json.dumps(
+                    {"sintesi": "s", "swot": {}, "proposte": [], "disclaimer": ""}))
+            if "welfare" in prompt:
+                return _StubAgentResponse(json.dumps({"swot": {}, "proposte": [
+                    {"titolo": "Welfare A", "descrizione": "d", "generatore": "welfare",
+                     "evidenze": [{"fonte": "istat", "url": _WELFARE_URL, "dettaglio": "x"}],
+                     "fattibilita": {"livello": "alta", "motivazione": "m"}},
+                    {"titolo": "Welfare B", "descrizione": "d", "generatore": "welfare",
+                     "evidenze": [{"fonte": "istat", "url": _WELFARE_URL, "dettaglio": "x"}],
+                     "fattibilita": {"livello": "media", "motivazione": "m"}},
+                ]}))
+            return _StubAgentResponse(json.dumps({"swot": {}, "proposte": []}))
+
+    agent = _TwoPerLens()
+    req = ProgrammaRequest(cod_comune="072021", modalita="idee")
+    aggregate = build_programma_aggregator(
+        agent, req, idee_agent=agent, idee_chunking=True,  # type: ignore[arg-type]
+        welfare_info={"source_url": _WELFARE_URL, "anno": 2011, "indice_vecchiaia": 157.1},
+    )
+    resp = (await aggregate(_participants())).response
+    welfare_idee = [p for p in resp.proposte if p.generatore == "welfare"]
+    assert len(welfare_idee) == 1  # 2 prodotte → 1 tenuta (la più promettente)
+    assert welfare_idee[0].titolo == "Welfare A"
 
 
 @pytest.mark.asyncio

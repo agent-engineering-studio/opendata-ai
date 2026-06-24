@@ -59,6 +59,14 @@ _COMPARATIVO_GENERATORI = (
     "gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
 )
 
+# Cap/priorità idee (modalità chunked): ogni chunk produce ≤2 idee per lente, ma in
+# output ne teniamo 1 (la più promettente — i chunk listano per priorità) per lente,
+# così spariscono le coppie quasi-duplicate (es. 2 idee ambiente/sanità simili). Tetto
+# totale + ordinamento per impatto×fattibilità (fattibilità alta prima, finanziamento bonus).
+_IDEE_PER_LENS = 1
+_IDEE_MAX = 10
+_IDEE_FATT_RANK = {"alta": 3, "media": 2, "bassa": 1, "da_verificare": 0}
+
 
 # ─────────────────────────── contratto dati (spec 04 §6) ───────────────────
 
@@ -1368,11 +1376,26 @@ def build_programma_aggregator(
             merged = _LlmProgramma()
             seen_titoli: set[str] = set()
             for pc in parsed_chunks:
+                kept_from_chunk = 0
                 for p in pc.proposte:
                     key = p.titolo.strip().lower()
-                    if key and key not in seen_titoli:
-                        seen_titoli.add(key)
-                        merged.proposte.append(p)
+                    if not key or key in seen_titoli:
+                        continue
+                    if kept_from_chunk >= _IDEE_PER_LENS:
+                        break  # 1 idea per lente (la più promettente): no doppioni
+                    seen_titoli.add(key)
+                    merged.proposte.append(p)
+                    kept_from_chunk += 1
+            # Priorità globale (impatto×fattibilità) + tetto: fattibilità alta prima,
+            # finanziamento come bonus; stabile → a parità resta l'ordine dei chunk.
+            merged.proposte.sort(
+                key=lambda p: (
+                    _IDEE_FATT_RANK.get(p.fattibilita.livello, 0),
+                    p.finanziamento is not None,
+                ),
+                reverse=True,
+            )
+            merged.proposte = merged.proposte[:_IDEE_MAX]
             # Sintesi d'insieme: una chiamata finale leggera sui soli titoli (niente
             # bundle → niente problema di citazione/contesto). Best-effort.
             if merged.proposte:
