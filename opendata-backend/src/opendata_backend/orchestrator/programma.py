@@ -66,12 +66,6 @@ _COMPARATIVO_GENERATORI = (
 _IDEE_PER_LENS = 1
 _IDEE_MAX = 10
 _IDEE_FATT_RANK = {"alta": 3, "media": 2, "bassa": 1, "da_verificare": 0}
-# Tetti token per le chiamate PICCOLE del chunking: un chunk produce ≤2 idee, la
-# sintesi 2-4 frasi → non servono i 16k di synth_max_tokens. Su provider seriale
-# (Ollama) il numero di token generati è il driver principale della latenza: con N
-# chunk serializzati, capire l'output per-chunk taglia drasticamente i ~20 minuti.
-_CHUNK_MAX_TOKENS = 4000
-_SINTESI_MAX_TOKENS = 700
 
 
 # ─────────────────────────── contratto dati (spec 04 §6) ───────────────────
@@ -750,6 +744,12 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
     in smoke con un modello piccolo che ha emesso `fonte: "ospr"`.
     """
     text = raw.strip()
+    # Output vuoto / senza JSON = nessun contenuto (es. un chunk-lente senza idea,
+    # o una risposta troncata a zero): è un esito NORMALE in modalità chunked, non
+    # un errore. Ritorna una scheda vuota invece di sollevare (che `_run` loggava
+    # come ERROR con traceback, allarmante e fuorviante).
+    if not text:
+        return _LlmProgramma()
     if "```" in text:
         # taglia al primo blocco fenced (```json ... ```)
         chunks = text.split("```")
@@ -760,7 +760,9 @@ def _parse_llm_json(raw: str) -> _LlmProgramma:
                 break
     start = text.find("{")
     if start < 0:
-        raise ValueError(f"Nessun oggetto JSON nella risposta del programma_agent: {raw[:200]}")
+        log.warning("nessun oggetto JSON nella risposta (%d char, niente '{'): scheda vuota",
+                    len(text))
+        return _LlmProgramma()
     end = text.rfind("}")
     # JSON troncato (max_tokens): nessuna chiusura → prendi dal primo `{` in poi
     # e lascia che json_repair chiuda le strutture aperte.
@@ -1315,25 +1317,18 @@ def build_programma_aggregator(
         }
 
         async def _run(
-            agent: Agent, label: str, prompt_text: str | None = None, *,
-            stream: bool = True, max_tokens: int | None = None,
+            agent: Agent, label: str, prompt_text: str | None = None, *, stream: bool = True,
         ) -> _LlmProgramma:
             # `prompt_text` consente al chunking idee di passare un prompt focalizzato
             # su UNA lente; `stream=False` salta il feed live (le chiamate dei chunk
             # girano in parallelo: i loro token interlacciati garbleerebbero il feed).
-            # `max_tokens` abbassa il tetto per le chiamate piccole (chunk: ≤2 idee):
-            # su provider seriale (Ollama, num_predict) è il driver principale della
-            # latenza — un chunk non deve generare fino a synth_max_tokens (16k).
             prompt_local = prompt_text if prompt_text is not None else prompt
-            # agent_framework Agent.run prende le opzioni via `options=` (TypedDict),
-            # non un kwarg `max_tokens`; quelle del run hanno precedenza sui default.
-            extra = {"options": {"max_tokens": max_tokens}} if max_tokens else {}
             fase = _PHASE_LABEL.get(label, label)
             try:
                 if emit is not None and stream:
                     # L3: streaming dei token della sintesi → feed "thinking" live.
                     emit({"event": "status", "source": fase, "phase": "start"})
-                    stream_resp = agent.run(prompt_local, stream=True, **extra)
+                    stream_resp = agent.run(prompt_local, stream=True)
                     async for update in stream_resp:
                         if getattr(update, "text", None):
                             emit({"event": "thinking", "source": fase, "delta": update.text})
@@ -1341,7 +1336,7 @@ def build_programma_aggregator(
                     raw = (getattr(final, "text", None) or str(final)).strip()
                     emit({"event": "status", "source": fase, "phase": "end"})
                 else:
-                    llm_result = await agent.run(prompt_local, **extra)
+                    llm_result = await agent.run(prompt_local)
                     raw = (getattr(llm_result, "text", None) or str(llm_result)).strip()
                 return _parse_llm_json(raw)
             except Exception:
@@ -1377,8 +1372,7 @@ def build_programma_aggregator(
             if emit is not None:
                 emit({"event": "status", "source": fase, "phase": "start"})
             parsed_chunks = await asyncio.gather(*[
-                _run(agent, label, _chunk_idee_prompt(gens, sec), stream=False,
-                     max_tokens=_CHUNK_MAX_TOKENS)
+                _run(agent, label, _chunk_idee_prompt(gens, sec), stream=False)
                 for _, gens, sec in chunks
             ])
             merged = _LlmProgramma()
@@ -1409,7 +1403,6 @@ def build_programma_aggregator(
             if merged.proposte:
                 merged.sintesi = (await _run(
                     agent, label, _sintesi_idee_prompt(merged.proposte), stream=False,
-                    max_tokens=_SINTESI_MAX_TOKENS,
                 )).sintesi
             if emit is not None:
                 emit({"event": "status", "source": fase, "phase": "end"})

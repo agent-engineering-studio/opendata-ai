@@ -629,44 +629,14 @@ async def test_idee_chunking_runs_one_call_per_lens() -> None:
 
 
 @pytest.mark.asyncio
-async def test_idee_chunk_calls_cap_max_tokens() -> None:
-    """Perf: le chiamate dei chunk (≤2 idee) e la sintesi passano un tetto token
-    BASSO via `options.max_tokens`, non i 16k di synth — su provider seriale (Ollama)
-    è il driver della latenza (~20 min → molto meno)."""
-    from opendata_backend.orchestrator.programma import (
-        _CHUNK_MAX_TOKENS,
-        _SINTESI_MAX_TOKENS,
-    )
+async def test_empty_chunk_output_is_graceful_not_error() -> None:
+    """Un chunk che restituisce testo VUOTO (es. lente senza idea, o risposta
+    troncata) NON deve sollevare: contribuisce 0 idee, il report resta valido."""
+    from opendata_backend.orchestrator.programma import _parse_llm_json
 
-    class _RecAgent:
-        def __init__(self) -> None:
-            self.max_tokens_seen: list[int | None] = []
-
-        async def run(self, prompt: str, **kw) -> _StubAgentResponse:  # noqa: ANN003
-            opts = kw.get("options") or {}
-            self.max_tokens_seen.append(opts.get("max_tokens"))
-            if "Scrivi SOLO il campo `sintesi`" in prompt:
-                return _StubAgentResponse(json.dumps(
-                    {"sintesi": "s", "swot": {}, "proposte": [], "disclaimer": ""}))
-            if "welfare" in prompt:
-                return _StubAgentResponse(json.dumps({"swot": {}, "proposte": [{
-                    "titolo": "W", "descrizione": "d", "generatore": "welfare",
-                    "evidenze": [{"fonte": "istat", "url": _WELFARE_URL, "dettaglio": "x"}],
-                    "fattibilita": {"livello": "media", "motivazione": "m"}}]}))
-            return _StubAgentResponse(json.dumps({"swot": {}, "proposte": []}))
-
-    agent = _RecAgent()
-    req = ProgrammaRequest(cod_comune="072021", modalita="idee")
-    aggregate = build_programma_aggregator(
-        agent, req, idee_agent=agent, idee_chunking=True,  # type: ignore[arg-type]
-        welfare_info={"source_url": _WELFARE_URL, "anno": 2011, "indice_vecchiaia": 157.1},
-    )
-    await aggregate(_participants())
-    seen = [m for m in agent.max_tokens_seen if m is not None]
-    assert seen, "nessuna chiamata col tetto token"
-    assert _CHUNK_MAX_TOKENS in agent.max_tokens_seen   # chunk per-lente
-    assert _SINTESI_MAX_TOKENS in agent.max_tokens_seen  # sintesi finale
-    assert all(m <= _CHUNK_MAX_TOKENS for m in seen)     # mai i 16k di synth
+    assert _parse_llm_json("") .proposte == []          # vuoto → scheda vuota
+    assert _parse_llm_json("   \n ").proposte == []      # solo whitespace
+    assert _parse_llm_json("nessun json qui").proposte == []  # niente '{' → vuoto, non raise
 
 
 @pytest.mark.asyncio
