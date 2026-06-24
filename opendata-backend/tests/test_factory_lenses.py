@@ -107,3 +107,42 @@ async def test_resolve_comparabili_excludes_self_by_slug(monkeypatch) -> None:
     clps = {p["clp"] for p in out["progetti"]}
     assert clps == {"PEER1"}  # SELF1 escluso via slug
     assert out["progetti"][0]["url"].endswith("/progetti/peer1/")
+
+
+@pytest.mark.asyncio
+async def test_resolve_comparabili_filters_scale_and_theme(monkeypatch) -> None:
+    """#1 rilevanza: esclude le opere fuori scala municipale (importo > tetto) e
+    limita a max 2 progetti per tema → comparabili pertinenti e diversi, non 6 strade."""
+    import opendata_core.opencoesione as ocmod
+
+    projects = [
+        {"clp": "MEGA", "titolo": "Autostrada", "tema": "trasporti",
+         "finanziamento_totale": 300_000_000.0, "territori": ["bari-comune"]},
+        {"clp": "T1", "titolo": "Strada 1", "tema": "trasporti",
+         "finanziamento_totale": 5_000_000.0, "territori": ["altamura-comune"]},
+        {"clp": "T2", "titolo": "Strada 2", "tema": "trasporti",
+         "finanziamento_totale": 4_000_000.0, "territori": ["bitonto-comune"]},
+        {"clp": "T3", "titolo": "Strada 3", "tema": "trasporti",
+         "finanziamento_totale": 3_000_000.0, "territori": ["modugno-comune"]},
+        {"clp": "C1", "titolo": "Museo", "tema": "cultura e turismo",
+         "finanziamento_totale": 2_000_000.0, "territori": ["bitetto-comune"]},
+    ]
+
+    class _FakeOC:
+        async def __aenter__(self):  # noqa: ANN204
+            return self
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+        async def search_projects(self, **_):  # noqa: ANN003, ANN201
+            return {"results": projects}
+
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _FakeOC)
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_comparabili_uncached(req)
+    assert out is not None
+    clps = [p["clp"] for p in out["progetti"]]
+    assert "MEGA" not in clps  # fuori scala (>15M) escluso
+    assert clps.count("T3") == 0  # 3° trasporti scartato (max 2 per tema)
+    assert set(clps) == {"T1", "T2", "C1"}  # 2 trasporti (i più grandi) + 1 cultura
