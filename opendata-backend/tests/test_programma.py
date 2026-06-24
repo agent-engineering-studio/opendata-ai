@@ -515,6 +515,23 @@ class _ChunkAwareIdeeAgent:
 
 
 @pytest.mark.asyncio
+async def test_marketing_skipped_without_web_evidence() -> None:
+    """#3: in modalità completa, se il bundle non ha evidenza web (source='web'),
+    il marketing_agent NON viene eseguito (gli spunti verrebbero scartati dal
+    guardrail A+B) — niente chiamata sprecata."""
+    programma = _StubProgrammaAgent(_llm_json())
+    idee = _StubProgrammaAgent(_llm_json(proposte=[]))
+    marketing = _StubProgrammaAgent(_llm_json(proposte=[]))
+    req = ProgrammaRequest(cod_comune="072021", modalita="completa")
+    aggregate = build_programma_aggregator(
+        programma, req, idee_agent=idee, marketing_agent=marketing,  # type: ignore[arg-type]
+    )
+    # _participants() porta solo opencoesione + istat (nessun source='web')
+    await aggregate(_participants())
+    assert marketing.last_prompt is None  # marketing non invocato
+
+
+@pytest.mark.asyncio
 async def test_comparabili_info_injects_citable_peer_projects() -> None:
     """Fase B: i progetti peer (OpenCoesione, stessa provincia) vengono iniettati
     come Resource citabili con URL /progetti/{clp} + sezione COMPARABILI nel bundle,
