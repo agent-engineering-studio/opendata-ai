@@ -177,3 +177,25 @@ async def test_lens_cached_force_skips_read_rewrites(monkeypatch) -> None:
     # force=True → salta la cache, riesegue il producer e riscrive
     assert await fac._lens_cached(("x", "1"), _producer, force=True) == "FRESH"
     assert calls["producer"] == 1 and calls["set"] == 1
+
+
+@pytest.mark.asyncio
+async def test_lens_cached_force_falls_back_to_stale_on_failure(monkeypatch) -> None:
+    """force_refresh + fetch fresco fallito (None: es. ISTAT TimeoutError) → ripiega
+    sul valore in cache stantio invece di perdere la lente (niente report impoverito)."""
+    import opendata_backend.factory as fac
+
+    async def _fake_get(_key):  # noqa: ANN001, ANN202
+        return "STALE"
+
+    async def _noset(_key, _val, ttl_seconds=None):  # noqa: ANN001, ANN202
+        pass
+
+    async def _failing():  # noqa: ANN202
+        return None  # i resolver sono fail-safe: ritornano None su timeout
+
+    monkeypatch.setattr(fac, "cache_get", _fake_get)
+    monkeypatch.setattr(fac, "cache_set", _noset)
+
+    # force=True ma producer fallisce → usa la cache stantia (non None)
+    assert await fac._lens_cached(("x", "1"), _failing, force=True) == "STALE"

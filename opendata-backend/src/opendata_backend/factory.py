@@ -153,7 +153,10 @@ async def _lens_cached(parts: tuple[str, ...], producer, *, force: bool = False)
 
     `force=True` (Rigenera/force_refresh) SALTA la lettura della cache e ri-esegue
     il producer, poi RISCRIVE il valore fresco: altrimenti "Rigenera" bypassava la
-    cache F1 del report ma serviva lenti stale per 24h (es. comparabili pre-fix)."""
+    cache F1 del report ma serviva lenti stale per 24h (es. comparabili pre-fix).
+    Ma se il fetch fresco FALLISCE (None: es. ISTAT live in TimeoutError), su force
+    si RIPIEGA sulla cache stantia invece di perdere la lente — fresh-quando-possibile,
+    last-known-good altrimenti (niente report impoverito per un timeout transitorio)."""
     key = "od:lens:" + ":".join(p for p in parts if p)
     if not force:
         cached = await cache_get(key)
@@ -162,6 +165,12 @@ async def _lens_cached(parts: tuple[str, ...], producer, *, force: bool = False)
     result = await producer()
     if result is not None:
         await cache_set(key, result, ttl_seconds=_LENS_TTL)
+        return result
+    if force:  # fetch fresco fallito → non perdere la lente: usa il valore in cache
+        cached = await cache_get(key)
+        if cached is not None:
+            log.info("lente %s: fetch fresco fallito → uso il valore in cache (stantio)", key)
+            return cached
     return result
 
 
