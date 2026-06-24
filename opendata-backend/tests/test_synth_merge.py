@@ -640,3 +640,47 @@ def test_is_placeholder_url_rejects_hallucinated_uuid() -> None:
     assert not _is_placeholder_url(
         "http://dati.cittametropolitana.bo.it/Engine/SIT_PMC_ARCHI.zip"
     )
+
+
+@pytest.mark.asyncio
+async def test_build_workflow_hands_framework_a_single_arg_aggregator(monkeypatch) -> None:
+    """Regression: agent_framework dispatches the aggregator by parameter count
+    (`>=2` → invoked as `(results, WorkflowContext)`). `build_aggregator` returns a
+    2-param callable whose 2nd arg is an `emit` callback (only used by
+    run_streaming). If `build_workflow` handed that straight to the framework, the
+    WorkflowContext would bind to `emit`, `emit(...)` would raise
+    "'WorkflowContext' object is not callable", and synth would silently degrade to
+    concatenated narratives. So build_workflow must expose a strict 1-arg adapter.
+    """
+    import inspect
+
+    from opendata_backend.orchestrator import workflow as wf
+
+    captured: dict[str, Any] = {}
+
+    class _FakeBuilder:
+        def __init__(self, participants: list[Any]) -> None:
+            self.participants = participants
+
+        def with_aggregator(self, cb: Any) -> "_FakeBuilder":
+            captured["cb"] = cb
+            return self
+
+        def build(self) -> str:
+            return "workflow-sentinel"
+
+    monkeypatch.setattr(wf, "ConcurrentBuilder", _FakeBuilder)
+
+    synth = _StubAgent("Sintesi unificata.")
+    aggregator = build_aggregator(synth)  # type: ignore[arg-type]
+    built = wf.build_workflow([object()], aggregator)
+    assert built == "workflow-sentinel"
+
+    cb = captured["cb"]
+    # Must be exactly 1 parameter so the framework never injects a WorkflowContext.
+    assert len(inspect.signature(cb).parameters) == 1
+
+    # Framework's 1-arg dispatch: emit stays None → the synth agent actually runs
+    # (real synthesis), proving we're not on the degraded fallback path.
+    out = await cb([_result("ckan", _ckan_reply([])), _result("istat", _istat_reply([]))])
+    assert "Sintesi unificata." in out.text
