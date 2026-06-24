@@ -176,23 +176,21 @@ def _generatore_ok(prop) -> bool:
 
 
 def _generatore_marketing_ok(prop) -> bool:
-    """Lo spunto marketing soddisfa la regola (A)+(B)? (Pezzo 10).
+    """Lo spunto marketing è difendibile? (Pezzo 10, regola DEGRADABILE).
 
-    - generatore ∈ GENERATORI_MARKETING;
-    - (A) ≥1 evidenza LOCALE verificabile (fonte_tipo "dato_locale");
-    - (B) ≥1 evidenza ESTERNA (fonte web → "ispirazione_esterna").
-    Le evidenze qui sono già filtrate a quelle con URL risolvibile, quindi (B)
-    implica un precedente esterno effettivamente fetchabile. Manca (A) o (B)
-    → lo spunto è scartato (non degradato): senza premessa locale non è
-    difendibile, senza precedente esterno non è "marketing che prende spunto".
+    Requisito MINIMO: generatore ∈ GENERATORI_MARKETING + ≥1 evidenza LOCALE
+    verificabile (fonte_tipo "dato_locale"). L'ispirazione ESTERNA (fonte web →
+    "ispirazione_esterna") NON è più un gate: è un BONUS che alza la fattibilità
+    (gestito in validate_programma). Così il marketing DEGRADA invece di sparire
+    quando il web specialist non produce un precedente esterno — vale per QUALSIASI
+    provider configurato (es. Ollama), senza casi-speciali. Senza premessa locale,
+    però, lo spunto resta indifendibile → scartato.
     """
     if prop.generatore not in GENERATORI_MARKETING:
         return False
-    has_local = any(getattr(e, "fonte_tipo", "dato_locale") == "dato_locale" for e in prop.evidenze)
-    has_external = any(
-        getattr(e, "fonte_tipo", None) == "ispirazione_esterna" for e in prop.evidenze
+    return any(
+        getattr(e, "fonte_tipo", "dato_locale") == "dato_locale" for e in prop.evidenze
     )
-    return has_local and has_external
 
 
 # Claim di un comparabile NON verificabile. Due firme:
@@ -302,20 +300,18 @@ def validate_programma(
                 prop.titolo[:40],
             )
             prop.fattibilita.livello = "da_verificare"
-        # Marketing: fattibilità mai "alta" su SOLA base esterna — serve un
-        # riscontro locale (difesa ridondante: _generatore_marketing_ok già lo
-        # impone, ma tiene la regola esplicita per chiarezza/test).
-        if (
-            modalita == "marketing"
-            and prop.fattibilita.livello == "alta"
-            and prop.evidenze
-            and all(getattr(e, "fonte_tipo", None) == "ispirazione_esterna" for e in prop.evidenze)
-        ):
-            log.info(
-                "guardrail marketing: spunto %r solo esterno → fattibilità degradata a media",
-                prop.titolo[:40],
-            )
-            prop.fattibilita.livello = "media"
+        # Marketing DEGRADABILE: la fattibilità "alta" richiede SIA premessa locale
+        # SIA precedente esterno (ispirazione_esterna). Se manca una delle due —
+        # solo locale (es. web specialist vuoto/Ollama) o solo esterno — si degrada
+        # a "media". Così lo spunto sopravvive (non sparisce) con confidenza ridotta.
+        if modalita == "marketing" and prop.fattibilita.livello == "alta":
+            tipi = {getattr(e, "fonte_tipo", "dato_locale") for e in prop.evidenze}
+            if not ({"dato_locale", "ispirazione_esterna"} <= tipi):
+                log.info(
+                    "guardrail marketing: spunto %r senza locale+esterno → fattibilità a media",
+                    prop.titolo[:40],
+                )
+                prop.fattibilita.livello = "media"
         # Tier documentale (spec 09): fattibilità mai "alta" su SOLA base
         # documentale — serve almeno un riscontro certificato.
         if (

@@ -545,10 +545,10 @@ class _ChunkAwareIdeeAgent:
 
 
 @pytest.mark.asyncio
-async def test_marketing_skipped_without_web_evidence() -> None:
-    """#3: in modalità completa, se il bundle non ha evidenza web (source='web'),
-    il marketing_agent NON viene eseguito (gli spunti verrebbero scartati dal
-    guardrail A+B) — niente chiamata sprecata."""
+async def test_marketing_runs_even_without_web_evidence() -> None:
+    """Marketing degradabile: in modalità completa il marketing_agent gira SEMPRE
+    quando presente (niente skip "senza web"), così produce spunti solo-locali
+    degradati su qualsiasi provider invece di sparire."""
     programma = _StubProgrammaAgent(_llm_json())
     idee = _StubProgrammaAgent(_llm_json(proposte=[]))
     marketing = _StubProgrammaAgent(_llm_json(proposte=[]))
@@ -556,9 +556,23 @@ async def test_marketing_skipped_without_web_evidence() -> None:
     aggregate = build_programma_aggregator(
         programma, req, idee_agent=idee, marketing_agent=marketing,  # type: ignore[arg-type]
     )
-    # _participants() porta solo opencoesione + istat (nessun source='web')
+    # _participants() non porta evidenza web, ma il marketing gira lo stesso
     await aggregate(_participants())
-    assert marketing.last_prompt is None  # marketing non invocato
+    assert marketing.last_prompt is not None  # marketing invocato (degrada, non salta)
+
+
+def test_marketing_solo_local_degrades_feasibility() -> None:
+    """Uno spunto marketing con SOLA premessa locale (niente esterno) sopravvive
+    ma con fattibilità degradata da 'alta' a 'media'."""
+    solo_local = Proposta(
+        titolo="Itinerario locale", descrizione="d",
+        generatore="asset_sottoutilizzato", lente="turismo_cultura",
+        evidenze=[Evidenza(fonte="osm", url=_OSM_URL, dettaglio="castello")],
+        fattibilita=Fattibilita(livello="alta", motivazione="m"),
+    )
+    out = validate_programma(_resp([solo_local]), {_OSM_URL}, modalita="marketing")
+    assert len(out.proposte) == 1  # sopravvive (degradabile)
+    assert out.proposte[0].fattibilita.livello == "media"  # alta → media (manca esterno)
 
 
 @pytest.mark.asyncio
@@ -1520,18 +1534,19 @@ def _spunto(generatore: str | None, lente: str, evidenze: list[dict[str, Any]]) 
 
 
 @pytest.mark.asyncio
-async def test_marketing_mode_enforces_local_plus_external() -> None:
-    """Regola (A)+(B): ogni spunto cita una premessa locale + un precedente web,
-    e il `generatore` deve essere di marketing — altrimenti è SCARTATO."""
+async def test_marketing_mode_degrades_without_external() -> None:
+    """Regola DEGRADABILE: serve la PREMESSA LOCALE; l'ispirazione esterna è un
+    BONUS, non un gate. Solo-locale SOPRAVVIVE (fattibilità ≤ media); solo-esterno
+    e generatore non-marketing restano SCARTATI."""
     ev_local = {"fonte": "osm", "url": _OSM_URL, "dettaglio": "POI castello"}
     ev_web = {"fonte": "web", "url": _WEB_URL, "dettaglio": "spunto da: comune X"}
     agent = _StubProgrammaAgent(
         _llm_json(
             swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
             proposte=[
-                _spunto("caso_analogo", "turismo_cultura", [ev_local, ev_web]),    # ok
-                _spunto("asset_sottoutilizzato", "turismo_cultura", [ev_local]),   # manca web → out
-                _spunto("domanda_emergente", "viabilita_mobilita", [ev_web]),      # manca locale → out
+                _spunto("caso_analogo", "turismo_cultura", [ev_local, ev_web]),    # locale+esterno
+                _spunto("asset_sottoutilizzato", "turismo_cultura", [ev_local]),   # solo locale → degrada, resta
+                _spunto("domanda_emergente", "viabilita_mobilita", [ev_web]),      # solo esterno → out
                 _spunto("gap_comparativo", "turismo_cultura", [ev_local, ev_web]), # gen non marketing → out
             ],
         )
@@ -1551,12 +1566,11 @@ async def test_marketing_mode_enforces_local_plus_external() -> None:
     )
     resp = (await aggregate(parts)).response
     assert resp is not None
-    assert [p.generatore for p in resp.proposte] == ["caso_analogo"]
-    kept = resp.proposte[0]
-    assert kept.lente == "turismo_cultura"
-    # fonte_tipo derivato: la premessa locale e l'ispirazione esterna distinte.
-    tipi = {e.fonte_tipo for e in kept.evidenze}
-    assert tipi == {"dato_locale", "ispirazione_esterna"}
+    # solo-locale sopravvive (degradato), solo-esterno e non-marketing scartati
+    assert [p.generatore for p in resp.proposte] == ["caso_analogo", "asset_sottoutilizzato"]
+    # lo spunto solo-locale ha la sola premessa locale
+    solo_local = next(p for p in resp.proposte if p.generatore == "asset_sottoutilizzato")
+    assert {e.fonte_tipo for e in solo_local.evidenze} == {"dato_locale"}
 
 
 def test_marketing_requires_marketing_agent() -> None:
