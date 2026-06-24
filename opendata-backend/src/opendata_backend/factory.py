@@ -133,6 +133,7 @@ _LENS_SOURCES: dict[str, str] = {
     "istruzione": "Istruzione · scuole",
     "ambiente": "Ambiente · rischio idrogeologico",
     "sanita": "Sanità di prossimità",
+    "comparabili": "Comparabili · progetti peer (OpenCoesione)",
 }
 
 
@@ -918,6 +919,66 @@ class OrchestratorSession:
             return None
 
     @staticmethod
+    async def _resolve_comparabili(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Comparabili peer con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("comparabili", req.cod_comune),
+            lambda: OrchestratorSession._resolve_comparabili_uncached(req),
+        )
+
+    @staticmethod
+    async def _resolve_comparabili_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Progetti comparabili REALI da comuni della STESSA PROVINCIA (OpenCoesione):
+        i 'comuni simili l'hanno fatto' del generatore gap_comparativo. Senza questa
+        iniezione il bundle ha solo i dati del comune in esame e l'LLM INVENTAVA i
+        comparabili (CLP/importi/esiti — visto in produzione). Prendiamo i progetti
+        della provincia (escluso il comune stesso, best-effort per nome/codice),
+        ordinati per importo decrescente, top 5, con URL `/progetti/{clp}` citabile.
+        Fail-safe: se OpenCoesione non risponde, niente comparabili (l'idea resta
+        generica, niente invenzioni). Solo idee/completa.
+        """
+        cod = (req.cod_comune or "").strip()
+        if len(cod) < 3:
+            return None
+        cod_prov = cod[:3]
+        try:
+            from opendata_core.opencoesione import OpenCoesioneClient
+
+            async with OpenCoesioneClient() as c:
+                res = await asyncio.wait_for(
+                    c.search_projects(cod_provincia=cod_prov, limit=50),
+                    timeout=30.0,
+                )
+        except Exception as exc:
+            _log_lens_skip("comparabili peer OpenCoesione non risolti per provincia %s",
+                           cod_prov, exc=exc)
+            return None
+        nome = (req.comune_nome or "").strip().lower()
+
+        def _is_self(p: dict[str, Any]) -> bool:
+            terr = " ".join(str(t) for t in (p.get("territori") or [])).lower()
+            return (nome and nome in terr) or (cod in terr)
+
+        peers = [
+            p for p in (res.get("results") or [])
+            if p.get("clp") and (p.get("finanziamento_totale") or 0) > 0 and not _is_self(p)
+        ]
+        peers.sort(key=lambda p: p.get("finanziamento_totale") or 0, reverse=True)
+        progetti = [
+            {
+                "clp": str(p["clp"]).strip(),
+                "titolo": p.get("titolo") or "(senza titolo)",
+                "tema": p.get("tema"),
+                "importo": p.get("finanziamento_totale"),
+                "url": f"https://opencoesione.gov.it/it/progetti/{str(p['clp']).strip().lower()}/",
+            }
+            for p in peers[:5]
+        ]
+        return {"cod_provincia": cod_prov, "progetti": progetti} if progetti else None
+
+    @staticmethod
     async def _resolve_istruzione(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora ISTRUZIONE con cache Redis 24h (vedi `_lens_cached`)."""
         if req.modalita not in ("idee", "completa"):
@@ -1172,6 +1233,7 @@ class OrchestratorSession:
             ("istruzione", self._resolve_istruzione(req)),
             ("ambiente", self._resolve_ambiente(req)),
             ("sanita", self._resolve_sanita(req)),
+            ("comparabili", self._resolve_comparabili(req)),
         ]
         loop = asyncio.get_event_loop()
 
@@ -1200,7 +1262,7 @@ class OrchestratorSession:
         out = dict(pairs)
         return {k: out[k] for k in (
             "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-            "welfare", "istruzione", "ambiente", "sanita",
+            "welfare", "istruzione", "ambiente", "sanita", "comparabili",
         )}
 
     async def run_programma_streaming(
@@ -1272,6 +1334,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                comparabili_info=lenses["comparabili"],
                 idee_chunking=self._settings.idee_chunking,
             )
             task_text = build_programma_task(
@@ -1468,6 +1531,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                comparabili_info=lenses["comparabili"],
                 idee_chunking=self._settings.idee_chunking,
             )
             workflow = build_workflow(self._participants, aggregator)

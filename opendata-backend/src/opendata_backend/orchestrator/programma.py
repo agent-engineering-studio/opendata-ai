@@ -849,6 +849,7 @@ def build_programma_aggregator(
     istruzione_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
+    comparabili_info: dict[str, Any] | None = None,
     idee_chunking: bool = False,
 ) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
@@ -1244,6 +1245,45 @@ def build_programma_aggregator(
                     "numeri e citi la fonte."
                 )
                 _add_anchor("sanita", narrative, san_resources)
+
+        # Ancora COMPARABILI deterministica (OpenCoesione, progetti peer della stessa
+        # provincia): i "comuni simili l'hanno fatto" del generatore gap_comparativo,
+        # ciascuno con URL /progetti/{clp} CITABILE. Senza, l'LLM inventava i
+        # comparabili (CLP/importi/esiti). Va sia in `sections` (path standard) sia in
+        # `participant_sections` (così il chunk "comparativo" della modalità idee la vede).
+        if comparabili_info and comparabili_info.get("progetti"):
+            comp_resources: list[Resource] = []
+            righe: list[str] = []
+            seen = {r.url.strip() for r in all_resources}
+            for p in comparabili_info["progetti"]:
+                url = (p.get("url") or "").strip()
+                if not url:
+                    continue
+                r = Resource(
+                    name=f"OpenCoesione — {p.get('titolo')} (CLP {p.get('clp')})",
+                    url=url, format="JSON", source="opencoesione",
+                )
+                comp_resources.append(r)
+                if url not in seen:
+                    all_resources.append(r)
+                    seen.add(url)
+                imp = f"{p['importo']:,.0f} €".replace(",", ".") if p.get("importo") else "importo n.d."
+                righe.append(
+                    f"- {p.get('titolo')} (CLP {p.get('clp')}, {imp}, tema "
+                    f"{p.get('tema') or 'n.d.'}) | {url}"
+                )
+            if comp_resources:
+                narrative = (
+                    "Progetti comparabili REALI di comuni della stessa provincia "
+                    "(OpenCoesione, ordinati per importo). USALI per il generatore "
+                    "gap_comparativo: cita il PROGETTO SPECIFICO col suo URL /progetti/ "
+                    "nelle `evidenze` e riporta titolo + CLP + importo nel `dettaglio`. "
+                    "NON inventare comparabili diversi da questi; se nessuno è pertinente "
+                    "all'idea, non citare alcun comparabile.\n" + "\n".join(righe)
+                )
+                sec = _bundle_section("comparabili", narrative, comp_resources)
+                sections.append(sec)
+                participant_sections.append(sec)
 
         evidence_urls = {r.url.strip() for r in all_resources}
         bundle = "\n\n".join(sections)
