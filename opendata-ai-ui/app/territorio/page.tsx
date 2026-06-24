@@ -387,11 +387,18 @@ function TerritorioInner() {
                             aria-hidden="true"
                             title="nessun dato da questa fonte"
                             style={{ opacity: 0.6 }}
-                          >–</span>
+                          >○</span>
                         ) : (
                           <span className="text-success flex-shrink-0" aria-hidden="true">✓</span>
                         )}
-                        <span className={s.phase === "end" ? "text-muted" : ""}>{s.label}</span>
+                        {/* label muta per gli step CONCLUSI (end/error); normale solo l'in-corso */}
+                        <span className={s.phase !== "start" ? "text-muted" : ""}>{s.label}</span>
+                        {/* etichetta esplicita: "○ … nessun dato" ≠ spinner "in corso" */}
+                        {s.phase === "error" ? (
+                          <span className="badge bg-light text-secondary border fw-normal" style={{ fontSize: "0.65rem" }}>
+                            nessun dato
+                          </span>
+                        ) : null}
                         {s.phase !== "start" && s.elapsedMs != null ? (
                           <span className="ms-auto flex-shrink-0 font-monospace text-muted" style={{ fontSize: "0.7rem", opacity: 0.7 }}>
                             {(s.elapsedMs / 1000).toFixed(1)}s
