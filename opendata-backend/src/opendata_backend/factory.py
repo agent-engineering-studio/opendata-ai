@@ -1263,6 +1263,44 @@ class OrchestratorSession:
             _log_lens_skip("presìdi sanitari OSM non risolti per %s", req.cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_aree_candidate(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Aree candidate (vuoti urbani/dismessi) via OSM — cache 24h. Solo idee/completa."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("aree", req.cod_comune),
+            lambda: OrchestratorSession._resolve_aree_uncached(req),
+            force=req.force_refresh,
+        )
+
+    @staticmethod
+    async def _resolve_aree_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Localizzazione (Fase 2): enumera i vuoti urbani candidati nel bbox del
+        comune via OSM/Overpass + il centro (per la centralità). Fail-safe: se
+        Overpass è irraggiungibile (mirror bloccati) ritorna None e l'analisi
+        procede col solo dimensionamento (Fase 1)."""
+        try:
+            from opendata_core.osm import client as osm_client
+
+            async def _work() -> dict[str, Any] | None:
+                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                if not hits:
+                    return None
+                bb = hits[0].get("boundingbox") or []
+                if len(bb) != 4:
+                    return None
+                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                cands = await osm_client.overpass_candidate_areas(bbox=(s, w, n, e), limit=15)
+                if not cands:
+                    return None
+                return {"centro": [(s + n) / 2, (w + e) / 2], "candidati": cands}
+
+            return await asyncio.wait_for(_work(), timeout=60.0)
+        except Exception as exc:  # noqa: BLE001 — fail-safe, la lente è opzionale
+            _log_lens_skip("aree candidate OSM non risolte per %s", req.cod_comune, exc=exc)
+            return None
+
     async def _resolve_all_lenses(
         self,
         req: ProgrammaRequest,
@@ -1295,6 +1333,7 @@ class OrchestratorSession:
             ("ambiente", self._resolve_ambiente(req)),
             ("sanita", self._resolve_sanita(req)),
             ("comparabili", self._resolve_comparabili(req)),
+            ("aree", self._resolve_aree_candidate(req)),
         ]
         loop = asyncio.get_event_loop()
 
@@ -1396,6 +1435,7 @@ class OrchestratorSession:
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
+                aree_info=lenses["aree"],
                 idee_chunking=self._settings.idee_chunking,
             )
             task_text = build_programma_task(
@@ -1405,6 +1445,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                aree_info=lenses["aree"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -1595,6 +1636,7 @@ class OrchestratorSession:
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
+                aree_info=lenses["aree"],
                 idee_chunking=self._settings.idee_chunking,
             )
             workflow = build_workflow(self._participants, aggregator)
@@ -1606,6 +1648,7 @@ class OrchestratorSession:
                     istruzione_info=lenses["istruzione"],
                     ambiente_info=lenses["ambiente"],
                     sanita_info=lenses["sanita"],
+                    aree_info=lenses["aree"],
                 )
             )
         outputs = events.get_outputs()
