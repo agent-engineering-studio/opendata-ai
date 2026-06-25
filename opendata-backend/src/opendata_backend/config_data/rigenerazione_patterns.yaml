@@ -1,0 +1,90 @@
+# Catalogo dei "pattern" di rigenerazione urbana a base dati.
+#
+# Ogni pattern lega un BISOGNO a un INDICATORE parametrico (target = funzione
+# della popolazione) + alle fonti, ai criteri di localizzazione e agli strumenti
+# attuativi. Il motore puro `opendata_core.rigenerazione.valuta_pattern` li esegue
+# in modo uniforme; AGGIUNGERE UN PATTERN È UNA RIGA QUI, NON CODICE
+# (rif. "Territorio in dati — Documento di metodo").
+#
+# I valori calcolati sono OBIETTIVI di programmazione (Gap = target − dotazione
+# osservata), NON misure reali. `formula.tipo` ∈ {lineare, per_mille, classi, soglia}.
+# `criteri_pesi`: matrice multicriteria 0–100 (soglia idoneità ≥60) per la Fase 2
+# (localizzazione su lotti/corridoi via OSM); qui guida solo l'accento del dominio.
+
+version: 1
+patterns:
+  - id: aree_mercatali
+    tema: "Mercato, eventi e partecipazione"
+    esempio_virtuoso: "Area mercatale «P. Munno», Sammichele di Bari"
+    indicatore: "superficie polifunzionale per abitante"
+    norma: "D.M. 1444/1968 (attrezzature di interesse comune) + modello aree mercatali polifunzionali"
+    geometria: lotto
+    fonti: [istat, osm]
+    strumenti: [PUG, perequazione, esproprio, PIRU, PPP]
+    criteri_pesi: { centralita: 20, disponibilita_giuridica: 20, abbandono: 15, dimensione: 15, urbanistica: 10, accesso: 10, vincoli: 10 }
+    formula:
+      tipo: classi
+      unita: mq
+      derivati:
+        - { nome: posteggi_indicativi, fattore: 0.0171875 }  # superficie × 0,55 ÷ 32 mq
+      classi:
+        - { max_ab: 2000, coeff: null, valore_soglia: 1750, assetto: "polo unico minimo (soglia funzionale)" }
+        - { max_ab: 5000, coeff: 1.1, assetto: "polo unico" }
+        - { max_ab: 10000, coeff: 1.0, assetto: "polo unico" }
+        - { max_ab: 20000, coeff: 0.85, assetto: "1–2 poli" }
+        - { max_ab: null, coeff: 0.7, assetto: "rete di poli (decentramento)" }
+
+  - id: verde_gioco_sport
+    tema: "Verde, gioco e sport"
+    indicatore: "9 mq/ab di verde-gioco-sport"
+    norma: "D.M. 1444/1968 (9 mq/ab a parco, gioco e sport)"
+    geometria: lotto
+    fonti: [osm, copernicus]
+    strumenti: [PUG, perequazione, PIRU]
+    criteri_pesi: { centralita: 10, disponibilita_giuridica: 20, abbandono: 15, dimensione: 20, urbanistica: 10, accesso: 15, vincoli: 10 }
+    formula: { tipo: lineare, unita: mq, coeff: 9 }
+
+  - id: impianti_sportivi
+    tema: "Impianti sportivi"
+    esempio_virtuoso: "Centro sportivo polifunzionale di quartiere"
+    indicatore: "≈4 mq/ab di impianti sportivi"
+    norma: "D.M. 1444/1968 (quota sport) + norme CONI-CIS per i singoli impianti"
+    geometria: lotto
+    fonti: [osm]
+    strumenti: [PUG, PIRU, PPP, project_financing]
+    criteri_pesi: { centralita: 10, disponibilita_giuridica: 20, abbandono: 15, dimensione: 20, urbanistica: 10, accesso: 15, vincoli: 10 }
+    formula: { tipo: lineare, unita: mq, coeff: 4 }
+
+  - id: rete_ciclabile
+    tema: "Ciclabili e mobilità dolce"
+    indicatore: "1,5 km di rete ogni 1.000 ab"
+    norma: "riferimento PUMS/europeo (Piano Generale Mobilità Ciclistica, MIT)"
+    geometria: corridoio
+    fonti: [osm, mit]
+    strumenti: [PUMS, Biciplan, PIRU]
+    criteri_pesi: { centralita: 15, disponibilita_giuridica: 20, abbandono: 10, dimensione: 10, urbanistica: 10, accesso: 20, vincoli: 15 }
+    formula: { tipo: per_mille, unita: km, coeff: 1.5, decimali: 1 }
+
+  - id: parcheggi_pubblici
+    tema: "Sosta pubblica"
+    indicatore: "2,5 mq/ab di parcheggi pubblici"
+    norma: "D.M. 1444/1968 (2,5 mq/ab a parcheggi)"
+    geometria: lotto
+    fonti: [osm]
+    strumenti: [PUG, PPP]
+    criteri_pesi: { centralita: 20, disponibilita_giuridica: 20, abbandono: 10, dimensione: 15, urbanistica: 10, accesso: 15, vincoli: 10 }
+    formula: { tipo: lineare, unita: mq, coeff: 2.5 }
+
+  - id: traffico_mobilita
+    tema: "Traffico e mobilità sostenibile"
+    indicatore: "strumento di pianificazione della mobilità"
+    norma: "PUMS; Reg. UE 2024/1679 (TEN-T) — nodi urbani entro il 2027"
+    geometria: corridoio
+    fonti: [mit, osm]
+    strumenti: [PUMS, Biciplan, "Piano del traffico"]
+    criteri_pesi: {}
+    formula:
+      tipo: soglia
+      soglia_ab: 100000
+      se_sopra: "PUMS obbligatorio"
+      se_sotto: "PUMS raccomandato (forma semplificata: Piano del traffico / Biciplan)"

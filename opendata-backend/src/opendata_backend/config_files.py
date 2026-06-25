@@ -64,10 +64,23 @@ def maturity_coverage() -> dict[str, Any]:
     return _load_yaml("maturity_coverage.yaml")
 
 
+@lru_cache(maxsize=None)
+def rigenerazione_patterns() -> list[dict[str, Any]]:
+    """Catalogo dei pattern di rigenerazione (rigenerazione_patterns.yaml).
+
+    Ritorna la lista `patterns` da iniettare nel motore puro
+    `opendata_core.rigenerazione.valuta_pattern`.
+    """
+    data = _load_yaml("rigenerazione_patterns.yaml")
+    pats = data.get("patterns")
+    return pats if isinstance(pats, list) else []
+
+
 __all__ = [
     "maturity_weights",
     "value_taxonomy",
     "civic_kpi",
     "portali_regionali",
     "maturity_coverage",
+    "rigenerazione_patterns",
 ]
