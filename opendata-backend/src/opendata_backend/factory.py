@@ -57,6 +57,8 @@ from .config import (
 from .orchestrator.programma import (
     ProgrammaRequest,
     ProgrammaResponse,
+    _vincolo_pct_comunale,
+    applica_qualita,
     build_programma_aggregator,
     build_programma_task,
 )
@@ -1651,6 +1653,10 @@ class OrchestratorSession:
                     )
                 if resolve_report_depth(self._settings) == "concise":
                     resp.disclaimer = (resp.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+                applica_qualita(
+                    resp, req,
+                    vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+                )
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
                 fw_logger.removeHandler(handler)
@@ -1718,6 +1724,10 @@ class OrchestratorSession:
             response = ProgrammaResponse.model_validate_json(text)
         if resolve_report_depth(self._settings) == "concise":
             response.disclaimer = (response.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+        applica_qualita(
+            response, req,
+            vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+        )
         return response
 
     async def run(self, query: str) -> str:
