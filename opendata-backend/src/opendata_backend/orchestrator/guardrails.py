@@ -69,7 +69,16 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
               "commercio_duc", "turismo_cultura", "lavoro", "trasporti", "welfare",
-              "istruzione", "ambiente", "sanita")
+              "istruzione", "ambiente", "sanita", "combinazione")
+
+# Host validi come premessa per QUALSIASI lente (usati dal generatore "combinazione",
+# che incrocia ≥2 segnali di domini diversi — Fase 3, "serendipità guidata").
+_LENS_HOSTS = (
+    "istat.it", "ottomilacensus.istat.it", "isprambiente.it", "openstreetmap.org",
+    "overpass-api.de", "opencoesione.gov.it", "dati.salute.gov.it", "dati.istruzione.it",
+)
+# Minimo di evidenze (URL distinti su host validi) per una combinazione difendibile.
+_COMBINAZIONE_MIN_EVIDENZE = 2
 
 # Generatori del marketing territoriale (modalità marketing, Pezzo 10). A
 # differenza dei generatori finanziari, l'ancoraggio non è OpenCoesione ma la
@@ -172,6 +181,15 @@ def _generatore_ok(prop) -> bool:
         # Lente Sanità: premessa LOCALE = dotazione farmacie Ministero della Salute.
         # Nessun requisito web.
         return any(any(d in h for d in _SANITA_HOSTS) for h in hosts)
+    if prop.generatore == "combinazione":
+        # Serendipità guidata (Fase 3): incrocio di ≥2 segnali di lenti diverse in
+        # un intervento multifunzionale. Premessa = ≥2 evidenze (URL distinti) su
+        # host-indicatori validi → la combinazione è ancorata a più dati reali.
+        valid_urls = {
+            u for u, h in zip(urls, hosts)
+            if u and any(d in h for d in _LENS_HOSTS)
+        }
+        return len(valid_urls) >= _COMBINAZIONE_MIN_EVIDENZE
     return False  # generatore mancante o sconosciuto
 
 

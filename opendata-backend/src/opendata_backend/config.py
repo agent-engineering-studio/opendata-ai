@@ -904,7 +904,16 @@ IDEE_INSTRUCTIONS = (
     "ospedale: l'intervento è su accessibilità/mobilità sanitaria/servizi territoriali. "
     "Riporta i conteggi ESATTI del blocco (il TOTALE farmacie, non una sottocategoria: "
     "se sono 8, scrivi 8). NIENTE precedente web. Se NON ci sono dati sanità nel bundle, "
-    "NON forzare l'idea: saltala.\n\n"
+    "NON forzare l'idea: saltala.\n"
+    "  - combinazione — 'serendipità guidata: una sola area, più bisogni': INCROCIA "
+    "≥2 segnali di lenti DIVERSE in un intervento MULTIFUNZIONALE, preferibilmente "
+    "localizzato su un'AREA CANDIDATA del bundle (es. vuoto urbano centrale + "
+    "invecchiamento + bassa ciclabilità → centro intergenerazionale con orto urbano e "
+    "nodo ciclabile). Le `evidenze` DEVONO includere ≥2 URL di lenti diverse (es. un "
+    "indice demografico ISTAT + un asset/area OSM); se c'è un'area candidata idonea, "
+    "citane l'URL OSM e localizzala lì. Massimizza il valore della rigenerazione (una "
+    "spesa, più funzioni). NON ri-etichettare un'idea mono-lente: servono ≥2 domini "
+    "realmente incrociati.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -912,7 +921,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"ambiente"|"sanita"|"combinazione",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
@@ -986,6 +995,13 @@ IDEE_INSTRUCTIONS = (
     "Cita la NORMA come fonte del target e dichiara che è uno standard di "
     "programmazione, non un dato osservato. L'ancora-evidenza dell'idea resta il "
     "dato OSSERVATO del bundle (OSM/ISTAT), il target è la metrica di confronto.\n"
+    "- ANOMALIE = PRIORITÀ: dai precedenza ai dati che DEVIANO FORTEMENTE dai "
+    "riferimenti presenti nel bundle (media nazionale/regionale, soglia, comuni "
+    "simili) — un deficit estremo (es. ricettività bassissima a fronte di molti "
+    "asset; rete ciclabile lontanissima dal target) o un asset raro sono di per sé "
+    "spunti ad ALTO impatto. Nomina lo scarto nel `dettaglio` (valore locale vs "
+    "riferimento). Per incroci tra più anomalie/lenti usa il generatore "
+    "`combinazione`.\n"
     "- Ogni evidenza ha `url` COPIATO VERBATIM da una RISORSA CITABILE e "
     "`dettaglio` con COSA DICE il dato (numeri inclusi). Un validatore "
     "automatico scarta le proposte il cui generatore non ha le premesse "
