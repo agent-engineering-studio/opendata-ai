@@ -538,6 +538,16 @@ def build_programma_task(
                 )
                 if sanita_info.get("osm_source_url"):
                     fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
+            # Comune SENZA ospedale: steer esplicito SEMPRE (anche se la distanza dal
+            # più vicino non è disponibile — es. Overpass/OSRM non raggiungibili), così
+            # il modello non ripiega su "costruire nuove strutture ospedaliere".
+            if sanita_info.get("ospedali") == 0:
+                bits.append(
+                    "il comune NON ha ospedali nel territorio: la leva sanitaria è "
+                    "l'ACCESSIBILITÀ (mobilità sanitaria verso l'ospedale di riferimento, "
+                    "case/ospedali di comunità, assistenza territoriale di prossimità, "
+                    "telemedicina) — è SBAGLIATO proporre la costruzione di un ospedale locale"
+                )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
                 dist = (
