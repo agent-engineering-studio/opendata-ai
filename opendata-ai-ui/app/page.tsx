@@ -416,6 +416,47 @@ print(reply.artifacts[0].parts[0].text)`}</CodeBlock>
         </div>
       </section>
 
+      {/* ============ CULTURA DEL DATO / APPROFONDIMENTI ============ */}
+      <section id="approfondimenti" style={{ background: "#fff", padding: "96px 0", scrollMarginTop: 80 }}>
+        <div className="container">
+          <div data-reveal style={{ maxWidth: 720 }}>
+            <div style={eyebrow}>Cultura del dato</div>
+            <h2 style={h2}>Il valore degli open data senza esporre i cittadini</h2>
+            <p style={lead}>
+              Il patrimonio informativo della PA è un asset strategico, ma va valorizzato{" "}
+              <strong>senza esporre le persone</strong>. OpenData AI lavora solo su dati già pubblici e
+              aggregati, da fonti ufficiali — mai su dati personali dei cittadini.
+            </p>
+          </div>
+
+          <div className="row g-3" style={{ marginTop: 34 }}>
+            <SpecCard tag="Asset pubblico" tagBg="#E7F0FD" tagColor="#1959B8" title="Un tesoro di dati" body="Anagrafe, mobilità, ambiente, bilanci: aperti nel modo giusto diventano un bene comune che alimenta servizi, ricerca e trasparenza." delay={0} />
+            <SpecCard tag="Tutela" tagBg="#E1F4F4" tagColor="#0B7878" title="Aprire senza esporre" body="Il rischio non è il nome, è la re-identificazione per incrocio di campi. Meglio rinunciare a un dato che pubblicarne uno riconducibile a una persona." delay={60} />
+            <SpecCard tag="Tecniche" tagBg="#E4F5EC" tagColor="#147A52" title="Anonimizzazione e PET" body="Anonimizzazione, pseudonimizzazione, k-anonymity e dati sintetici: la cassetta degli attrezzi per estrarre valore riducendo l'esposizione." delay={120} />
+            <SpecCard tag="Il nostro approccio" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Solo dati già aperti" body="Nessun nuovo trattamento di dati personali, ogni numero tracciabile alla fonte, «dato insufficiente» al posto di punteggi falsi." delay={180} rail />
+          </div>
+
+          <div data-reveal className="d-flex flex-wrap gap-3" style={{ marginTop: 30 }}>
+            <Link
+              href="/approfondimenti"
+              className="d-inline-flex align-items-center gap-2"
+              style={{ padding: "13px 24px", borderRadius: 999, background: "#E7F0FD", color: "#1959B8", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 16 }}
+            >
+              Leggi l&apos;approfondimento
+              <Icon path={ICON.arrow} stroke="currentColor" size={16} />
+            </Link>
+            <Link
+              href="/guida-open-data"
+              className="d-inline-flex align-items-center gap-2"
+              style={{ padding: "13px 24px", borderRadius: 999, border: "1.5px solid var(--color-border)", color: "#42535F", textDecoration: "none", fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 16 }}
+            >
+              Guida open data per i Comuni
+              <Icon path={ICON.arrow} stroke="currentColor" size={16} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ============ CTA FINALE ============ */}
       <section id="prova" style={{ position: "relative", background: BRAND_BG, color: "#fff", padding: "92px 0", overflow: "hidden", scrollMarginTop: 80 }}>
         <div aria-hidden="true" style={{ position: "absolute", left: -80, bottom: -120, width: 360, height: 360, opacity: 0.18, pointerEvents: "none" }}>

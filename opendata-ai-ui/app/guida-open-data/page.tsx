@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { PageHero } from "@/components/PageHero";
+
 export const metadata: Metadata = {
   title: "Come avviare una politica di open data in un Comune — OpenData AI",
   description:
@@ -47,15 +49,20 @@ const TOC: { id: string; label: string }[] = [
 
 export default function Page() {
   return (
-    <article className="container py-5" style={{ maxWidth: 880 }}>
-      <h1>Come avviare una politica di open data in un Comune: guida passo passo</h1>
-      <p className="lead">
-        Questa guida accompagna un Comune che parte <strong>da zero</strong> nell&apos;apertura del
-        proprio patrimonio informativo. Mette insieme la parte amministrativa (delibere, regolamenti,
-        responsabilità) e quella tecnica (formati, metadati, pubblicazione) senza dare nulla per
-        scontato, sulla base della normativa italiana ed europea vigente e delle prassi dei portali
-        nazionali.
-      </p>
+    <>
+      <PageHero
+        eyebrow="Guida passo passo"
+        title="Come avviare una politica di open data in un Comune"
+        lead={
+          <>
+            Una guida per un Comune che parte <strong>da zero</strong> nell&apos;apertura del proprio
+            patrimonio informativo: parte amministrativa (delibere, regolamenti, responsabilità) e parte
+            tecnica (formati, metadati, pubblicazione), sulla base della normativa italiana ed europea
+            vigente e delle prassi dei portali nazionali.
+          </>
+        }
+      />
+      <article className="container py-5" style={{ maxWidth: 880 }}>
       <p>
         L&apos;idea di fondo: aprire i dati non è prima di tutto un problema tecnologico, ma un cambio
         di postura organizzativa. La tecnologia (un catalogo, un convertitore di formati) è la parte
@@ -398,6 +405,7 @@ export default function Page() {
         Questa guida ha carattere informativo e divulgativo; non sostituisce gli atti ufficiali né la
         consulenza legale. Fare sempre riferimento ai testi normativi e alle linee guida AgID vigenti.
       </p>
-    </article>
+      </article>
+    </>
   );
 }
