@@ -9,5 +9,6 @@ non codice. I valori sono OBIETTIVI di programmazione, non dati osservati.
 """
 
 from .dimensionamento import valuta_pattern
+from .scoring import SOGLIA_IDONEITA, score_candidato, valuta_aree
 
-__all__ = ["valuta_pattern"]
+__all__ = ["valuta_pattern", "score_candidato", "valuta_aree", "SOGLIA_IDONEITA"]
