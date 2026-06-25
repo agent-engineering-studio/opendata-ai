@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
+from opendata_core.report_quality import valuta_report as _valuta_qualita
 from opendata_core.rigenerazione import valuta_aree, valuta_pattern
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -190,7 +191,28 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-22e"
+PROMPT_VERSION = "2026-06-25-qualita"
+
+
+class QualitaControllo(BaseModel):
+    """Esito di un singolo gate della rubric (Parte IV)."""
+
+    gate: str
+    dimensione: str
+    tipo: str  # critica | alta | media
+    esito: str  # PASS | WARN | FAIL
+    messaggio: str
+
+
+class QualitaReport(BaseModel):
+    """Scorecard di qualità del report (gate auto-valutabili, Fase 1)."""
+
+    punteggio: int
+    massimo: int
+    dimensioni_valutate: int
+    esito: str  # PASS | WARN | FAIL
+    pubblicabile: bool
+    controlli: list[QualitaControllo]
 
 
 class ProgrammaResponse(BaseModel):
@@ -214,6 +236,10 @@ class ProgrammaResponse(BaseModel):
     # rigenerata: la UI mostra "analisi da cache · Rigenera". `generato_il`
     # resta la data della generazione originale.
     da_cache: bool = False
+    # Scorecard di qualità (rubric Parte IV): gate auto-valutabili eseguiti dopo
+    # la generazione. Annotativa, non bloccante (design fail-safe). None finché
+    # non calcolata (es. cache di versioni precedenti).
+    qualita: QualitaReport | None = None
 
 
 class _LlmProgramma(BaseModel):
@@ -732,6 +758,50 @@ _ZONA_TIPO_FOCUS: dict[str, str] = {
         "multifunzionalità, agro-energia, spopolamento"
     ),
 }
+
+
+def applica_qualita(
+    resp: ProgrammaResponse,
+    req: ProgrammaRequest,
+    *,
+    vincolo_disponibile: bool,
+) -> None:
+    """Esegue i gate di qualità (rubric Parte IV) sulla risposta strutturata e
+    annota `resp` IN PLACE: popola `resp.qualita` (scorecard) e appende il footer
+    "Qualità del report" al disclaimer. Non blocca (design fail-safe) e non
+    riscrive la prosa: la correzione dei difetti avviene a monte, nel grounding
+    dei prompt; qui si verifica e si annota l'esito.
+
+    Tutto parametrico sul comune: i gate ricevono solo il testo del report + i
+    metadati iniettati (popolazione di riferimento, anno, evidenze). Fail-safe:
+    qualsiasi errore lascia il report intatto."""
+    try:
+        evidenze: list[Evidenza] = []
+        for voci in (resp.swot or {}).values():
+            for v in voci:
+                evidenze.extend(v.evidenze or [])
+        for p in resp.proposte or []:
+            evidenze.extend(p.evidenze or [])
+        evidenze_testo = " ".join(
+            f"{e.fonte} {e.dettaglio} {e.url}" for e in evidenze
+        ) + " " + " ".join(
+            f"{getattr(c, 'name', '')} {getattr(c, 'url', '')}" for c in (resp.citazioni or [])
+        )
+        testi = [resp.sintesi, resp.idee_sintesi]
+        testi += [v.testo for voci in (resp.swot or {}).values() for v in voci]
+        testi += [f"{p.titolo}. {p.descrizione}" for p in resp.proposte or []]
+        q = _valuta_qualita(
+            testi=testi,
+            titoli_proposte=[p.titolo for p in resp.proposte or []],
+            pop_rif=req.popolazione,
+            anno_corrente=(resp.generato_il or datetime.now(timezone.utc)).year,
+            evidenze_testo=evidenze_testo,
+            vincolo_comunale_disponibile=vincolo_disponibile,
+        )
+        resp.qualita = QualitaReport.model_validate(q.to_dict())
+        resp.disclaimer = (resp.disclaimer or "").rstrip() + "\n\n" + q.markdown()
+    except Exception:  # noqa: BLE001 — annotazione best-effort, mai bloccante
+        log.warning("valutazione qualità report fallita", exc_info=True)
 
 
 def _request_header(req: ProgrammaRequest) -> str:

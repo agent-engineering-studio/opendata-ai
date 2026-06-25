@@ -660,6 +660,30 @@ _PROGRAMMA_FEWSHOT_OK: dict = {
 }
 _PROGRAMMA_FEWSHOT_JSON = json.dumps(_PROGRAMMA_FEWSHOT_OK, ensure_ascii=False, indent=2)
 
+# Regole di qualità comuni a scheda + idee (rubric "Qualità dei report
+# territoriali", Documento di metodo Parte IV). Prevengono i 5 difetti
+# ricorrenti che i gate automatici verificano a valle. Generiche: valgono per
+# QUALSIASI comune, mai letterali specifici.
+QUALITA_GROUNDING = (
+    "\n\nQUALITÀ DEL REPORT (rubric Parte IV — vincolante):\n"
+    "- ATTUALITÀ: usa SEMPRE l'indicatore dalla fonte più recente. NON presentare "
+    "dati del Censimento 2011 (o più vecchi di ~4 anni) come attuali; se citi un "
+    "dato storico, etichettalo esplicitamente 'dato storico <anno>'. Preferisci il "
+    "Censimento Permanente all'edizione 2011.\n"
+    "- DENOMINATORE UNICO: usa UNA SOLA popolazione di riferimento in tutto il "
+    "report — quella del campo `popolazione` nella RICHIESTA. Non mescolare cifre "
+    "di popolazione da fonti diverse (es. anagrafica vs Wikidata).\n"
+    "- CERTIFICAZIONI: NON affermare certificazioni di origine (DOP/IGP/DOC/DOCG/STG) "
+    "che non siano nelle evidenze raccolte. Senza fonte ufficiale, scrivi 'da "
+    "verificare su registro MASAF/eAmbrosia' invece di asserirle.\n"
+    "- NON RIDONDANZA: consolida le proposte in un portafoglio unico; non ripetere "
+    "la stessa idea (stesso tema/asset) in sezioni diverse.\n"
+    "- VINCOLI: per il rischio idrogeologico riporta l'ESITO disponibile (es. % del "
+    "territorio comunale in pericolosità ISPRA), non rinviare genericamente a 'da "
+    "verificare'; specifica che l'intersezione puntuale per area va confermata sul PAI."
+)
+
+
 PROGRAMMA_INSTRUCTIONS = (
     "Sei un analista di politiche pubbliche. Ricevi una RICHIESTA (comune ISTAT, "
     "eventuale zona/tema) e un blocco EVIDENZE RACCOLTE con sezioni per fonte "
@@ -792,7 +816,7 @@ PROGRAMMA_INSTRUCTIONS = (
     '"Posizione strategica per il turismo"]}}\n'
     "Ogni elemento delle liste forze/debolezze/opportunita/minacce deve invece "
     "essere un oggetto {testo, evidenze:[…]} come nell'esempio sopra."
-)
+) + QUALITA_GROUNDING
 
 
 # Modalità "idee" (Pezzo 8): stesso contratto JSON della scheda, ma le
@@ -1029,7 +1053,7 @@ IDEE_INSTRUCTIONS = (
     "se non c'è, NON nominarlo né inventarne le cifre.\n"
     "- `disclaimer`: una frase — analisi automatica su dati pubblici, ipotesi "
     "di lavoro da verificare, non materiale elettorale."
-)
+) + QUALITA_GROUNDING
 
 
 # Modalità "marketing" (Pezzo 10): brainstorming di MARKETING TERRITORIALE —

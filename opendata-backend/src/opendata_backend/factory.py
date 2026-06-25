@@ -57,6 +57,8 @@ from .config import (
 from .orchestrator.programma import (
     ProgrammaRequest,
     ProgrammaResponse,
+    _vincolo_pct_comunale,
+    applica_qualita,
     build_programma_aggregator,
     build_programma_task,
 )
@@ -1328,14 +1330,26 @@ class OrchestratorSession:
             from opendata_core.osm import client as osm_client
 
             async def _work() -> dict[str, Any] | None:
-                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
-                if not hits:
-                    return None
-                bb = hits[0].get("boundingbox") or []
-                if len(bb) != 4:
-                    return None
-                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
-                cands = await osm_client.overpass_candidate_areas(bbox=(s, w, n, e), limit=15)
+                # Confine comunale (poligono GeoJSON) → bbox + clip dei candidati.
+                # Scartando i centroidi fuori confine si toglie il rumore dei comuni
+                # vicini pescati dal bbox. Fallback al boundingbox di geocode se il
+                # poligono non è disponibile.
+                boundary = await osm_client.geocode_boundary(f"{req.comune_nome}, Italia")
+                geojson = boundary.get("geojson") if boundary else None
+                bbox = osm_client.bbox_from_geojson(geojson)
+                if bbox is None:
+                    hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                    if not hits:
+                        return None
+                    bb = hits[0].get("boundingbox") or []
+                    if len(bb) != 4:
+                        return None
+                    bbox = (float(bb[0]), float(bb[2]), float(bb[1]), float(bb[3]))
+                    geojson = None  # nessun poligono → niente clip
+                s, w, n, e = bbox
+                cands = await osm_client.overpass_candidate_areas(
+                    bbox=(s, w, n, e), boundary=geojson, limit=15
+                )
                 if not cands:
                     return None
                 return {"centro": [(s + n) / 2, (w + e) / 2], "candidati": cands}
@@ -1639,6 +1653,10 @@ class OrchestratorSession:
                     )
                 if resolve_report_depth(self._settings) == "concise":
                     resp.disclaimer = (resp.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+                applica_qualita(
+                    resp, req,
+                    vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+                )
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
                 fw_logger.removeHandler(handler)
@@ -1706,6 +1724,10 @@ class OrchestratorSession:
             response = ProgrammaResponse.model_validate_json(text)
         if resolve_report_depth(self._settings) == "concise":
             response.disclaimer = (response.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+        applica_qualita(
+            response, req,
+            vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+        )
         return response
 
     async def run(self, query: str) -> str:

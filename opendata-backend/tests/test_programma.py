@@ -23,6 +23,7 @@ from opendata_backend.orchestrator.programma import (
     ProgrammaResponse,
     Proposta,
     VoceSwot,
+    applica_qualita,
     build_programma_aggregator,
     build_programma_task,
 )
@@ -1775,3 +1776,60 @@ async def test_combinazione_requires_two_cross_lens_evidences() -> None:
     assert resp is not None
     assert [p.generatore for p in resp.proposte] == ["combinazione"]
     assert len(resp.proposte[0].evidenze) == 2
+
+
+# ───────────────────────── qualità del report (rubric Parte IV) ─────────────
+
+
+def _resp_qualita(sintesi: str, proposte: list[Proposta]) -> ProgrammaResponse:
+    from datetime import datetime, timezone
+
+    return ProgrammaResponse(
+        comune="072021",
+        sintesi=sintesi,
+        swot={k: [] for k in ("forze", "debolezze", "opportunita", "minacce")},
+        proposte=proposte,
+        citazioni=[],
+        disclaimer="Analisi automatica.",
+        generato_il=datetime(2026, 6, 25, tzinfo=timezone.utc),
+    )
+
+
+def _prop(titolo: str, dettaglio: str = "x") -> Proposta:
+    return Proposta(
+        titolo=titolo,
+        descrizione="d",
+        evidenze=[Evidenza(fonte="istat", url=_OC_URL, dettaglio=dettaglio)],
+        fattibilita=Fattibilita(livello="media", motivazione="m"),
+    )
+
+
+def test_applica_qualita_pulito_pass() -> None:
+    resp = _resp_qualita(
+        "La popolazione è di 26.731 abitanti (dati ISTAT 2024).",
+        [_prop("Rete ciclabile urbana"), _prop("Sistema museale integrato")],
+    )
+    applica_qualita(resp, ProgrammaRequest(cod_comune="072021", popolazione=26731),
+                    vincolo_disponibile=False)
+    assert resp.qualita is not None
+    assert resp.qualita.esito == "PASS" and resp.qualita.pubblicabile
+    assert "Qualità del report" in resp.disclaimer
+
+
+def test_applica_qualita_segnala_difetti_senza_bloccare() -> None:
+    # Censimento 2011 come attuale (FAIL critica) + due popolazioni diverse.
+    resp = _resp_qualita(
+        "Secondo il Censimento 2011 i residenti erano 27.889 abitanti; oggi 26.731 ab.",
+        [_prop("Rete ciclabile per la mobilità"),
+         _prop("Mobilità sostenibile: rete ciclabile")],
+    )
+    applica_qualita(resp, ProgrammaRequest(cod_comune="072021", popolazione=26731),
+                    vincolo_disponibile=True)
+    q = resp.qualita
+    assert q is not None and q.esito == "FAIL" and not q.pubblicabile
+    esiti = {c.gate: c.esito for c in q.controlli}
+    assert esiti["freshness"] == "FAIL"        # Censimento 2011
+    assert esiti["denominatore"] == "FAIL"     # 27.889 vs 26.731
+    assert esiti["dedup"] == "WARN"            # due ciclabili simili
+    # non bloccante: la risposta resta integra
+    assert resp.proposte and resp.sintesi
