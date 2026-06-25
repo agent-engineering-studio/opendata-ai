@@ -661,9 +661,14 @@ _CANDIDATE_AREA_FILTERS = [
     '["disused:landuse"]',                     # ex-uso dismesso (qualsiasi)
     '["abandoned:landuse"]',
     '["landuse"="railway"]["disused"="yes"]',  # ex sedime ferroviario
+    '["landuse"="military"]["disused"="yes"]',  # ex area militare (caserme/basi dismesse)
+    '["disused:military"]',                    # ex-militare (qualsiasi)
+    '["disused:amenity"]',                     # servizio dismesso (es. ex ospedale/mercato)
+    '["disused:building"]',                    # edificio dismesso con sedime
     '["place"="square"]',                      # piazze / slarghi
     '["amenity"="parking"]',                   # parcheggi (riqualificabili a polifunzionali)
     '["building"="ruins"]',
+    '["historic"="ruins"]',                    # ruderi storici (sedime riusabile)
 ]
 
 
@@ -687,9 +692,73 @@ def _polygon_area_m2(coords: list[tuple[float, float]]) -> float:
     return abs(s) / 2.0
 
 
+def _point_in_ring(lat: float, lon: float, ring: list[Any]) -> bool:
+    """Ray-casting su un anello GeoJSON (coordinate [lon, lat])."""
+    inside = False
+    n = len(ring)
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat):
+            x_cross = (xj - xi) * (lat - yi) / ((yj - yi) or 1e-12) + xi
+            if lon < x_cross:
+                inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_polygon_coords(lat: float, lon: float, polygon: list[Any]) -> bool:
+    """Polygon GeoJSON = [anello_esterno, foro1, …]. Dentro = nell'esterno e in
+    nessun foro."""
+    if not polygon or not _point_in_ring(lat, lon, polygon[0]):
+        return False
+    return not any(_point_in_ring(lat, lon, hole) for hole in polygon[1:])
+
+
+def point_in_geojson(lat: float, lon: float, geojson: dict[str, Any] | None) -> bool:
+    """True se (lat, lon) cade dentro un GeoJSON Polygon/MultiPolygon (es. il confine
+    comunale da `geocode_boundary`). False se `geojson` è assente/non poligonale —
+    così il chiamante può ripiegare sul bbox senza scartare nulla."""
+    if not geojson:
+        return False
+    gtype, coords = geojson.get("type"), geojson.get("coordinates")
+    if gtype == "Polygon":
+        return _point_in_polygon_coords(lat, lon, coords or [])
+    if gtype == "MultiPolygon":
+        return any(_point_in_polygon_coords(lat, lon, poly) for poly in (coords or []))
+    return False
+
+
+def _iter_rings(geojson: dict[str, Any]) -> list[list[Any]]:
+    gtype, coords = geojson.get("type"), geojson.get("coordinates") or []
+    if gtype == "Polygon":
+        return list(coords)
+    if gtype == "MultiPolygon":
+        return [ring for poly in coords for ring in poly]
+    return []
+
+
+def bbox_from_geojson(geojson: dict[str, Any] | None) -> tuple[float, float, float, float] | None:
+    """Bounding box `(s, w, n, e)` di un GeoJSON Polygon/MultiPolygon, o None se non
+    poligonale/vuoto. Le coordinate GeoJSON sono [lon, lat]."""
+    if not geojson:
+        return None
+    lats: list[float] = []
+    lons: list[float] = []
+    for ring in _iter_rings(geojson):
+        for pt in ring:
+            lons.append(pt[0])
+            lats.append(pt[1])
+    if not lats:
+        return None
+    return (min(lats), min(lons), max(lats), max(lons))
+
+
 async def overpass_candidate_areas(
     *,
     bbox: tuple[float, float, float, float],
+    boundary: dict[str, Any] | None = None,
     limit: int = 20,
     timeout: float = 40.0,
 ) -> list[dict[str, Any]]:
@@ -697,8 +766,11 @@ async def overpass_candidate_areas(
 
     `out geom` per calcolare l'area approssimata di ogni way/relation. Ritorna
     `[{osm_type, osm_id, name, kind, lat, lon, area_mq, url}]` ordinato per area
-    decrescente, max `limit`. Fail-safe a monte: `overpass_post` ruota i mirror e
-    apre il circuit breaker; il chiamante cattura le eccezioni di trasporto."""
+    decrescente, max `limit`. Se `boundary` (GeoJSON Polygon/MultiPolygon del confine
+    comunale) è fornito, scarta i candidati il cui centroide cade fuori dal confine —
+    elimina il rumore dei comuni vicini pescati dal bbox. Fail-safe a monte:
+    `overpass_post` ruota i mirror e apre il circuit breaker; il chiamante cattura le
+    eccezioni di trasporto."""
     s, w, n, e = bbox
     region = f"({s},{w},{n},{e})"
     union = "".join(f" way{f}{region}; relation{f}{region};" for f in _CANDIDATE_AREA_FILTERS)
@@ -721,17 +793,25 @@ async def overpass_candidate_areas(
             continue
         seen.add(key)
         tags = el.get("tags") or {}
+        clat = round(sum(c[0] for c in coords) / len(coords), 6)
+        clon = round(sum(c[1] for c in coords) / len(coords), 6)
+        if boundary is not None and not point_in_geojson(clat, clon, boundary):
+            continue  # centroide fuori dal confine comunale → rumore dei comuni vicini
         kind = (
             tags.get("landuse") or tags.get("amenity") or tags.get("place")
-            or tags.get("building") or "area"
+            or tags.get("building") or tags.get("historic")
+            or tags.get("disused:landuse") or tags.get("disused:amenity")
+            or tags.get("disused:building")
+            or ("ex-militare" if ("disused:military" in tags or tags.get("military")) else None)
+            or "area"
         )
         out.append({
             "osm_type": otype,
             "osm_id": oid,
             "name": (tags.get("name") or "").strip() or None,
             "kind": kind,
-            "lat": round(sum(c[0] for c in coords) / len(coords), 6),
-            "lon": round(sum(c[1] for c in coords) / len(coords), 6),
+            "lat": clat,
+            "lon": clon,
             "area_mq": int(round(area)),
             "url": f"https://www.openstreetmap.org/{otype}/{oid}",
         })

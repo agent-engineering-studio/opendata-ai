@@ -1328,14 +1328,26 @@ class OrchestratorSession:
             from opendata_core.osm import client as osm_client
 
             async def _work() -> dict[str, Any] | None:
-                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
-                if not hits:
-                    return None
-                bb = hits[0].get("boundingbox") or []
-                if len(bb) != 4:
-                    return None
-                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
-                cands = await osm_client.overpass_candidate_areas(bbox=(s, w, n, e), limit=15)
+                # Confine comunale (poligono GeoJSON) → bbox + clip dei candidati.
+                # Scartando i centroidi fuori confine si toglie il rumore dei comuni
+                # vicini pescati dal bbox. Fallback al boundingbox di geocode se il
+                # poligono non è disponibile.
+                boundary = await osm_client.geocode_boundary(f"{req.comune_nome}, Italia")
+                geojson = boundary.get("geojson") if boundary else None
+                bbox = osm_client.bbox_from_geojson(geojson)
+                if bbox is None:
+                    hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                    if not hits:
+                        return None
+                    bb = hits[0].get("boundingbox") or []
+                    if len(bb) != 4:
+                        return None
+                    bbox = (float(bb[0]), float(bb[2]), float(bb[1]), float(bb[3]))
+                    geojson = None  # nessun poligono → niente clip
+                s, w, n, e = bbox
+                cands = await osm_client.overpass_candidate_areas(
+                    bbox=(s, w, n, e), boundary=geojson, limit=15
+                )
                 if not cands:
                     return None
                 return {"centro": [(s + n) / 2, (w + e) / 2], "candidati": cands}
