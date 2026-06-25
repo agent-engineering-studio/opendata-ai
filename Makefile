@@ -64,7 +64,12 @@ up-host-ollama: ## Start the stack against a host-installed Ollama (NO Docker Ol
 	@echo "✅ Host Ollama reachable. Bringing up stack with LLM_PROVIDER=ollama (no Docker Ollama)…"
 	@echo "ℹ️  LLM_PROVIDER=ollama vale ovunque: sintesi, classify, semantic-maturità,"
 	@echo "    narrative e use case girano tutti su Ollama. Nessuna chiamata ad Anthropic."
-	LLM_PROVIDER=ollama $(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
+	@echo "ℹ️  Overpass self-hosted incluso: OVERPASS_URL → http://overpass/api/interpreter"
+	@echo "    (backend + osm-mcp), fallback al mirror FR. PRIMA accensione lunga"
+	@echo "    (~1-2h, ~25-50GB disco): le lenti OSM usano il fallback finché il DB non è pronto."
+	OVERPASS_URL=$${OVERPASS_URL:-http://overpass/api/interpreter} \
+	OVERPASS_FALLBACK_URLS=$${OVERPASS_FALLBACK_URLS:-https://overpass.openstreetmap.fr/api/interpreter} \
+	LLM_PROVIDER=ollama $(COMPOSE) up -d $(CUSTOM_SERVICES) overpass
 
 up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANTHROPIC_API_KEY in $(ENV_FILE).
 	@if ! grep -qE '^ANTHROPIC_API_KEY=.+' $(ENV_FILE); then \
