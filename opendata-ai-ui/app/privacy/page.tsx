@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { PageHero } from "@/components/PageHero";
+
 export const metadata: Metadata = {
   title: "Privacy policy — OpenData AI",
   description:
@@ -12,15 +14,21 @@ export default function Page() {
   const ISSUES_URL = "https://github.com/agent-engineering-studio/opendata-ai/issues";
 
   return (
-    <article className="container py-5" style={{ maxWidth: 880 }}>
-      <h1>Privacy policy</h1>
+    <>
+      <PageHero
+        eyebrow="Informativa · GDPR"
+        title="Privacy policy"
+        lead={
+          <>
+            Informativa privacy ai sensi degli articoli 13 e 14 del Regolamento UE 2016/679 (di seguito
+            &ldquo;GDPR&rdquo;) relativa al trattamento dei dati personali nell&apos;ambito del progetto
+            sperimentale OpenData AI.
+          </>
+        }
+      />
+      <article className="container py-5" style={{ maxWidth: 880 }}>
       <p className="text-muted small">
         Ultimo aggiornamento: {LAST_UPDATED} · Versione 1.1
-      </p>
-      <p className="lead">
-        Informativa privacy ai sensi degli articoli 13 e 14 del Regolamento UE
-        2016/679 (di seguito &ldquo;GDPR&rdquo;) relativa al trattamento dei
-        dati personali nell&apos;ambito del progetto sperimentale OpenData AI.
       </p>
 
       <div className="alert alert-warning" role="status">
@@ -413,6 +421,7 @@ export default function Page() {
           <Link href="/docs">documentazione tecnica</Link>.
         </p>
       </section>
-    </article>
+      </article>
+    </>
   );
 }
