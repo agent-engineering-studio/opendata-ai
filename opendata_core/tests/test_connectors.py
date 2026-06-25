@@ -109,21 +109,25 @@ async def test_overpass_health_counts(monkeypatch) -> None:
     from opendata_core.osm import client as osm
 
     async def fake_post(query: str, **_kw):
-        # la query deve filtrare ospedali + ambulatori + studi medici
+        # ospedali (+ acuti via emergency) + ambulatori + studi medici
         assert '"amenity"="hospital"' in query
+        assert '"emergency"="yes"' in query
         assert '"amenity"="clinic"' in query
         assert '"amenity"="doctors"' in query
-        # 3 categorie (ospedali, ambulatori, studi_medici) + totale, in ordine
+        # 4 categorie (ospedali, ospedali_acuti, ambulatori, studi_medici) + totale, in ordine
         return [
-            {"type": "count", "tags": {"total": "1"}},
-            {"type": "count", "tags": {"total": "2"}},
-            {"type": "count", "tags": {"total": "3"}},
-            {"type": "count", "tags": {"total": "6"}},
+            {"type": "count", "tags": {"total": "2"}},  # ospedali
+            {"type": "count", "tags": {"total": "1"}},  # ospedali_acuti
+            {"type": "count", "tags": {"total": "2"}},  # ambulatori
+            {"type": "count", "tags": {"total": "3"}},  # studi_medici
+            {"type": "count", "tags": {"total": "6"}},  # totale
         ]
 
     monkeypatch.setattr(osm, "overpass_post", fake_post)
     out = await osm.overpass_health_counts(bbox=(40.69, 16.78, 40.86, 17.03))
-    assert out == {"ospedali": 1, "ambulatori": 2, "studi_medici": 3, "totale": 6}
+    assert out == {
+        "ospedali": 2, "ospedali_acuti": 1, "ambulatori": 2, "studi_medici": 3, "totale": 6,
+    }
 
 
 async def test_nearest_hospital_picks_closest(monkeypatch) -> None:
