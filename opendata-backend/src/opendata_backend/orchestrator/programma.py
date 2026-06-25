@@ -237,12 +237,31 @@ class ProgrammaOutput:
 # ─────────────────────────── evidence bundle ────────────────────────────────
 
 
-def _top_aree_candidate(aree_info: dict[str, Any] | None, n: int = 3) -> list[dict[str, Any]]:
+def _vincolo_pct_comunale(ambiente_info: dict[str, Any] | None) -> float | None:
+    """Pericolosità idrogeologica ELEVATA del comune (% territorio, ISPRA): il max
+    tra frane P3+P4 e alluvioni P3. Proxy a livello COMUNALE per il feasibility-gate
+    (la pericolosità puntuale per area richiede il PAI, non disponibile da open data)."""
+    if not ambiente_info:
+        return None
+    vals = [
+        float(v)
+        for v in (ambiente_info.get("frane_area_pct"), ambiente_info.get("alluvioni_p3_area_pct"))
+        if isinstance(v, (int, float))
+    ]
+    return max(vals) if vals else None
+
+
+def _top_aree_candidate(
+    aree_info: dict[str, Any] | None,
+    ambiente_info: dict[str, Any] | None = None,
+    n: int = 3,
+) -> list[dict[str, Any]]:
     """Top-n aree candidate (Fase 2) valutate con la matrice multicriteria.
 
     Usa i pesi del pattern `aree_mercatali` (matrice canonica) e `target_mq=None`
     (idoneità di SITO: centralità + abbandono, dimensione lasciata al confronto col
-    target nel bundle). Ritorna [] se non ci sono candidati (Overpass non risolto).
+    target nel bundle). `ambiente_info` alimenta il criterio `vincoli` con la
+    pericolosità idrogeologica comunale (ISPRA). Ritorna [] se non ci sono candidati.
     """
     if not (aree_info and aree_info.get("candidati") and aree_info.get("centro")):
         return []
@@ -251,7 +270,8 @@ def _top_aree_candidate(aree_info: dict[str, Any] | None, n: int = 3) -> list[di
         None,
     ) or {}
     scored = valuta_aree(
-        aree_info["candidati"], tuple(aree_info["centro"]), target_mq=None, criteri_pesi=pesi
+        aree_info["candidati"], tuple(aree_info["centro"]), target_mq=None,
+        criteri_pesi=pesi, vincolo_pct=_vincolo_pct_comunale(ambiente_info),
     )
     return scored[:n]
 
@@ -618,7 +638,7 @@ def build_programma_task(
                         pezzo += f", assetto «{r['assetto']}»"
                     if r.get("posteggi_indicativi") is not None:
                         pezzo += f" (~{r['posteggi_indicativi']} posteggi)"
-                pezzo += f" [{r.get('norma')}]"
+                pezzo += f" [{r.get('norma')}" + (f"; {r['sdg']}" if r.get("sdg") else "") + "]"
                 voci.append(pezzo)
             if voci:
                 parts.append(
@@ -636,7 +656,7 @@ def build_programma_task(
         # AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani OSM + scoring
         # multicriteria. Fail-safe: senza dati OSM (Overpass irraggiungibile) il
         # blocco non compare e resta il solo dimensionamento (Fase 1).
-        top_aree = _top_aree_candidate(aree_info)
+        top_aree = _top_aree_candidate(aree_info, ambiente_info)
         if top_aree:
             parts.append(
                 "AREE CANDIDATE (localizzazione — opportunity mining OSM: vuoti urbani / "
@@ -647,7 +667,8 @@ def build_programma_task(
                 "parcheggi, spazi pubblici) PROPONI la localizzazione sull'area candidata più "
                 "idonea la cui superficie regge il target di dimensionamento, citandone l'URL "
                 "OSM come evidenza; dichiara SEMPRE che proprietà e conformità urbanistica "
-                "vanno verificate (no open data certi)."
+                "vanno verificate (no open data certi) e che i vincoli idrogeologici, stimati a "
+                "livello comunale (ISPRA), vanno verificati puntualmente sul PAI."
             )
     if req.modalita in ("marketing", "completa"):
         parts.append(
@@ -1362,7 +1383,7 @@ def build_programma_aggregator(
         # Ancora AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani/dismessi OSM
         # con punteggio di idoneità; URL OSM CITABILE (host openstreetmap.org, valido
         # per commercio_duc/trasporti). Un'idea di dotazione su lotto localizza qui.
-        top_aree = _top_aree_candidate(aree_info)
+        top_aree = _top_aree_candidate(aree_info, ambiente_info)
         if top_aree:
             aree_resources: list[Resource] = []
             for a in top_aree:
@@ -1381,7 +1402,8 @@ def build_programma_aggregator(
                     "Aree candidate per dotazioni su lotto (vuoti urbani / dismessi mappati su "
                     "OSM) — " + "; ".join(_fmt_area_candidata(a) for a in top_aree) + ". Punteggio "
                     "di idoneità su centralità/abbandono; PROPRIETÀ e DESTINAZIONE URBANISTICA "
-                    "DA VERIFICARE. Un'idea di dotazione su lotto (mercatale/eventi, sport, "
+                    "DA VERIFICARE (vincoli idrogeologici stimati a livello comunale ISPRA → PAI). "
+                    "Un'idea di dotazione su lotto (mercatale/eventi, sport, "
                     "parcheggi, spazi pubblici) localizzi sull'area più idonea che regge il target "
                     "di dimensionamento e citi l'URL OSM."
                 )

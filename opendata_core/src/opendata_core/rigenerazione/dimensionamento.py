@@ -46,6 +46,7 @@ def _valuta_uno(pop: int, pattern: dict[str, Any]) -> dict[str, Any] | None:
         "indicatore": pattern.get("indicatore"),
         "unita": f.get("unita"),
         "norma": pattern.get("norma"),
+        "sdg": pattern.get("sdg"),
         "geometria": pattern.get("geometria"),
         "fonti": pattern.get("fonti") or [],
         "criteri_pesi": pattern.get("criteri_pesi") or {},

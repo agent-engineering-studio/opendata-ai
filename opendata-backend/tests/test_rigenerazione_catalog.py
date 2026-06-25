@@ -36,6 +36,7 @@ def test_target_gioia_del_colle() -> None:
     assert _by_id(res, "traffico_mobilita")["target"].startswith("PUMS raccomandato")
 
 
-def test_ogni_pattern_cita_la_norma() -> None:
+def test_ogni_pattern_cita_norma_e_sdg() -> None:
     for r in valuta_pattern(10000, rigenerazione_patterns()):
         assert r.get("norma"), f"manca la norma per {r['id']}"
+        assert r.get("sdg", "").startswith("SDG"), f"manca/SDG malformato per {r['id']}"
