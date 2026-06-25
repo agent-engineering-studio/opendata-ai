@@ -46,10 +46,13 @@ from .config import (
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
     PROGRAMMA_INSTRUCTIONS,
+    REPORT_DEPTH_CONCISE_NOTE,
+    REPORT_DEPTH_ESTESA,
     SYNTH_INSTRUCTIONS,
     WEB_INSTRUCTIONS,
     Settings,
     resolve_provider,
+    resolve_report_depth,
 )
 from .orchestrator.programma import (
     ProgrammaRequest,
@@ -540,18 +543,22 @@ class OrchestratorSession:
                 programma_client = AnthropicClient(
                     api_key=s.anthropic_api_key, model=s.programma_model,
                 )
+            # Report depth tiering: i prompt sono concisi di default (rapidi sui
+            # modelli locali piccoli); sui modelli capaci/cloud appendo la
+            # direttiva ESTESA per tornare verbosi. Vedi resolve_report_depth.
+            _depth_extra = REPORT_DEPTH_ESTESA if resolve_report_depth(s) == "full" else ""
             self._programma_agent = await self._enter_agent(
-                programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
+                programma_client, PROGRAMMA_INSTRUCTIONS + _depth_extra, s.programma_agent_name,
                 None, synth_options,
             )
             # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
             self._idee_agent = await self._enter_agent(
-                programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
+                programma_client, IDEE_INSTRUCTIONS + _depth_extra, f"{s.programma_agent_name}-idee",
                 None, idee_options,
             )
             # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
             self._marketing_agent = await self._enter_agent(
-                programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
+                programma_client, MARKETING_INSTRUCTIONS + _depth_extra, f"{s.programma_agent_name}-marketing",
                 None, idee_options,
             )
 
@@ -1545,6 +1552,8 @@ class OrchestratorSession:
                     resp = ProgrammaResponse.model_validate_json(
                         getattr(output, "text", None) or str(output)
                     )
+                if resolve_report_depth(self._settings) == "concise":
+                    resp.disclaimer = (resp.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
                 fw_logger.removeHandler(handler)
@@ -1604,11 +1613,13 @@ class OrchestratorSession:
             raise RuntimeError("Programma workflow produced no outputs")
         final = outputs[0]
         response = getattr(final, "response", None)
-        if isinstance(response, ProgrammaResponse):
-            return response
-        # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
-        text = getattr(final, "text", None) or str(final)
-        return ProgrammaResponse.model_validate_json(text)
+        if not isinstance(response, ProgrammaResponse):
+            # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
+            text = getattr(final, "text", None) or str(final)
+            response = ProgrammaResponse.model_validate_json(text)
+        if resolve_report_depth(self._settings) == "concise":
+            response.disclaimer = (response.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+        return response
 
     async def run(self, query: str) -> str:
         """Fan out `query` to the enabled specialists in parallel and return the synth reply.

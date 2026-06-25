@@ -1105,6 +1105,11 @@ class Settings(BaseSettings):
     # else azure_foundry if the Azure AI project is configured, else ollama.
     llm_provider: Provider = Field(default="auto")
 
+    # Report depth (territorio): "auto" tiers by model capability — concise on
+    # local ollama (small models, fast), full/verbose on claude/azure/ollama_cloud.
+    # Force with REPORT_DEPTH=full|concise. See resolve_report_depth().
+    report_depth: Literal["auto", "full", "concise"] = Field(default="auto")
+
     # MCP server URLs. The CKAN agent uses ckan-mcp; the three SDMX-based stats
     # specialists (istat / eurostat / oecd) all share the istat-mcp instance —
     # the SDMX tools are generic, only base_url + agency differ per call.
@@ -1463,6 +1468,36 @@ def resolve_provider(settings: Settings) -> Provider:
     if settings.ollama_cloud_api_key:
         return "ollama_cloud"
     return "ollama"
+
+
+# ── Report depth tiering (territorio) ──────────────────────────────────────
+# I prompt programma/idee/marketing sono CONCISI di default (rapidi sui modelli
+# locali piccoli). Sui modelli capaci/cloud (claude/azure/ollama_cloud) il report
+# torna VERBOSO appendendo questa direttiva; sui locali resta sintetico + nota.
+REPORT_DEPTH_ESTESA = (
+    "\n\nMODALITÀ ESTESA — il modello in uso regge analisi approfondite: "
+    "OVERRIDE dei limiti di lunghezza indicati sopra. Usa `sintesi` 6-8 frasi, "
+    "ogni voce SWOT 2-4 frasi, ogni `descrizione` 5-7 frasi, sviluppando ogni "
+    "punto in profondità. INVARIATE tutte le altre regole (citazioni, evidenze, "
+    "divieto di inventare dati/URL)."
+)
+REPORT_DEPTH_CONCISE_NOTE = (
+    " Report in modalità sintetica (modello locale compatto): per l'analisi "
+    "estesa usa un modello più capace (Claude o Ollama Cloud)."
+)
+
+
+def resolve_report_depth(settings: "Settings") -> Literal["full", "concise"]:
+    """Profondità del report territorio in base alla capacità del modello.
+
+    `auto` (default): `concise` per ollama locale (modelli piccoli), `full` per
+    claude/azure_foundry/ollama_cloud (capaci/cloud). Forzabile con
+    `REPORT_DEPTH=full|concise`.
+    """
+    mode = settings.report_depth
+    if mode in ("full", "concise"):
+        return mode  # type: ignore[return-value]
+    return "concise" if resolve_provider(settings) == "ollama" else "full"
 
 
 def get_settings() -> Settings:
