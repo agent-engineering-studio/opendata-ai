@@ -102,6 +102,25 @@ function TerritorioInner() {
   const [extra, setExtra] = useState<TerritorioExtraData>({});
   const [esportandoSito, setEsportandoSito] = useState(false);
 
+  // Disclaimer modello: il backend espone se il sistema usa un modello locale
+  // compatto (tier "concise"), che può produrre imprecisioni nel report. Best-effort.
+  const [reportConcise, setReportConcise] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await apiFetch("/territorio/report-mode", { token });
+        if (res.ok && alive) setReportConcise(!!(await res.json()).concise);
+      } catch {
+        /* il disclaimer è un di più: il sito si genera comunque */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [getToken]);
+
   // Timer di attesa: /programma non ha (ancora) eventi di progresso e con un
   // LLM locale il fan-out può durare minuti — il contatore mostra che è vivo.
   useEffect(() => {
@@ -357,6 +376,19 @@ function TerritorioInner() {
                 </span>
               ) : null}
             </div>
+
+            {reportConcise ? (
+              <div
+                className="alert alert-warning mt-3 mb-0 small"
+                role="note"
+                style={{ maxWidth: 720 }}
+              >
+                ⚠️ <strong>Modello locale compatto in uso.</strong> L&apos;analisi può contenere
+                imprecisioni o affermazioni non del tutto fondate sui dati: verifica sempre i
+                numeri e le fonti citate. Per un report più accurato configura un modello più
+                capace (Claude o Ollama Cloud).
+              </div>
+            ) : null}
 
             {stato.fase === "loading" ? (
               <div className="mt-3" role="status" aria-label="Avanzamento dell'analisi">

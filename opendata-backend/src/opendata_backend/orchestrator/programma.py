@@ -237,12 +237,31 @@ class ProgrammaOutput:
 # ─────────────────────────── evidence bundle ────────────────────────────────
 
 
-def _top_aree_candidate(aree_info: dict[str, Any] | None, n: int = 3) -> list[dict[str, Any]]:
+def _vincolo_pct_comunale(ambiente_info: dict[str, Any] | None) -> float | None:
+    """Pericolosità idrogeologica ELEVATA del comune (% territorio, ISPRA): il max
+    tra frane P3+P4 e alluvioni P3. Proxy a livello COMUNALE per il feasibility-gate
+    (la pericolosità puntuale per area richiede il PAI, non disponibile da open data)."""
+    if not ambiente_info:
+        return None
+    vals = [
+        float(v)
+        for v in (ambiente_info.get("frane_area_pct"), ambiente_info.get("alluvioni_p3_area_pct"))
+        if isinstance(v, (int, float))
+    ]
+    return max(vals) if vals else None
+
+
+def _top_aree_candidate(
+    aree_info: dict[str, Any] | None,
+    ambiente_info: dict[str, Any] | None = None,
+    n: int = 3,
+) -> list[dict[str, Any]]:
     """Top-n aree candidate (Fase 2) valutate con la matrice multicriteria.
 
     Usa i pesi del pattern `aree_mercatali` (matrice canonica) e `target_mq=None`
     (idoneità di SITO: centralità + abbandono, dimensione lasciata al confronto col
-    target nel bundle). Ritorna [] se non ci sono candidati (Overpass non risolto).
+    target nel bundle). `ambiente_info` alimenta il criterio `vincoli` con la
+    pericolosità idrogeologica comunale (ISPRA). Ritorna [] se non ci sono candidati.
     """
     if not (aree_info and aree_info.get("candidati") and aree_info.get("centro")):
         return []
@@ -251,7 +270,8 @@ def _top_aree_candidate(aree_info: dict[str, Any] | None, n: int = 3) -> list[di
         None,
     ) or {}
     scored = valuta_aree(
-        aree_info["candidati"], tuple(aree_info["centro"]), target_mq=None, criteri_pesi=pesi
+        aree_info["candidati"], tuple(aree_info["centro"]), target_mq=None,
+        criteri_pesi=pesi, vincolo_pct=_vincolo_pct_comunale(ambiente_info),
     )
     return scored[:n]
 
@@ -563,22 +583,33 @@ def build_programma_task(
                 if sanita_info.get("source_url"):
                     fonti.append(f"farmacie: {sanita_info.get('source_url')}")
             if sanita_info.get("ospedali") is not None:
+                acuti = sanita_info.get("ospedali_acuti")
+                acuti_txt = (
+                    f" (di cui {acuti} per acuti / con pronto soccorso)" if acuti is not None else ""
+                )
                 bits.append(
-                    f"presìdi mappati su OSM nel comune: {sanita_info.get('ospedali')} ospedali, "
-                    f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
-                    "(ambulatori/studi medici)"
+                    f"presìdi ospedalieri mappati su OSM nel comune: {sanita_info.get('ospedali')}"
+                    f"{acuti_txt}, {sanita_info.get('strutture_territoriali')} strutture territoriali "
+                    "(ambulatori/studi medici). NB: `amenity=hospital` su OSM può includere "
+                    "poliambulatori/case di cura NON acuti"
                 )
                 if sanita_info.get("osm_source_url"):
                     fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
-            # Comune SENZA ospedale: steer esplicito SEMPRE (anche se la distanza dal
-            # più vicino non è disponibile — es. Overpass/OSRM non raggiungibili), così
-            # il modello non ripiega su "costruire nuove strutture ospedaliere".
-            if sanita_info.get("ospedali") == 0:
+            # Comune senza ospedale PER ACUTI (anche se ci sono presìdi ospedalieri
+            # non-acuti): steer esplicito così il modello non propone di "costruire un
+            # ospedale" e legge correttamente la leva (mobilità sanitaria / territoriale).
+            if sanita_info.get("ospedali_acuti") == 0:
+                ha_presidi = bool(sanita_info.get("ospedali"))
+                premessa = (
+                    "il comune ha presìdi ospedalieri non-acuti ma NESSUN ospedale per acuti "
+                    "(pronto soccorso)" if ha_presidi
+                    else "il comune NON ha ospedali nel territorio"
+                )
                 bits.append(
-                    "il comune NON ha ospedali nel territorio: la leva sanitaria è "
-                    "l'ACCESSIBILITÀ (mobilità sanitaria verso l'ospedale di riferimento, "
-                    "case/ospedali di comunità, assistenza territoriale di prossimità, "
-                    "telemedicina) — è SBAGLIATO proporre la costruzione di un ospedale locale"
+                    f"{premessa}: la leva sanitaria è l'ACCESSIBILITÀ AGLI ACUTI (mobilità "
+                    "sanitaria verso l'ospedale di riferimento, case/ospedali di comunità, "
+                    "assistenza territoriale di prossimità, telemedicina) — è SBAGLIATO "
+                    "proporre la costruzione di un nuovo ospedale per acuti"
                 )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
@@ -618,7 +649,7 @@ def build_programma_task(
                         pezzo += f", assetto «{r['assetto']}»"
                     if r.get("posteggi_indicativi") is not None:
                         pezzo += f" (~{r['posteggi_indicativi']} posteggi)"
-                pezzo += f" [{r.get('norma')}]"
+                pezzo += f" [{r.get('norma')}" + (f"; {r['sdg']}" if r.get("sdg") else "") + "]"
                 voci.append(pezzo)
             if voci:
                 parts.append(
@@ -636,7 +667,7 @@ def build_programma_task(
         # AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani OSM + scoring
         # multicriteria. Fail-safe: senza dati OSM (Overpass irraggiungibile) il
         # blocco non compare e resta il solo dimensionamento (Fase 1).
-        top_aree = _top_aree_candidate(aree_info)
+        top_aree = _top_aree_candidate(aree_info, ambiente_info)
         if top_aree:
             parts.append(
                 "AREE CANDIDATE (localizzazione — opportunity mining OSM: vuoti urbani / "
@@ -647,7 +678,8 @@ def build_programma_task(
                 "parcheggi, spazi pubblici) PROPONI la localizzazione sull'area candidata più "
                 "idonea la cui superficie regge il target di dimensionamento, citandone l'URL "
                 "OSM come evidenza; dichiara SEMPRE che proprietà e conformità urbanistica "
-                "vanno verificate (no open data certi)."
+                "vanno verificate (no open data certi) e che i vincoli idrogeologici, stimati a "
+                "livello comunale (ISPRA), vanno verificati puntualmente sul PAI."
             )
     if req.modalita in ("marketing", "completa"):
         parts.append(
@@ -1333,10 +1365,15 @@ def build_programma_aggregator(
                 if osrc not in {r.url.strip() for r in all_resources}:
                     all_resources.append(osm_res)
                 san_resources.append(osm_res)
+                acuti = sanita_info.get("ospedali_acuti")
+                acuti_txt = (
+                    f" (di cui {acuti} per acuti/pronto soccorso)" if acuti is not None else ""
+                )
                 narrative_bits.append(
-                    f"presìdi OSM: {sanita_info.get('ospedali')} ospedali, "
+                    f"presìdi OSM: {sanita_info.get('ospedali')} ospedalieri{acuti_txt}, "
                     f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
-                    "(ambulatori/studi medici)"
+                    "(ambulatori/studi medici); su OSM `amenity=hospital` può includere "
+                    "presìdi non-acuti"
                 )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
@@ -1346,8 +1383,8 @@ def build_programma_aggregator(
                     else f"~{osp.get('dist_linea_km')} km in linea d'aria"
                 )
                 narrative_bits.append(
-                    f"nessun ospedale nel comune; il più vicino è «{osp.get('nome')}» a {dist} "
-                    "(accessibilità ospedaliera)"
+                    f"nessun ospedale per acuti nel comune; il più vicino (con pronto soccorso) "
+                    f"è «{osp.get('nome')}» a {dist} (accessibilità agli acuti)"
                 )
             if san_resources:
                 narrative = (
@@ -1362,7 +1399,7 @@ def build_programma_aggregator(
         # Ancora AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani/dismessi OSM
         # con punteggio di idoneità; URL OSM CITABILE (host openstreetmap.org, valido
         # per commercio_duc/trasporti). Un'idea di dotazione su lotto localizza qui.
-        top_aree = _top_aree_candidate(aree_info)
+        top_aree = _top_aree_candidate(aree_info, ambiente_info)
         if top_aree:
             aree_resources: list[Resource] = []
             for a in top_aree:
@@ -1381,7 +1418,8 @@ def build_programma_aggregator(
                     "Aree candidate per dotazioni su lotto (vuoti urbani / dismessi mappati su "
                     "OSM) — " + "; ".join(_fmt_area_candidata(a) for a in top_aree) + ". Punteggio "
                     "di idoneità su centralità/abbandono; PROPRIETÀ e DESTINAZIONE URBANISTICA "
-                    "DA VERIFICARE. Un'idea di dotazione su lotto (mercatale/eventi, sport, "
+                    "DA VERIFICARE (vincoli idrogeologici stimati a livello comunale ISPRA → PAI). "
+                    "Un'idea di dotazione su lotto (mercatale/eventi, sport, "
                     "parcheggi, spazi pubblici) localizzi sull'area più idonea che regge il target "
                     "di dimensionamento e citi l'URL OSM."
                 )

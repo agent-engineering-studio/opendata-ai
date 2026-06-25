@@ -4,7 +4,8 @@
 # della popolazione) + alle fonti, ai criteri di localizzazione e agli strumenti
 # attuativi. Il motore puro `opendata_core.rigenerazione.valuta_pattern` li esegue
 # in modo uniforme; AGGIUNGERE UN PATTERN È UNA RIGA QUI, NON CODICE
-# (rif. "Territorio in dati — Documento di metodo").
+# (rif. "Territorio in dati"). `sdg`: obiettivi Agenda 2030 (Appendice A) per la
+# rendicontazione e l'accesso ai finanziamenti.
 #
 # I valori calcolati sono OBIETTIVI di programmazione (Gap = target − dotazione
 # osservata), NON misure reali. `formula.tipo` ∈ {lineare, per_mille, classi, soglia}.
@@ -15,6 +16,7 @@ version: 1
 patterns:
   - id: aree_mercatali
     tema: "Mercato, eventi e partecipazione"
+    sdg: "SDG 8, 11, 12"
     esempio_virtuoso: "Area mercatale «P. Munno», Sammichele di Bari"
     indicatore: "superficie polifunzionale per abitante"
     norma: "D.M. 1444/1968 (attrezzature di interesse comune) + modello aree mercatali polifunzionali"
@@ -36,6 +38,7 @@ patterns:
 
   - id: verde_gioco_sport
     tema: "Verde, gioco e sport"
+    sdg: "SDG 3, 11"
     indicatore: "9 mq/ab di verde-gioco-sport"
     norma: "D.M. 1444/1968 (9 mq/ab a parco, gioco e sport)"
     geometria: lotto
@@ -46,6 +49,7 @@ patterns:
 
   - id: impianti_sportivi
     tema: "Impianti sportivi"
+    sdg: "SDG 3, 11"
     esempio_virtuoso: "Centro sportivo polifunzionale di quartiere"
     indicatore: "≈4 mq/ab di impianti sportivi"
     norma: "D.M. 1444/1968 (quota sport) + norme CONI-CIS per i singoli impianti"
@@ -57,6 +61,7 @@ patterns:
 
   - id: rete_ciclabile
     tema: "Ciclabili e mobilità dolce"
+    sdg: "SDG 3, 11, 13"
     indicatore: "1,5 km di rete ogni 1.000 ab"
     norma: "riferimento PUMS/europeo (Piano Generale Mobilità Ciclistica, MIT)"
     geometria: corridoio
@@ -67,6 +72,7 @@ patterns:
 
   - id: parcheggi_pubblici
     tema: "Sosta pubblica"
+    sdg: "SDG 11"
     indicatore: "2,5 mq/ab di parcheggi pubblici"
     norma: "D.M. 1444/1968 (2,5 mq/ab a parcheggi)"
     geometria: lotto
@@ -77,6 +83,7 @@ patterns:
 
   - id: traffico_mobilita
     tema: "Traffico e mobilità sostenibile"
+    sdg: "SDG 11, 13"
     indicatore: "strumento di pianificazione della mobilità"
     norma: "PUMS; Reg. UE 2024/1679 (TEN-T) — nodi urbani entro il 2027"
     geometria: corridoio
