@@ -20,6 +20,7 @@ const LANDING_NAV = [
   { href: "/#come", label: "Come funziona" },
   { href: "/#perchi", label: "Per chi" },
   { href: "/#sviluppatori", label: "Sviluppatori" },
+  { href: "/#approfondimenti", label: "Cultura del dato" },
   { href: "/docs", label: "Documentazione" },
   { href: "/roadmap", label: "Roadmap" },
   { href: "/sostieni", label: "Sostieni" },

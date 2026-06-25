@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { PageHero } from "@/components/PageHero";
+
 export const metadata: Metadata = {
   title: "Note legali — OpenData AI",
   description:
@@ -11,14 +13,15 @@ export default function Page() {
   const LAST_UPDATED = "11 giugno 2026";
 
   return (
-    <article className="container py-5" style={{ maxWidth: 880 }}>
-      <h1>Note legali</h1>
+    <>
+      <PageHero
+        eyebrow="Termini d'uso"
+        title="Note legali"
+        lead="Condizioni d'uso del progetto sperimentale OpenData AI gestito da Agent Engineering Studio."
+      />
+      <article className="container py-5" style={{ maxWidth: 880 }}>
       <p className="text-muted small">
         Ultimo aggiornamento: {LAST_UPDATED} · Versione 1.0
-      </p>
-      <p className="lead">
-        Condizioni d&apos;uso del progetto sperimentale OpenData AI gestito
-        da Agent Engineering Studio.
       </p>
 
       <section className="mt-4">
@@ -175,6 +178,7 @@ export default function Page() {
           <Link href="/privacy">privacy policy</Link>.
         </p>
       </section>
-    </article>
+      </article>
+    </>
   );
 }
