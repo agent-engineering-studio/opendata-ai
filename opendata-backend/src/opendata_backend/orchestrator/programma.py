@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
+from opendata_core.rigenerazione import dimensiona
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from .guardrails import validate_programma
@@ -568,6 +569,31 @@ def build_programma_task(
                     "'sanita' deve ancorarsi a questi numeri e citare la fonte (es. farmacia dei "
                     "servizi o telemedicina dove mancano strutture territoriali)."
                 )
+        # DIMENSIONAMENTO RIGENERAZIONE (framework parametrico): target normativi
+        # dalla popolazione (deterministici, NON osservati) — ancora quantitativa per
+        # le idee di mobilità/ciclabili, sport, mercato/eventi e spazi pubblici.
+        if req.popolazione:
+            dim = dimensiona(req.popolazione)
+            m, sp, ci, tr = (
+                dim["aree_mercatali"], dim["sport"], dim["ciclabili"], dim["traffico"],
+            )
+            parts.append(
+                "DIMENSIONAMENTO RIGENERAZIONE — TARGET NORMATIVI (parametrici dalla "
+                f"popolazione {dim['popolazione']} ab; sono OBIETTIVI di dotazione, NON dati "
+                "osservati: confrontali con l'esistente nel bundle e dimensiona il gap). "
+                f"(1) Aree mercatali/eventi: superficie polifunzionale target ~{m['superficie_target_mq']} mq "
+                f"(~{m['posteggi_indicativi']} posteggi), assetto «{m['assetto']}» [{m['norma']}]. "
+                f"(2) Sport: ~{sp['verde_gioco_sport_mq']} mq verde-gioco-sport, di cui ~{sp['impianti_sportivi_mq']} "
+                f"mq impianti sportivi; dotazione tipo «{sp['dotazione_tipo']}» [{sp['norma']}]. "
+                f"(3) Ciclabili/mobilità dolce: rete target ~{ci['rete_target_km']} km, assetto «{ci['assetto']}» [{ci['norma']}]. "
+                f"(4) Traffico: {tr['strumento']} — leve: {tr['leve']} [{tr['norma']}]. "
+                "USA questi target per QUANTIFICARE le idee dei generatori pertinenti "
+                "(trasporti → rete ciclabile/PUMS; commercio_duc → area mercatale/eventi; "
+                "welfare/spazi pubblici → sport e verde): confronta il target con la dotazione "
+                "osservata nel bundle (impianti/fermate/asset OSM) e proponi interventi DIMENSIONATI "
+                "sul gap, CITANDO la norma come fonte del target e dichiarando che sono standard di "
+                "programmazione, non misure reali."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
