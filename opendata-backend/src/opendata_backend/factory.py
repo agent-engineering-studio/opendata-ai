@@ -1271,15 +1271,18 @@ class OrchestratorSession:
                 clat, clon = (s + n) / 2, (w + e) / 2
                 counts = await osm_client.overpass_health_counts(bbox=(s, w, n, e)) or {}
                 ospedali = counts.get("ospedali", 0)
+                ospedali_acuti = counts.get("ospedali_acuti", 0)
                 result: dict[str, Any] = {
                     "ospedali": ospedali,
+                    "ospedali_acuti": ospedali_acuti,
                     "strutture_territoriali": counts.get("ambulatori", 0)
                     + counts.get("studi_medici", 0),
                     "osm_source_url": _osm_object_url(hits[0], clat, clon),
                 }
-                # Nessun ospedale nel comune → misura l'accessibilità al più vicino.
-                if ospedali == 0:
-                    nh = await osm_client.nearest_hospital(clat, clon)
+                # Nessun ospedale PER ACUTI nel comune (anche se ci sono presìdi
+                # ospedalieri non-acuti) → misura l'accessibilità all'acuto più vicino.
+                if ospedali_acuti == 0:
+                    nh = await osm_client.nearest_hospital(clat, clon, acute_only=True)
                     if nh:
                         osp = {"nome": nh["nome"], "dist_linea_km": nh["dist_linea_km"]}
                         try:

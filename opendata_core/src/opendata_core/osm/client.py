@@ -129,6 +129,9 @@ _CATEGORY_FILTER: dict[str, str] = {
     "attraction": '["tourism"="attraction"]',
     "bus_station": '["amenity"="bus_station"]',
     "train_station": '["railway"="station"]',
+    # Ospedale per ACUTI = con pronto soccorso (emergency=yes); distingue gli
+    # ospedali veri dai presìdi taggati amenity=hospital ma non-acuti (poliambulatori).
+    "hospital_acute": '["amenity"="hospital"]["emergency"="yes"]',
 }
 
 
@@ -502,6 +505,9 @@ async def overpass_transport_counts(
 # l'accessibilità geografica ai servizi sanitari dentro il confine del comune.
 _HEALTH_FILTERS: dict[str, str] = {
     "ospedali": '["amenity"="hospital"]',
+    # Sottoinsieme degli ospedali con pronto soccorso (acuti) — su OSM `amenity=hospital`
+    # include anche poliambulatori/case di cura non-acute; `emergency=yes` isola gli acuti.
+    "ospedali_acuti": '["amenity"="hospital"]["emergency"="yes"]',
     "ambulatori": '["amenity"="clinic"]',
     "studi_medici": '["amenity"="doctors"]',
 }
@@ -567,15 +573,20 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 async def nearest_hospital(
-    lat: float, lon: float, *, radii_m: tuple[int, ...] = (15000, 40000, 90000)
+    lat: float,
+    lon: float,
+    *,
+    radii_m: tuple[int, ...] = (15000, 40000, 90000),
+    acute_only: bool = False,
 ) -> dict[str, Any] | None:
-    """Ospedale (amenity=hospital) più vicino a (lat,lon), cercando in raggi
-    CRESCENTI (Overpass live). Utile per i comuni SENZA ospedale: misura
-    l'accessibilità ospedaliera. Ritorna `{nome, lat, lon, dist_linea_km}` del più
-    vicino in linea d'aria, o None se nessuno entro il raggio massimo. La distanza/
-    tempo STRADALI si ottengono poi con `osrm_route()`."""
+    """Ospedale più vicino a (lat,lon), cercando in raggi CRESCENTI (Overpass live).
+    Con `acute_only=True` cerca solo ospedali per ACUTI (con pronto soccorso,
+    `emergency=yes`) — utile per i comuni senza ospedale acuto. Ritorna
+    `{nome, lat, lon, dist_linea_km}` del più vicino in linea d'aria, o None se
+    nessuno entro il raggio massimo. La distanza/tempo STRADALI: poi `osrm_route()`."""
+    category = "hospital_acute" if acute_only else "hospital"
     for radius in radii_m:
-        elements = await overpass_around(lat, lon, radius, "hospital", limit=80)
+        elements = await overpass_around(lat, lon, radius, category, limit=80)
         best: dict[str, Any] | None = None
         best_d: float | None = None
         for el in elements:

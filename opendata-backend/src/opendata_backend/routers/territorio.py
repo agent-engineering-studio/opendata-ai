@@ -19,7 +19,13 @@ from opendata_core.osm.zones import ZONA_TIPI, OverpassError
 
 from ..auth import ClerkUser
 from ..cache.store import cache_get, cache_set
-from ..config import check_territorio_scope, get_settings, province_scope
+from ..config import (
+    REPORT_DEPTH_CONCISE_NOTE,
+    check_territorio_scope,
+    get_settings,
+    province_scope,
+    resolve_report_depth,
+)
 from ..shared.ratelimit import enforce_rate_limit
 
 log = logging.getLogger("opendata-backend.territorio")
@@ -32,6 +38,24 @@ _TTL = 24 * 3600
 def _key(*parts: str) -> str:
     raw = "|".join(p.lower().strip() for p in parts).encode()
     return "od:territorio:" + hashlib.sha1(raw).hexdigest()
+
+
+@router.get("/report-mode")
+async def report_mode(
+    user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008, ARG001
+) -> dict:
+    """Profondità del report territorio in base alla capacità del modello attivo.
+
+    Serve alla UI per mostrare un disclaimer accanto a «Genera» quando il sistema
+    usa un modello locale compatto (tier `concise`), che può produrre imprecisioni;
+    sui modelli capaci (claude/azure/ollama_cloud) il tier è `full`.
+    """
+    depth = resolve_report_depth(get_settings())
+    return {
+        "depth": depth,
+        "concise": depth == "concise",
+        "note": REPORT_DEPTH_CONCISE_NOTE.strip() if depth == "concise" else None,
+    }
 
 
 @router.get("/comuni")

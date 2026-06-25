@@ -583,22 +583,33 @@ def build_programma_task(
                 if sanita_info.get("source_url"):
                     fonti.append(f"farmacie: {sanita_info.get('source_url')}")
             if sanita_info.get("ospedali") is not None:
+                acuti = sanita_info.get("ospedali_acuti")
+                acuti_txt = (
+                    f" (di cui {acuti} per acuti / con pronto soccorso)" if acuti is not None else ""
+                )
                 bits.append(
-                    f"presìdi mappati su OSM nel comune: {sanita_info.get('ospedali')} ospedali, "
-                    f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
-                    "(ambulatori/studi medici)"
+                    f"presìdi ospedalieri mappati su OSM nel comune: {sanita_info.get('ospedali')}"
+                    f"{acuti_txt}, {sanita_info.get('strutture_territoriali')} strutture territoriali "
+                    "(ambulatori/studi medici). NB: `amenity=hospital` su OSM può includere "
+                    "poliambulatori/case di cura NON acuti"
                 )
                 if sanita_info.get("osm_source_url"):
                     fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
-            # Comune SENZA ospedale: steer esplicito SEMPRE (anche se la distanza dal
-            # più vicino non è disponibile — es. Overpass/OSRM non raggiungibili), così
-            # il modello non ripiega su "costruire nuove strutture ospedaliere".
-            if sanita_info.get("ospedali") == 0:
+            # Comune senza ospedale PER ACUTI (anche se ci sono presìdi ospedalieri
+            # non-acuti): steer esplicito così il modello non propone di "costruire un
+            # ospedale" e legge correttamente la leva (mobilità sanitaria / territoriale).
+            if sanita_info.get("ospedali_acuti") == 0:
+                ha_presidi = bool(sanita_info.get("ospedali"))
+                premessa = (
+                    "il comune ha presìdi ospedalieri non-acuti ma NESSUN ospedale per acuti "
+                    "(pronto soccorso)" if ha_presidi
+                    else "il comune NON ha ospedali nel territorio"
+                )
                 bits.append(
-                    "il comune NON ha ospedali nel territorio: la leva sanitaria è "
-                    "l'ACCESSIBILITÀ (mobilità sanitaria verso l'ospedale di riferimento, "
-                    "case/ospedali di comunità, assistenza territoriale di prossimità, "
-                    "telemedicina) — è SBAGLIATO proporre la costruzione di un ospedale locale"
+                    f"{premessa}: la leva sanitaria è l'ACCESSIBILITÀ AGLI ACUTI (mobilità "
+                    "sanitaria verso l'ospedale di riferimento, case/ospedali di comunità, "
+                    "assistenza territoriale di prossimità, telemedicina) — è SBAGLIATO "
+                    "proporre la costruzione di un nuovo ospedale per acuti"
                 )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
@@ -1354,10 +1365,15 @@ def build_programma_aggregator(
                 if osrc not in {r.url.strip() for r in all_resources}:
                     all_resources.append(osm_res)
                 san_resources.append(osm_res)
+                acuti = sanita_info.get("ospedali_acuti")
+                acuti_txt = (
+                    f" (di cui {acuti} per acuti/pronto soccorso)" if acuti is not None else ""
+                )
                 narrative_bits.append(
-                    f"presìdi OSM: {sanita_info.get('ospedali')} ospedali, "
+                    f"presìdi OSM: {sanita_info.get('ospedali')} ospedalieri{acuti_txt}, "
                     f"{sanita_info.get('strutture_territoriali')} strutture territoriali "
-                    "(ambulatori/studi medici)"
+                    "(ambulatori/studi medici); su OSM `amenity=hospital` può includere "
+                    "presìdi non-acuti"
                 )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
@@ -1367,8 +1383,8 @@ def build_programma_aggregator(
                     else f"~{osp.get('dist_linea_km')} km in linea d'aria"
                 )
                 narrative_bits.append(
-                    f"nessun ospedale nel comune; il più vicino è «{osp.get('nome')}» a {dist} "
-                    "(accessibilità ospedaliera)"
+                    f"nessun ospedale per acuti nel comune; il più vicino (con pronto soccorso) "
+                    f"è «{osp.get('nome')}» a {dist} (accessibilità agli acuti)"
                 )
             if san_resources:
                 narrative = (
