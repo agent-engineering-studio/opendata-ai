@@ -638,3 +638,91 @@ async def osrm_table(
         r = await client.get(url, params={"annotations": "duration,distance"})
         r.raise_for_status()
         return r.json()
+
+
+# ── Aree candidate per la rigenerazione (opportunity mining, Fase 2) ───────
+#
+# Vuoti urbani / aree dismesse o sottoutilizzate riusabili per dotazioni
+# (mercato/eventi, sport, parcheggi, spazi pubblici). Tipologie OSM dei "vuoti":
+_CANDIDATE_AREA_FILTERS = [
+    '["landuse"="brownfield"]',                # area dismessa / da bonificare
+    '["landuse"="greenfield"]',                # area libera edificabile
+    '["disused:landuse"]',                     # ex-uso dismesso (qualsiasi)
+    '["abandoned:landuse"]',
+    '["landuse"="railway"]["disused"="yes"]',  # ex sedime ferroviario
+    '["place"="square"]',                      # piazze / slarghi
+    '["amenity"="parking"]',                   # parcheggi (riqualificabili a polifunzionali)
+    '["building"="ruins"]',
+]
+
+
+def _polygon_area_m2(coords: list[tuple[float, float]]) -> float:
+    """Area approssimata (m²) di un anello (lat,lon) via proiezione equirettangolare
+    locale + shoelace. Sufficiente per ordinare/filtrare i candidati (non catastale)."""
+    import math
+
+    if len(coords) < 3:
+        return 0.0
+    lat0 = sum(c[0] for c in coords) / len(coords)
+    rr = 6371000.0
+    coslat = math.cos(math.radians(lat0))
+    pts = [(math.radians(lon) * rr * coslat, math.radians(lat) * rr) for lat, lon in coords]
+    s = 0.0
+    n = len(pts)
+    for i in range(n):
+        x1, y1 = pts[i]
+        x2, y2 = pts[(i + 1) % n]
+        s += x1 * y2 - x2 * y1
+    return abs(s) / 2.0
+
+
+async def overpass_candidate_areas(
+    *,
+    bbox: tuple[float, float, float, float],
+    limit: int = 20,
+    timeout: float = 40.0,
+) -> list[dict[str, Any]]:
+    """Enumera AREE candidate (vuoti urbani / dismessi / sottoutilizzati) in un bbox.
+
+    `out geom` per calcolare l'area approssimata di ogni way/relation. Ritorna
+    `[{osm_type, osm_id, name, kind, lat, lon, area_mq, url}]` ordinato per area
+    decrescente, max `limit`. Fail-safe a monte: `overpass_post` ruota i mirror e
+    apre il circuit breaker; il chiamante cattura le eccezioni di trasporto."""
+    s, w, n, e = bbox
+    region = f"({s},{w},{n},{e})"
+    union = "".join(f" way{f}{region}; relation{f}{region};" for f in _CANDIDATE_AREA_FILTERS)
+    cap = max(1, min(limit * 3, 120))
+    query = f"[out:json][timeout:{int(timeout)}];\n({union}\n);\nout geom {cap};"
+    elements = await overpass_post(query, timeout=timeout, backoff_base=2.0)
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for el in elements:
+        geom = el.get("geometry") or []
+        coords = [(g["lat"], g["lon"]) for g in geom if "lat" in g and "lon" in g]
+        if len(coords) < 3:
+            continue
+        area = _polygon_area_m2(coords)
+        if area < 300:  # scarta micro-poligoni (rumore)
+            continue
+        otype, oid = el.get("type", "way"), el.get("id")
+        key = f"{otype}/{oid}"
+        if key in seen:
+            continue
+        seen.add(key)
+        tags = el.get("tags") or {}
+        kind = (
+            tags.get("landuse") or tags.get("amenity") or tags.get("place")
+            or tags.get("building") or "area"
+        )
+        out.append({
+            "osm_type": otype,
+            "osm_id": oid,
+            "name": (tags.get("name") or "").strip() or None,
+            "kind": kind,
+            "lat": round(sum(c[0] for c in coords) / len(coords), 6),
+            "lon": round(sum(c[1] for c in coords) / len(coords), 6),
+            "area_mq": int(round(area)),
+            "url": f"https://www.openstreetmap.org/{otype}/{oid}",
+        })
+    out.sort(key=lambda d: d["area_mq"], reverse=True)
+    return out[:limit]

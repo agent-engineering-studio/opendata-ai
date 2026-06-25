@@ -1748,3 +1748,30 @@ def test_router_audit_summary_is_informative() -> None:
     s = _summary(resp)
     assert "110002" in s and "0 voci SWOT" in s and "2 citazioni" in s
     assert "istat" in s and "opencoesione" in s
+
+
+@pytest.mark.asyncio
+async def test_combinazione_requires_two_cross_lens_evidences() -> None:
+    """combinazione (Fase 3 — serendipità guidata): incrocio di ≥2 segnali di lenti
+    diverse. Due evidenze (ISTAT + OSM) → tenuta; una sola → scartata dal guardrail."""
+    ev_istat = {"fonte": "istat", "url": _ISTAT_URL, "dettaglio": "indice vecchiaia 248"}
+    ev_osm = {"fonte": "osm", "url": _TUR_OSM_URL, "dettaglio": "vuoto urbano centrale"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("combinazione", [ev_istat, ev_osm]),  # 2 lenti diverse → ok
+                _idea("combinazione", [ev_istat]),           # una sola evidenza → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("istat", "Demografia + asset.", [
+        {"name": "vecchiaia", "url": _ISTAT_URL, "format": "CSV", "content": None},
+        {"name": "vuoto urbano", "url": _TUR_OSM_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["combinazione"]
+    assert len(resp.proposte[0].evidenze) == 2

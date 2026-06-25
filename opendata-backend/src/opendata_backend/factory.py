@@ -46,10 +46,13 @@ from .config import (
     OPENCOESIONE_INSTRUCTIONS,
     OSM_INSTRUCTIONS,
     PROGRAMMA_INSTRUCTIONS,
+    REPORT_DEPTH_CONCISE_NOTE,
+    REPORT_DEPTH_ESTESA,
     SYNTH_INSTRUCTIONS,
     WEB_INSTRUCTIONS,
     Settings,
     resolve_provider,
+    resolve_report_depth,
 )
 from .orchestrator.programma import (
     ProgrammaRequest,
@@ -134,6 +137,7 @@ _LENS_SOURCES: dict[str, str] = {
     "ambiente": "Ambiente · rischio idrogeologico",
     "sanita": "Sanità di prossimità",
     "comparabili": "Comparabili · progetti peer (OpenCoesione)",
+    "aree": "Aree candidate · vuoti urbani (OSM)",
 }
 
 # Comparabili (Fase B): selezione RILEVANTE dei progetti peer. Prima si prendeva il
@@ -580,18 +584,22 @@ class OrchestratorSession:
                 programma_client = AnthropicClient(
                     api_key=s.anthropic_api_key, model=s.programma_model,
                 )
+            # Report depth tiering: i prompt sono concisi di default (rapidi sui
+            # modelli locali piccoli); sui modelli capaci/cloud appendo la
+            # direttiva ESTESA per tornare verbosi. Vedi resolve_report_depth.
+            _depth_extra = REPORT_DEPTH_ESTESA if resolve_report_depth(s) == "full" else ""
             self._programma_agent = await self._enter_agent(
-                programma_client, PROGRAMMA_INSTRUCTIONS, s.programma_agent_name,
+                programma_client, PROGRAMMA_INSTRUCTIONS + _depth_extra, s.programma_agent_name,
                 None, synth_options,
             )
             # Modalità "idee" (Pezzo 8): stesso client, istruzioni dedicate.
             self._idee_agent = await self._enter_agent(
-                programma_client, IDEE_INSTRUCTIONS, f"{s.programma_agent_name}-idee",
+                programma_client, IDEE_INSTRUCTIONS + _depth_extra, f"{s.programma_agent_name}-idee",
                 None, idee_options,
             )
             # Modalità "marketing" (Pezzo 10): stesso client, istruzioni dedicate.
             self._marketing_agent = await self._enter_agent(
-                programma_client, MARKETING_INSTRUCTIONS, f"{s.programma_agent_name}-marketing",
+                programma_client, MARKETING_INSTRUCTIONS + _depth_extra, f"{s.programma_agent_name}-marketing",
                 None, idee_options,
             )
 
@@ -1296,6 +1304,44 @@ class OrchestratorSession:
             _log_lens_skip("presìdi sanitari OSM non risolti per %s", req.cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_aree_candidate(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Aree candidate (vuoti urbani/dismessi) via OSM — cache 24h. Solo idee/completa."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("aree", req.cod_comune),
+            lambda: OrchestratorSession._resolve_aree_uncached(req),
+            force=req.force_refresh,
+        )
+
+    @staticmethod
+    async def _resolve_aree_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Localizzazione (Fase 2): enumera i vuoti urbani candidati nel bbox del
+        comune via OSM/Overpass + il centro (per la centralità). Fail-safe: se
+        Overpass è irraggiungibile (mirror bloccati) ritorna None e l'analisi
+        procede col solo dimensionamento (Fase 1)."""
+        try:
+            from opendata_core.osm import client as osm_client
+
+            async def _work() -> dict[str, Any] | None:
+                hits = await osm_client.geocode(f"{req.comune_nome}, Italia", limit=1)
+                if not hits:
+                    return None
+                bb = hits[0].get("boundingbox") or []
+                if len(bb) != 4:
+                    return None
+                s, n, w, e = (float(bb[0]), float(bb[1]), float(bb[2]), float(bb[3]))
+                cands = await osm_client.overpass_candidate_areas(bbox=(s, w, n, e), limit=15)
+                if not cands:
+                    return None
+                return {"centro": [(s + n) / 2, (w + e) / 2], "candidati": cands}
+
+            return await asyncio.wait_for(_work(), timeout=60.0)
+        except Exception as exc:  # noqa: BLE001 — fail-safe, la lente è opzionale
+            _log_lens_skip("aree candidate OSM non risolte per %s", req.cod_comune, exc=exc)
+            return None
+
     async def _resolve_all_lenses(
         self,
         req: ProgrammaRequest,
@@ -1328,6 +1374,7 @@ class OrchestratorSession:
             ("ambiente", self._resolve_ambiente(req)),
             ("sanita", self._resolve_sanita(req)),
             ("comparabili", self._resolve_comparabili(req)),
+            ("aree", self._resolve_aree_candidate(req)),
         ]
         loop = asyncio.get_event_loop()
 
@@ -1354,10 +1401,10 @@ class OrchestratorSession:
 
         pairs = await asyncio.gather(*(_run(k, c) for k, c in lenses))
         out = dict(pairs)
-        return {k: out[k] for k in (
-            "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-            "welfare", "istruzione", "ambiente", "sanita", "comparabili",
-        )}
+        # Restituisci le chiavi nell'ordine in cui sono dichiarate in `lenses`.
+        # NON ricopiare qui una whitelist hardcoded: divergeva (es. "aree" era
+        # risolta ma non inclusa → KeyError a valle in run_programma_streaming).
+        return {k: out[k] for k, _ in lenses}
 
     async def run_programma_streaming(
         self,
@@ -1429,6 +1476,7 @@ class OrchestratorSession:
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
+                aree_info=lenses["aree"],
                 idee_chunking=self._settings.idee_chunking,
             )
             task_text = build_programma_task(
@@ -1438,6 +1486,7 @@ class OrchestratorSession:
                 istruzione_info=lenses["istruzione"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
+                aree_info=lenses["aree"],
             )
             queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
             in_flight: set[str] = set()
@@ -1585,6 +1634,8 @@ class OrchestratorSession:
                     resp = ProgrammaResponse.model_validate_json(
                         getattr(output, "text", None) or str(output)
                     )
+                if resolve_report_depth(self._settings) == "concise":
+                    resp.disclaimer = (resp.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
                 fw_logger.removeHandler(handler)
@@ -1626,6 +1677,7 @@ class OrchestratorSession:
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
+                aree_info=lenses["aree"],
                 idee_chunking=self._settings.idee_chunking,
             )
             workflow = build_workflow(self._participants, aggregator)
@@ -1637,6 +1689,7 @@ class OrchestratorSession:
                     istruzione_info=lenses["istruzione"],
                     ambiente_info=lenses["ambiente"],
                     sanita_info=lenses["sanita"],
+                    aree_info=lenses["aree"],
                 )
             )
         outputs = events.get_outputs()
@@ -1644,11 +1697,13 @@ class OrchestratorSession:
             raise RuntimeError("Programma workflow produced no outputs")
         final = outputs[0]
         response = getattr(final, "response", None)
-        if isinstance(response, ProgrammaResponse):
-            return response
-        # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
-        text = getattr(final, "text", None) or str(final)
-        return ProgrammaResponse.model_validate_json(text)
+        if not isinstance(response, ProgrammaResponse):
+            # Fallback: il workflow ha serializzato l'output → riparsa dal JSON.
+            text = getattr(final, "text", None) or str(final)
+            response = ProgrammaResponse.model_validate_json(text)
+        if resolve_report_depth(self._settings) == "concise":
+            response.disclaimer = (response.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+        return response
 
     async def run(self, query: str) -> str:
         """Fan out `query` to the enabled specialists in parallel and return the synth reply.

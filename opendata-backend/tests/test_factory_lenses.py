@@ -19,6 +19,7 @@ _LENSES = (
     "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
     "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti", "_resolve_welfare",
     "_resolve_istruzione", "_resolve_ambiente", "_resolve_sanita", "_resolve_comparabili",
+    "_resolve_aree_candidate",
 )
 
 
@@ -44,7 +45,7 @@ async def test_resolve_all_lenses_runs_in_parallel() -> None:
     assert elapsed < 0.2, f"lenti non parallele: {elapsed:.3f}s"
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-        "welfare", "istruzione", "ambiente", "sanita", "comparabili",
+        "welfare", "istruzione", "ambiente", "sanita", "comparabili", "aree",
     }
     assert out["commercio"] == {"tag": "_resolve_commercio"}
 

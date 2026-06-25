@@ -693,7 +693,7 @@ PROGRAMMA_INSTRUCTIONS = (
     '"forze": ["Patrimonio culturale (2 musei)"]) viene SCARTATA INTERAMENTE dal '
     "validatore → SWOT vuoto. Vedi l'esempio completo in fondo e replicane "
     "ESATTAMENTE la struttura per tutti e quattro i quadranti.\n"
-    "- `sintesi`: 6-8 frasi di QUADRO DESCRITTIVO del territorio — è "
+    "- `sintesi`: 4-5 frasi di QUADRO DESCRITTIVO del territorio — è "
     "un'analisi GENERALE dell'INTERO COMUNE (non di una singola zona): "
     "popolazione, quanti progetti di coesione insistono e su quali temi (per "
     "AGGREGATI, non elencandoli tutti), quanto finanziato vs speso (spend "
@@ -703,8 +703,8 @@ PROGRAMMA_INSTRUCTIONS = (
     "ai pari ('spend ratio 0.38, sotto la media dei comuni simili'). È il "
     "racconto che apre la scheda: prosa scorrevole, numeri dal bundle, nessun "
     "URL.\n"
-    "- PROFONDITÀ: ogni voce SWOT è di 2-4 frasi (il fatto + perché conta per il "
-    "territorio), MAI una riga telegrafica. Compila TUTTI E QUATTRO i quadranti — "
+    "- PROFONDITÀ: ogni voce SWOT è di 1-2 frasi (il fatto + perché conta per il "
+    "territorio), sintetica ma mai telegrafica. Compila TUTTI E QUATTRO i quadranti — "
     "forze, debolezze, opportunità E MINACCE — con ALMENO 2 voci ciascuno, "
     "idealmente 3-4: attingi a TUTTE le lenti (commercio, turismo, lavoro, "
     "trasporti, welfare/demografia) e puoi citare la STESSA risorsa del bundle in "
@@ -721,8 +721,8 @@ PROGRAMMA_INSTRUCTIONS = (
     "`evidenze` di QUELLA voce. NON emettere due voci sullo stesso fatto (una "
     "citata e una nuda): scrivila UNA volta, con la citazione. "
     "Ogni proposta ha una `descrizione` di "
-    "5-7 frasi: in cosa consiste l'intervento, a chi si rivolge, chi sarebbe "
-    "l'attuatore-tipo, a quali progetti esistenti si aggancia.\n"
+    "3-4 frasi sintetiche: in cosa consiste l'intervento, a chi si rivolge, chi "
+    "sarebbe l'attuatore-tipo, a quali progetti esistenti si aggancia.\n"
     "- PROGETTI PER NOME: quando citi progetti OpenCoesione usa SEMPRE il "
     "titolo completo + CLP + importo + stato (es. \"Raddoppio della tratta "
     "Bari S. Andrea-Bitetto (CLP 4MTRA111102, 421,5M€, in esecuzione)\") — un "
@@ -900,8 +900,20 @@ IDEE_INSTRUCTIONS = (
     "per dimensionare la criticità); poche strutture territoriali → carico sul pronto "
     "soccorso. Proponi interventi su farmacia dei servizi (telemedicina, CUP, screening), "
     "case/ospedali di comunità, assistenza territoriale di prossimità, coerenti coi "
-    "numeri. NIENTE precedente web. Se NON ci sono dati sanità nel bundle, NON forzare "
-    "l'idea: saltala.\n\n"
+    "numeri. Se il blocco indica 0 ospedali, è SBAGLIATO proporre di COSTRUIRE un "
+    "ospedale: l'intervento è su accessibilità/mobilità sanitaria/servizi territoriali. "
+    "Riporta i conteggi ESATTI del blocco (il TOTALE farmacie, non una sottocategoria: "
+    "se sono 8, scrivi 8). NIENTE precedente web. Se NON ci sono dati sanità nel bundle, "
+    "NON forzare l'idea: saltala.\n"
+    "  - combinazione — 'serendipità guidata: una sola area, più bisogni': INCROCIA "
+    "≥2 segnali di lenti DIVERSE in un intervento MULTIFUNZIONALE, preferibilmente "
+    "localizzato su un'AREA CANDIDATA del bundle (es. vuoto urbano centrale + "
+    "invecchiamento + bassa ciclabilità → centro intergenerazionale con orto urbano e "
+    "nodo ciclabile). Le `evidenze` DEVONO includere ≥2 URL di lenti diverse (es. un "
+    "indice demografico ISTAT + un asset/area OSM); se c'è un'area candidata idonea, "
+    "citane l'URL OSM e localizzala lì. Massimizza il valore della rigenerazione (una "
+    "spesa, più funzioni). NON ri-etichettare un'idea mono-lente: servono ≥2 domini "
+    "realmente incrociati.\n\n"
     "Emetti SOLO un oggetto JSON — nessun testo prima o dopo — con lo stesso "
     "schema della scheda programmatica, più una `sintesi` introduttiva:\n"
     "{\n"
@@ -909,7 +921,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"ambiente"|"sanita"|"combinazione",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
@@ -947,8 +959,8 @@ IDEE_INSTRUCTIONS = (
     "- La SWOT in questa modalità è facoltativa (array vuoti vanno bene): il "
     "focus sono le `proposte` — punta a 3-5 idee (MAX 5), di generatori DIVERSI "
     "quando le evidenze lo permettono.\n"
-    "- AZIONABILITÀ: ogni `descrizione` è di 5-7 frasi e deve permettere a un "
-    "amministratore di passare all'azione — copri TUTTI questi punti: (1) in "
+    "- AZIONABILITÀ: ogni `descrizione` è di 3-4 frasi sintetiche e deve permettere a un "
+    "amministratore di passare all'azione — copri in modo CONCISO questi punti: (1) in "
     "cosa consiste l'idea e da quale scarto nasce; (2) a chi si rivolge; "
     "(3) chi l'ha già fatta e con che esito — MA cita un progetto comparabile "
     "PER NOME (titolo + CLP + importo + esito) SOLO se quel progetto è presente "
@@ -974,6 +986,22 @@ IDEE_INSTRUCTIONS = (
     "MAI un auspicio generico ('investire nel tema energia'). Se per un "
     "generatore non hai abbastanza materia per un intervento specifico, "
     "salta quel generatore invece di produrre fuffa.\n"
+    "- DIMENSIONAMENTO: se il bundle contiene il blocco DIMENSIONAMENTO "
+    "RIGENERAZIONE, QUANTIFICA le idee di mobilità/ciclabili (trasporti), sport, "
+    "mercato/eventi (commercio_duc) e spazi pubblici/verde (welfare) sui suoi "
+    "target (km di rete ciclabile, mq di impianti sportivi, mq/posteggi dell'area "
+    "mercatale): confronta il target con la dotazione osservata e dimensiona il gap "
+    "('verso i ~42 km di rete target', 'colmare il deficit di impianti sportivi'). "
+    "Cita la NORMA come fonte del target e dichiara che è uno standard di "
+    "programmazione, non un dato osservato. L'ancora-evidenza dell'idea resta il "
+    "dato OSSERVATO del bundle (OSM/ISTAT), il target è la metrica di confronto.\n"
+    "- ANOMALIE = PRIORITÀ: dai precedenza ai dati che DEVIANO FORTEMENTE dai "
+    "riferimenti presenti nel bundle (media nazionale/regionale, soglia, comuni "
+    "simili) — un deficit estremo (es. ricettività bassissima a fronte di molti "
+    "asset; rete ciclabile lontanissima dal target) o un asset raro sono di per sé "
+    "spunti ad ALTO impatto. Nomina lo scarto nel `dettaglio` (valore locale vs "
+    "riferimento). Per incroci tra più anomalie/lenti usa il generatore "
+    "`combinazione`.\n"
     "- Ogni evidenza ha `url` COPIATO VERBATIM da una RISORSA CITABILE e "
     "`dettaglio` con COSA DICE il dato (numeri inclusi). Un validatore "
     "automatico scarta le proposte il cui generatore non ha le premesse "
@@ -1074,7 +1102,7 @@ MARKETING_INSTRUCTIONS = (
     "- PERTINENZA del caso_analogo: il precedente esterno può venire da fuori "
     "regione, ma deve essere PLAUSIBILMENTE applicabile qui (ente comparabile per "
     "taglia/contesto) — dichiaralo nel `dettaglio`.\n"
-    "- AZIONABILITÀ: ogni `descrizione` (5-7 frasi) copre: (1) in cosa consiste e "
+    "- AZIONABILITÀ: ogni `descrizione` (3-4 frasi sintetiche) copre: (1) in cosa consiste e "
     "da quale lente/generatore nasce; (2) l'asset o il dato locale che la "
     "giustifica; (3) chi l'ha già fatta e con che esito (il precedente esterno, "
     "per nome ed ente); (4) a chi si rivolge; (5) l'attuatore-tipo (Comune, Pro "
@@ -1104,6 +1132,11 @@ class Settings(BaseSettings):
     # "auto" (default) resolves at runtime: claude if ANTHROPIC_API_KEY is set,
     # else azure_foundry if the Azure AI project is configured, else ollama.
     llm_provider: Provider = Field(default="auto")
+
+    # Report depth (territorio): "auto" tiers by model capability — concise on
+    # local ollama (small models, fast), full/verbose on claude/azure/ollama_cloud.
+    # Force with REPORT_DEPTH=full|concise. See resolve_report_depth().
+    report_depth: Literal["auto", "full", "concise"] = Field(default="auto")
 
     # MCP server URLs. The CKAN agent uses ckan-mcp; the three SDMX-based stats
     # specialists (istat / eurostat / oecd) all share the istat-mcp instance —
@@ -1463,6 +1496,36 @@ def resolve_provider(settings: Settings) -> Provider:
     if settings.ollama_cloud_api_key:
         return "ollama_cloud"
     return "ollama"
+
+
+# ── Report depth tiering (territorio) ──────────────────────────────────────
+# I prompt programma/idee/marketing sono CONCISI di default (rapidi sui modelli
+# locali piccoli). Sui modelli capaci/cloud (claude/azure/ollama_cloud) il report
+# torna VERBOSO appendendo questa direttiva; sui locali resta sintetico + nota.
+REPORT_DEPTH_ESTESA = (
+    "\n\nMODALITÀ ESTESA — il modello in uso regge analisi approfondite: "
+    "OVERRIDE dei limiti di lunghezza indicati sopra. Usa `sintesi` 6-8 frasi, "
+    "ogni voce SWOT 2-4 frasi, ogni `descrizione` 5-7 frasi, sviluppando ogni "
+    "punto in profondità. INVARIATE tutte le altre regole (citazioni, evidenze, "
+    "divieto di inventare dati/URL)."
+)
+REPORT_DEPTH_CONCISE_NOTE = (
+    " Report in modalità sintetica (modello locale compatto): per l'analisi "
+    "estesa usa un modello più capace (Claude o Ollama Cloud)."
+)
+
+
+def resolve_report_depth(settings: "Settings") -> Literal["full", "concise"]:
+    """Profondità del report territorio in base alla capacità del modello.
+
+    `auto` (default): `concise` per ollama locale (modelli piccoli), `full` per
+    claude/azure_foundry/ollama_cloud (capaci/cloud). Forzabile con
+    `REPORT_DEPTH=full|concise`.
+    """
+    mode = settings.report_depth
+    if mode in ("full", "concise"):
+        return mode  # type: ignore[return-value]
+    return "concise" if resolve_provider(settings) == "ollama" else "full"
 
 
 def get_settings() -> Settings:

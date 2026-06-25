@@ -20,8 +20,10 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
+from opendata_core.rigenerazione import valuta_aree, valuta_pattern
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from ..config_files import rigenerazione_patterns
 from .guardrails import validate_programma
 from .parsing import Resource, parse_agent_reply
 from .sources import resolve_source_url, source_level
@@ -235,6 +237,35 @@ class ProgrammaOutput:
 # ─────────────────────────── evidence bundle ────────────────────────────────
 
 
+def _top_aree_candidate(aree_info: dict[str, Any] | None, n: int = 3) -> list[dict[str, Any]]:
+    """Top-n aree candidate (Fase 2) valutate con la matrice multicriteria.
+
+    Usa i pesi del pattern `aree_mercatali` (matrice canonica) e `target_mq=None`
+    (idoneità di SITO: centralità + abbandono, dimensione lasciata al confronto col
+    target nel bundle). Ritorna [] se non ci sono candidati (Overpass non risolto).
+    """
+    if not (aree_info and aree_info.get("candidati") and aree_info.get("centro")):
+        return []
+    pesi = next(
+        (p.get("criteri_pesi") for p in rigenerazione_patterns() if p.get("id") == "aree_mercatali"),
+        None,
+    ) or {}
+    scored = valuta_aree(
+        aree_info["candidati"], tuple(aree_info["centro"]), target_mq=None, criteri_pesi=pesi
+    )
+    return scored[:n]
+
+
+def _fmt_area_candidata(a: dict[str, Any]) -> str:
+    nome = a.get("name") or a.get("kind") or "area"
+    pnt = a.get("idoneita", {}).get("punteggio")
+    return (
+        f"«{nome}» ({a.get('kind')}, ~{a.get('area_mq')} mq, {a.get('dist_km')} km dal centro"
+        + (f", idoneità {pnt}/100" if pnt is not None else "")
+        + f") {a.get('url')}"
+    )
+
+
 def build_programma_task(
     req: ProgrammaRequest,
     zona_info: dict[str, Any] | None = None,
@@ -247,6 +278,7 @@ def build_programma_task(
     istruzione_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
+    aree_info: dict[str, Any] | None = None,
 ) -> str:
     """Il task inviato ai partecipanti del fan-out (stessa query per tutti).
 
@@ -538,6 +570,16 @@ def build_programma_task(
                 )
                 if sanita_info.get("osm_source_url"):
                     fonti.append(f"presìdi OSM: {sanita_info.get('osm_source_url')}")
+            # Comune SENZA ospedale: steer esplicito SEMPRE (anche se la distanza dal
+            # più vicino non è disponibile — es. Overpass/OSRM non raggiungibili), così
+            # il modello non ripiega su "costruire nuove strutture ospedaliere".
+            if sanita_info.get("ospedali") == 0:
+                bits.append(
+                    "il comune NON ha ospedali nel territorio: la leva sanitaria è "
+                    "l'ACCESSIBILITÀ (mobilità sanitaria verso l'ospedale di riferimento, "
+                    "case/ospedali di comunità, assistenza territoriale di prossimità, "
+                    "telemedicina) — è SBAGLIATO proporre la costruzione di un ospedale locale"
+                )
             osp = sanita_info.get("ospedale_piu_vicino")
             if osp:
                 dist = (
@@ -558,6 +600,55 @@ def build_programma_task(
                     "'sanita' deve ancorarsi a questi numeri e citare la fonte (es. farmacia dei "
                     "servizi o telemedicina dove mancano strutture territoriali)."
                 )
+        # DIMENSIONAMENTO RIGENERAZIONE (catalogo pattern data-driven): target
+        # normativi dalla popolazione (deterministici, NON osservati). Il catalogo
+        # è in config_data/rigenerazione_patterns.yaml — aggiungere un dominio è una
+        # riga di YAML, non codice (rif. "Territorio in dati"). Ancora quantitativa
+        # per le idee di mobilità/ciclabili, sport, mercato/eventi, spazi pubblici.
+        if req.popolazione:
+            valutati = valuta_pattern(req.popolazione, rigenerazione_patterns())
+            voci: list[str] = []
+            for r in valutati:
+                target, unita = r.get("target"), (r.get("unita") or "").strip()
+                if isinstance(target, str):  # pattern a soglia (es. PUMS)
+                    pezzo = f"{r.get('tema')}: {target}"
+                else:
+                    pezzo = f"{r.get('tema')}: target ~{target} {unita}".rstrip()
+                    if r.get("assetto"):
+                        pezzo += f", assetto «{r['assetto']}»"
+                    if r.get("posteggi_indicativi") is not None:
+                        pezzo += f" (~{r['posteggi_indicativi']} posteggi)"
+                pezzo += f" [{r.get('norma')}]"
+                voci.append(pezzo)
+            if voci:
+                parts.append(
+                    "DIMENSIONAMENTO RIGENERAZIONE — TARGET NORMATIVI (parametrici dalla "
+                    f"popolazione {int(req.popolazione)} ab; sono OBIETTIVI di dotazione, NON dati "
+                    "osservati: confrontali con l'esistente nel bundle e dimensiona il gap). "
+                    + " | ".join(voci) + ". "
+                    "USA questi target per QUANTIFICARE le idee dei generatori pertinenti "
+                    "(trasporti → rete ciclabile/mobilità; commercio_duc → area mercatale/eventi; "
+                    "welfare/spazi pubblici → sport, verde, parcheggi): confronta il target con la "
+                    "dotazione osservata nel bundle (impianti/fermate/asset OSM) e proponi interventi "
+                    "DIMENSIONATI sul gap, CITANDO la norma come fonte del target e dichiarando che "
+                    "sono standard di programmazione, non misure reali."
+                )
+        # AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani OSM + scoring
+        # multicriteria. Fail-safe: senza dati OSM (Overpass irraggiungibile) il
+        # blocco non compare e resta il solo dimensionamento (Fase 1).
+        top_aree = _top_aree_candidate(aree_info)
+        if top_aree:
+            parts.append(
+                "AREE CANDIDATE (localizzazione — opportunity mining OSM: vuoti urbani / "
+                "aree dismesse o sottoutilizzate riusabili; punteggio multicriteria su "
+                "centralità e abbandono, con PROPRIETÀ e DESTINAZIONE URBANISTICA DA "
+                "VERIFICARE): " + " | ".join(_fmt_area_candidata(a) for a in top_aree) + ". "
+                "Per le idee di dotazione su lotto (area mercatale/eventi, impianti sportivi, "
+                "parcheggi, spazi pubblici) PROPONI la localizzazione sull'area candidata più "
+                "idonea la cui superficie regge il target di dimensionamento, citandone l'URL "
+                "OSM come evidenza; dichiara SEMPRE che proprietà e conformità urbanistica "
+                "vanno verificate (no open data certi)."
+            )
     if req.modalita in ("marketing", "completa"):
         parts.append(
             "MODALITÀ MARKETING TERRITORIALE: oltre agli indicatori, raccogli gli "
@@ -871,6 +962,7 @@ def build_programma_aggregator(
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
     comparabili_info: dict[str, Any] | None = None,
+    aree_info: dict[str, Any] | None = None,
     idee_chunking: bool = False,
 ) -> Callable[..., Awaitable[ProgrammaOutput]]:
     """Aggregatore per ConcurrentBuilder: evidenze → scheda validata.
@@ -1266,6 +1358,34 @@ def build_programma_aggregator(
                     "numeri e citi la fonte."
                 )
                 _add_anchor("sanita", narrative, san_resources)
+
+        # Ancora AREE CANDIDATE (Fase 2 — localizzazione): vuoti urbani/dismessi OSM
+        # con punteggio di idoneità; URL OSM CITABILE (host openstreetmap.org, valido
+        # per commercio_duc/trasporti). Un'idea di dotazione su lotto localizza qui.
+        top_aree = _top_aree_candidate(aree_info)
+        if top_aree:
+            aree_resources: list[Resource] = []
+            for a in top_aree:
+                url = (a.get("url") or "").strip()
+                if not url:
+                    continue
+                r = Resource(
+                    name=a.get("name") or f"Area candidata ({a.get('kind')})",
+                    url=url, format="JSON", source="osm",
+                )
+                aree_resources.append(r)
+                if url not in {x.url.strip() for x in all_resources}:
+                    all_resources.append(r)
+            if aree_resources:
+                narrative = (
+                    "Aree candidate per dotazioni su lotto (vuoti urbani / dismessi mappati su "
+                    "OSM) — " + "; ".join(_fmt_area_candidata(a) for a in top_aree) + ". Punteggio "
+                    "di idoneità su centralità/abbandono; PROPRIETÀ e DESTINAZIONE URBANISTICA "
+                    "DA VERIFICARE. Un'idea di dotazione su lotto (mercatale/eventi, sport, "
+                    "parcheggi, spazi pubblici) localizzi sull'area più idonea che regge il target "
+                    "di dimensionamento e citi l'URL OSM."
+                )
+                _add_anchor("aree", narrative, aree_resources)
 
         # Ancora COMPARABILI deterministica (OpenCoesione, progetti peer della stessa
         # provincia): i "comuni simili l'hanno fatto" del generatore gap_comparativo,
