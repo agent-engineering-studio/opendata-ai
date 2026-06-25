@@ -331,6 +331,41 @@ class OrchestratorSession:
         await self._stack.enter_async_context(agent)
         return agent
 
+    async def _add_mcp_specialist(
+        self,
+        *,
+        chat_client: Any,
+        instructions: str,
+        name: str,
+        url: str,
+        description: str,
+        default_options: dict[str, object] | None,
+        participants: list[Agent],
+    ) -> None:
+        """Connect one MCP server + its agent, best-effort.
+
+        A specialist whose MCP server is unreachable at startup must NOT take
+        the whole backend down (crash-loop): live sources are fail-safe. On a
+        connection failure we log a warning and skip that specialist, leaving
+        the others to serve in degraded mode. The ``participants < 1`` guard in
+        ``__aenter__`` still refuses to start when *every* source is down.
+
+        Note: only ``Exception`` is caught — a genuine ``CancelledError``
+        (cooperative shutdown) is a ``BaseException`` and must still propagate.
+        """
+        try:
+            tool = await self._enter_mcp_tool(name, url, description)
+        except Exception:
+            log.warning(
+                "MCP specialist '%s' unavailable at %s — skipping (degraded mode)",
+                name, url, exc_info=True,
+            )
+            return
+        agent = await self._enter_agent(
+            chat_client, instructions, name, [tool], default_options,
+        )
+        participants.append(agent)
+
     async def __aenter__(self) -> "OrchestratorSession":
         s = self._settings
         enabled = [
@@ -367,29 +402,34 @@ class OrchestratorSession:
 
         participants: list[Agent] = []
 
+        # Every specialist below connects best-effort via `_add_mcp_specialist`:
+        # an unreachable MCP server is logged and skipped (degraded mode) rather
+        # than crashing the whole backend. The `participants < 1` guard at the
+        # end still refuses to start when *no* source comes up.
+
         if s.enable_ckan:
-            ckan_mcp = await self._enter_mcp_tool(
-                s.ckan_agent_name,
-                s.ckan_mcp_url,
-                "Tools to query any CKAN open data portal via the Action API.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=CKAN_INSTRUCTIONS,
+                name=s.ckan_agent_name,
+                url=s.ckan_mcp_url,
+                description="Tools to query any CKAN open data portal via the Action API.",
+                default_options=default_options,
+                participants=participants,
             )
-            ckan_agent = await self._enter_agent(
-                chat_client, CKAN_INSTRUCTIONS, s.ckan_agent_name, [ckan_mcp], default_options,
-            )
-            participants.append(ckan_agent)
 
         # OpenDataSoft specialist — same shape as CKAN (one portal per call, ODSQL
         # filters). Opt-in; joins the dataset fan-out (DATASET_SOURCES) when enabled.
         if s.enable_ods:
-            ods_mcp = await self._enter_mcp_tool(
-                s.ods_agent_name,
-                s.ods_mcp_url,
-                "Tools to query any OpenDataSoft portal via the Explore API v2.1.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=ODS_INSTRUCTIONS,
+                name=s.ods_agent_name,
+                url=s.ods_mcp_url,
+                description="Tools to query any OpenDataSoft portal via the Explore API v2.1.",
+                default_options=default_options,
+                participants=participants,
             )
-            ods_agent = await self._enter_agent(
-                chat_client, ODS_INSTRUCTIONS, s.ods_agent_name, [ods_mcp], default_options,
-            )
-            participants.append(ods_agent)
 
         # Each SDMX specialist dials its OWN MCP server instance (same image,
         # different ISTAT_SDMX_BASE_URL) → the agent never passes a base_url.
@@ -401,42 +441,42 @@ class OrchestratorSession:
         for on, name, instructions, url, desc in sdmx_specs:
             if not on:
                 continue
-            tool = await self._enter_mcp_tool(name, url, desc)
-            agent = await self._enter_agent(
-                chat_client, instructions, name, [tool], default_options,
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=instructions,
+                name=name,
+                url=url,
+                description=desc,
+                default_options=default_options,
+                participants=participants,
             )
-            participants.append(agent)
 
         # OpenCoesione is a standalone specialist (like CKAN, outside the SDMX
         # loop): financial/feasibility evidence, citations via `source_url`.
         if s.enable_opencoesione:
-            oc_mcp = await self._enter_mcp_tool(
-                s.opencoesione_agent_name,
-                s.opencoesione_mcp_url,
-                "Tools to query OpenCoesione (Italian cohesion-policy funded projects).",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=OPENCOESIONE_INSTRUCTIONS,
+                name=s.opencoesione_agent_name,
+                url=s.opencoesione_mcp_url,
+                description="Tools to query OpenCoesione (Italian cohesion-policy funded projects).",
+                default_options=default_options,
+                participants=participants,
             )
-            oc_agent = await self._enter_agent(
-                chat_client,
-                OPENCOESIONE_INSTRUCTIONS,
-                s.opencoesione_agent_name,
-                [oc_mcp],
-                default_options,
-            )
-            participants.append(oc_agent)
 
         # OSM specialist (accessibility). Reuses the same osm-mcp server that
         # already renders maps — here it joins the fan-out with the geocoding/
         # POI/routing/zone tools.
         if s.enable_osm:
-            osm_mcp = await self._enter_mcp_tool(
-                s.osm_agent_name,
-                s.osm_mcp_url,
-                "OpenStreetMap tools: geocoding, nearby places, routing, recognised zones.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=OSM_INSTRUCTIONS,
+                name=s.osm_agent_name,
+                url=s.osm_mcp_url,
+                description="OpenStreetMap tools: geocoding, nearby places, routing, recognised zones.",
+                default_options=default_options,
+                participants=participants,
             )
-            osm_agent = await self._enter_agent(
-                chat_client, OSM_INSTRUCTIONS, s.osm_agent_name, [osm_mcp], default_options,
-            )
-            participants.append(osm_agent)
 
         # Knowledge Graph (deployment esterno): evidenza documentale da
         # delibere/piani/bilanci ingeriti. Il server kg-mcp espone anche tool
@@ -444,42 +484,42 @@ class OrchestratorSession:
         # endpoint read e le KG_INSTRUCTIONS NON menzionano i tool write; la
         # protezione vera (esporre solo i read) sta nel deployment del KG.
         if s.enable_kg:
-            kg_mcp = await self._enter_mcp_tool(
-                s.kg_agent_name,
-                s.kg_mcp_url,
-                "Read-only Knowledge Graph tools over ingested PA documents.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=KG_INSTRUCTIONS,
+                name=s.kg_agent_name,
+                url=s.kg_mcp_url,
+                description="Read-only Knowledge Graph tools over ingested PA documents.",
+                default_options=default_options,
+                participants=participants,
             )
-            kg_agent = await self._enter_agent(
-                chat_client, KG_INSTRUCTIONS, s.kg_agent_name, [kg_mcp], default_options,
-            )
-            participants.append(kg_agent)
 
         # ISPRA IdroGEO specialist (environmental constraints).
         if s.enable_ispra:
-            ispra_mcp = await self._enter_mcp_tool(
-                s.ispra_agent_name,
-                s.ispra_mcp_url,
-                "ISPRA IdroGEO tools: landslide/flood hazard indicators per comune.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=ISPRA_INSTRUCTIONS,
+                name=s.ispra_agent_name,
+                url=s.ispra_mcp_url,
+                description="ISPRA IdroGEO tools: landslide/flood hazard indicators per comune.",
+                default_options=default_options,
+                participants=participants,
             )
-            ispra_agent = await self._enter_agent(
-                chat_client, ISPRA_INSTRUCTIONS, s.ispra_agent_name, [ispra_mcp], default_options,
-            )
-            participants.append(ispra_agent)
 
         # Web search specialist (marketing territoriale, Pezzo 10): web-mcp over
         # a self-hosted SearXNG. Surfaces EXTERNAL initiatives by other public
         # bodies to take inspiration from — the `ispirazione_esterna` half of the
         # marketing (A)+(B) guardrail.
         if s.enable_web:
-            web_mcp = await self._enter_mcp_tool(
-                s.web_agent_name,
-                s.web_mcp_url,
-                "Web search + fetch over external initiatives and territorial best practices.",
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=WEB_INSTRUCTIONS,
+                name=s.web_agent_name,
+                url=s.web_mcp_url,
+                description="Web search + fetch over external initiatives and territorial best practices.",
+                default_options=default_options,
+                participants=participants,
             )
-            web_agent = await self._enter_agent(
-                chat_client, WEB_INSTRUCTIONS, s.web_agent_name, [web_mcp], default_options,
-            )
-            participants.append(web_agent)
 
         # Optional A2A remote specialist (Phase 3 / Import). When enabled, the
         # orchestrator fans out to a remote A2A-compliant agent as a peer. It
