@@ -137,6 +137,7 @@ _LENS_SOURCES: dict[str, str] = {
     "ambiente": "Ambiente · rischio idrogeologico",
     "sanita": "Sanità di prossimità",
     "comparabili": "Comparabili · progetti peer (OpenCoesione)",
+    "aree": "Aree candidate · vuoti urbani (OSM)",
 }
 
 # Comparabili (Fase B): selezione RILEVANTE dei progetti peer. Prima si prendeva il
@@ -1360,10 +1361,10 @@ class OrchestratorSession:
 
         pairs = await asyncio.gather(*(_run(k, c) for k, c in lenses))
         out = dict(pairs)
-        return {k: out[k] for k in (
-            "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-            "welfare", "istruzione", "ambiente", "sanita", "comparabili",
-        )}
+        # Restituisci le chiavi nell'ordine in cui sono dichiarate in `lenses`.
+        # NON ricopiare qui una whitelist hardcoded: divergeva (es. "aree" era
+        # risolta ma non inclusa → KeyError a valle in run_programma_streaming).
+        return {k: out[k] for k, _ in lenses}
 
     async def run_programma_streaming(
         self,
