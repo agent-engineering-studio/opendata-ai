@@ -26,7 +26,7 @@ accountability di community, e un **anello valore⇄maturità** (i gap di dato
 penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
 modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
 
-## Le tre modalità: Esplora · Territorio · Maturità
+## Le quattro modalità: Esplora · Territorio · Maturità · Qualità
 
 La navbar dell'applicazione corrisponde a tre modalità d'uso, costruite l'una
 sull'altra: si **esplora** il dato grezzo, lo si trasforma in uno **studio del
@@ -154,6 +154,35 @@ comparabile dello stato di pubblicazione, evidenzia le priorità d'azione, e
 permette **benchmarking** tra enti e nel tempo. Per chi riusa i dati è un segnale
 di affidabilità della fonte; per chi li pubblica, una roadmap concreta di
 miglioramento.
+
+---
+
+### 4. Qualità — come si misura la qualità di un dataset
+
+![Qualità — anteprima tabellare di un dataset con struttura rilevata automaticamente: righe, colonne e colonne numeriche](docs/assets/qualita.png)
+
+**Cos'è.** Il **Data Quality Lab**: porti un file di dati (o apri una risorsa
+trovata in Esplora) e ottieni una **diagnosi automatica** della sua qualità, la
+versione già sistemata da scaricare e la scheda descrittiva pronta da pubblicare.
+
+**Come si misura.** La qualità non è un'opinione: parte dal **profilo automatico**
+del dato — già visibile nell'anteprima di ogni risorsa, che rileva *righe,
+colonne, colonne numeriche e tipo dei campi* — e la confronta con standard
+riconosciuti: principi **FAIR** (trovabile, accessibile, interoperabile,
+riusabile), modello **5-star** di Berners-Lee, **ISO 25012** (accuratezza,
+completezza, coerenza, attualità) e **DCAT-AP_IT** per i metadati. Su questa base
+il Lab segnala gli **errori più comuni** (celle vuote, date in formati diversi,
+codifiche/accenti sbagliati, doppioni), calcola un punteggio *prima/dopo* e
+propone le **correzioni** applicabili con un clic. Quando il dato è sotto la
+soglia minima per un giudizio attendibile dichiara *"dato insufficiente"* invece
+di assegnare punteggi fuorvianti.
+
+**A cosa serve / per chi.** È lo strumento di chi *pubblica* — uffici dati,
+RTD, open data manager — per alzare la qualità prima della pubblicazione e
+rispettare gli standard europei; e di chi *riusa*, per capire in fretta se un
+dataset è davvero pronto all'uso. Si integra con la **Maturità**: i problemi di
+qualità trovati qui sono le leve concrete che fanno salire la dimensione Qualità
+della scorecard dell'ente.
 
 ## Supported open data sources
 

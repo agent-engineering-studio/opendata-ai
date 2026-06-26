@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Roadmap — OpenData AI",
   description:
-    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma. Sei punti — qualità del dato, maturità open data, ottimizzazione, pubblicazione secondo gli standard, nuove fonti e automazione, e nuove lenti per l'analisi del territorio. Niente scadenze, solo direzioni utili.",
+    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma. Sette punti — qualità del dato, maturità open data, ottimizzazione, pubblicazione secondo gli standard, nuove fonti e automazione, nuove lenti per l'analisi del territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
 };
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
@@ -102,6 +102,7 @@ const ROADMAP: Punto[] = [
     voci: [
       { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali), già collegato alla ricerca. Prossimi connettori tracciati: Socrata #98, ANAC appalti #99, BDAP bilanci #100." },
       { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT, pacchetto di pubblicazione) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
+      { titolo: "Tutte le funzioni come strumenti per altri assistenti (MCP)", stato: "near", testo: "Un connettore unico che mette le quattro modalità — Esplora, Territorio, Maturità e Qualità — a disposizione di assistenti e agenti esterni (es. OpenClaw, Claude Desktop) come strumenti pronti all'uso, riusando l'orchestrazione e l'accesso già esistenti. Issue #131." },
       { titolo: "Controlli automatici programmati", stato: "explore", testo: "La piattaforma verifica da sola lo stato dei dati (aggiornamento, qualità, link rotti) e avvisa quando qualcosa cambia o si rompe. Progettata in dettaglio (issue #88), da sviluppare nelle prossime sessioni." },
     ],
   },
@@ -118,6 +119,20 @@ const ROADMAP: Punto[] = [
       { titolo: "Reddito e benessere economico", stato: "explore", testo: "Reddito medio dichiarato e fasce di reddito per comune (dati del Ministero dell'Economia): un'àncora socio-economica accanto a lavoro e welfare." },
       { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune — entrate, spese, capacità di spesa — da SIOPE e dalla banca dati dei bilanci pubblici: trasparenza sui soldi pubblici." },
       { titolo: "Connettività digitale", stato: "explore", testo: "Copertura della rete veloce (fibra) nel comune: il divario digitale, da verificare sulla disponibilità dei dati aperti." },
+    ],
+  },
+  {
+    n: "07",
+    icon: "🏗️",
+    titolo: "Dal dato alla realtà: cosa c'è davvero su quel terreno",
+    perche:
+      "Una mappa dice che un'area è “zona industriale” o “parco”, ma spesso la realtà è diversa: un capannone dismesso, un terreno agricolo, un'area privata o sotto vincolo. La piattaforma incrocia la mappa con le fonti ufficiali per capire lo stato reale del suolo — dichiarando sempre quanto è sicura ogni conclusione e cosa resta da verificare. Mai dare per pubblica una proprietà che non lo è.",
+    issue: 127,
+    voci: [
+      { titolo: "Mappa contro realtà", stato: "near", testo: "Per ogni area, confronta ciò che è mappato (OpenStreetMap) con le fonti ufficiali già collegate (rischio idrogeologico ISPRA, progetti finanziati) e dice lo stato reale: attiva, dismessa, vincolata, da bonificare. Ogni conclusione ha un livello di sicurezza — alta, media, bassa — e i campi non verificabili restano esplicitamente “da verificare”. Issue #127." },
+      { titolo: "Più fonti ufficiali, più certezza", stato: "explore", testo: "Aggiunge fonti consultabili dal vivo che alzano la sicurezza dell'analisi: siti contaminati (SIN-SIR), vincoli del paesaggio (PPTR), consumo di suolo (ISPRA). Solo fonti realmente interrogabili, nessun documento caricato a mano. Issue #128." },
+      { titolo: "Il piano urbanistico come dato aperto", stato: "explore", testo: "Per sapere se un'area è davvero edificabile serve il piano urbanistico (PUG/PRG). La piattaforma lo consulta quando il comune lo pubblica come dato aperto; se manca, non lo inventa: lo segnala come dato importante da aprire. Il piano diventa parte della politica open data del comune. Issue #129." },
+      { titolo: "Zone industriali e parchi", stato: "explore", testo: "Due letture pratiche: recuperare le aree produttive dismesse prima di consumare nuovo suolo, e misurare se i parchi sono davvero verde pubblico raggiungibile a piedi. Con il consiglio sullo strumento giusto per agire. Issue #130." },
     ],
   },
 ];
