@@ -60,12 +60,13 @@ export function LandingReveal() {
           { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
         );
         nodes.forEach((el) => io!.observe(el));
-        // Salvagente: nessun elemento resta invisibile per sempre.
+        // Salvagente: nessun elemento resta invisibile per sempre. 2s: chi
+        // scorre veloce non deve mai trovare sezioni vuote.
         safety = window.setTimeout(() => {
           nodes.forEach((el) => {
             if (!el.classList.contains("od-reveal--in")) reveal(el);
           });
-        }, 4000);
+        }, 2000);
       }
     }
 
