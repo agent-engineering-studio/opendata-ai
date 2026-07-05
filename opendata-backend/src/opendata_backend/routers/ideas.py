@@ -26,8 +26,11 @@ from ..ideas import (
     IdeaChatResponse,
     IdeaReportRequest,
     IdeaReportResponse,
+    IdeaScoutRequest,
+    IdeaScoutResponse,
     build_report,
     run_chat_turn,
+    scout_area,
 )
 from ..llm_access import LLMAccess, require_llm_access
 from ..shared.ratelimit import enforce_rate_limit
@@ -45,6 +48,18 @@ async def areas(
         "areas": [{"id": key, "label": val["label"]} for key, val in AREAS.items()],
         "stages": [{"id": s, "label": STAGE_LABELS[s]} for s in STAGES],
     }
+
+
+@router.post("/ideas/scout", response_model=IdeaScoutResponse)
+async def scout(
+    req: IdeaScoutRequest,
+    settings: Settings = Depends(get_settings),
+    user: ClerkUser = Depends(enforce_rate_limit),
+    access: LLMAccess = Depends(require_llm_access),  # noqa: ARG001 — gate only
+) -> IdeaScoutResponse:
+    """Pre-analisi dell'area: dataset disponibili + spunti d'idea concreti."""
+    log.info("/ideas/scout subject=%s area=%s", user.subject, req.area)
+    return await scout_area(settings, req)
 
 
 @router.post("/ideas/chat", response_model=IdeaChatResponse)

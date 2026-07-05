@@ -100,6 +100,10 @@ class IdeaChatRequest(BaseModel):
     messages: list[ChatMessage]
     area: Area | None = None
     territory: str | None = None
+    # "sfida": si parte da un problema aperto e si converge verso un'idea.
+    # "idea": l'idea c'è già — il percorso mappa il fabbisogno di dati
+    # (quali servono, quali esistono, quali mancano) per realizzarla.
+    mode: Literal["sfida", "idea"] = "sfida"
     # Tappa corrente: il client rimanda quella dell'ultima risposta.
     stage: str | None = None
     # Dataset e progetti finanziati già scoperti, rimandati dal client.
@@ -117,6 +121,25 @@ class IdeaChatResponse(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
     # True quando il percorso è alla sintesi: la UI mostra "Genera la scheda".
     report_ready: bool = False
+    offline: bool = False
+
+
+class IdeaSpunto(BaseModel):
+    """Direzione d'idea proposta dalla pre-analisi di un'area."""
+
+    titolo: str
+    descrizione: str = ""
+
+
+class IdeaScoutRequest(BaseModel):
+    area: Area
+    territory: str | None = None
+
+
+class IdeaScoutResponse(BaseModel):
+    datasets: list[IdeaDataset] = Field(default_factory=list)
+    funding: list[FundingProject] = Field(default_factory=list)
+    spunti: list[IdeaSpunto] = Field(default_factory=list)
     offline: bool = False
 
 
