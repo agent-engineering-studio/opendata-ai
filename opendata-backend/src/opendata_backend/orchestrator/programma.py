@@ -13,6 +13,7 @@ analisi verificabile, non propaganda.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
@@ -111,6 +112,10 @@ class Evidenza(BaseModel):
 
 
 class VoceSwot(BaseModel):
+    # ID deterministico (content-hash) timbrato server-side da `assign_item_ids`,
+    # MAI dall'LLM: stabile tra rigenerazioni a parità di comune + sezione +
+    # testo, così un sito civico può aggiornare/diffare la voce nel tempo.
+    id: str = ""
     testo: str
     evidenze: list[Evidenza]  # ≥1 obbligatoria (i guardrail scartano le orfane)
 
@@ -128,6 +133,11 @@ class Finanziamento(BaseModel):
 
 
 class Proposta(BaseModel):
+    # ID deterministico (content-hash) timbrato server-side da `assign_item_ids`,
+    # MAI dall'LLM: stabile tra rigenerazioni a parità di comune + titolo (la
+    # stessa chiave usata per il dedup), così un sito civico può aggiornare/
+    # diffare l'idea nel tempo.
+    id: str = ""
     titolo: str
     descrizione: str
     evidenze: list[Evidenza]  # ≥1 obbligatoria
@@ -191,7 +201,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-25-qualita"
+PROMPT_VERSION = "2026-06-26-item-ids"
 
 
 class QualitaControllo(BaseModel):
@@ -758,6 +768,38 @@ _ZONA_TIPO_FOCUS: dict[str, str] = {
         "multifunzionalità, agro-energia, spopolamento"
     ),
 }
+
+
+def _stable_id(prefix: str, *parts: str) -> str:
+    """ID deterministico, leggibile e stabile: `<prefix>_<sha1(parti)[:12]>`.
+
+    Le parti sono normalizzate (lower + whitespace collassato) prima dell'hash,
+    così varianti di sole maiuscole/spazi collassano sullo stesso ID.
+    Content-addressed: a parità di parti l'ID è identico tra rigenerazioni
+    (vedi `assign_item_ids`).
+    """
+    raw = "|".join(" ".join(p.split()).lower() for p in parts).encode("utf-8")
+    return f"{prefix}_{hashlib.sha1(raw).hexdigest()[:12]}"
+
+
+def assign_item_ids(resp: ProgrammaResponse) -> None:
+    """Timbra un ID deterministico su ogni item del report, IN PLACE.
+
+    Coperti: le idee/proposte (`Proposta.id`) e tutte le voci SWOT — forze,
+    debolezze, opportunità, minacce (`VoceSwot.id`). L'ID è un content-hash di
+    `comune` + (sezione +) testo identitario dell'item: lo stesso titolo idea o
+    la stessa voce SWOT, nello stesso comune, riceve lo STESSO ID anche quando
+    il report viene rigenerato — è la chiave con cui un sito civico aggiorna o
+    diffa gli item nel tempo. Se l'LLM riformula il testo l'ID cambia (nuovo
+    item): comportamento onesto e deterministico, nessuna riconciliazione
+    semantica. Idempotente. I controlli qualità non sono toccati: hanno già
+    `QualitaControllo.gate` come identificatore stabile."""
+    comune = resp.comune or ""
+    for sezione, voci in (resp.swot or {}).items():
+        for v in voci:
+            v.id = _stable_id("swot", comune, sezione, v.testo)
+    for p in resp.proposte or []:
+        p.id = _stable_id("idea", comune, p.titolo)
 
 
 def applica_qualita(
@@ -1754,6 +1796,9 @@ def build_programma_aggregator(
         # Display-only: fonti chiare (file→origine), OSM nascosto, dedup. La
         # validazione sopra ha già usato gli URL grezzi (evidence_urls intatto).
         response.citazioni = _clean_citazioni_for_display(response.citazioni)
+        # Timbra gli ID deterministici DOPO il merge/dedup delle proposte (così
+        # ogni idea/voce SWOT finale ha un ID), prima di serializzare l'output.
+        assign_item_ids(response)
         return ProgrammaOutput(
             text=response.model_dump_json(),
             response=response,

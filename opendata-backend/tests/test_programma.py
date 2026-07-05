@@ -169,6 +169,10 @@ async def test_happy_path_builds_validated_response() -> None:
         "https://opencoesione.gov.it/", "https://esploradati.istat.it/"
     }
     assert resp.disclaimer
+    # Ogni item finale porta un ID deterministico (idee + voci SWOT), così un
+    # sito civico può aggiornarli/diffarli tra rigenerazioni.
+    assert resp.proposte[0].id.startswith("idea_")
+    assert all(v.id.startswith("swot_") for voci in resp.swot.values() for v in voci)
     # Il wrapper espone anche il JSON serializzato per events.get_outputs().
     assert json.loads(out.text)["comune"] == "110002"
     assert out.evidence_sources == ["istat", "opencoesione"]
@@ -316,6 +320,41 @@ def _resp(proposte: list[Proposta], disclaimer: str = "ok") -> ProgrammaResponse
         disclaimer=disclaimer,
         generato_il=datetime.now(timezone.utc),
     )
+
+
+def test_assign_item_ids_is_deterministic_and_scoped() -> None:
+    """Stesso comune + stesso testo → stesso ID tra chiamate; comune diverso o
+    testo diverso → ID diverso. È il contratto su cui un sito civico aggiorna."""
+    from opendata_backend.orchestrator.programma import assign_item_ids
+
+    def _mk(comune: str, titolo: str, debolezza: str) -> ProgrammaResponse:
+        ev = [Evidenza(fonte="istat", url="https://x", dettaglio="d")]
+        r = _resp([Proposta(
+            titolo=titolo, descrizione="d", evidenze=ev,
+            fattibilita=Fattibilita(livello="media", motivazione="m"),
+        )])
+        r.comune = comune
+        r.swot["debolezze"] = [VoceSwot(testo=debolezza, evidenze=ev)]
+        return r
+
+    a = _mk("110002", "Mercato coperto", "Pochi parcheggi")
+    b = _mk("110002", "Mercato coperto", "Pochi parcheggi")
+    assign_item_ids(a)
+    assign_item_ids(b)
+    # Deterministico: due generazioni identiche → ID identici.
+    assert a.proposte[0].id == b.proposte[0].id
+    assert a.swot["debolezze"][0].id == b.swot["debolezze"][0].id
+    # Normalizzazione (case/spazi) non cambia l'ID.
+    c = _mk("110002", "  MERCATO  coperto ", "Pochi parcheggi")
+    assign_item_ids(c)
+    assert c.proposte[0].id == a.proposte[0].id
+    # Scope per comune: stesso testo, comune diverso → ID diverso.
+    d = _mk("072006", "Mercato coperto", "Pochi parcheggi")
+    assign_item_ids(d)
+    assert d.proposte[0].id != a.proposte[0].id
+    # Idee e voci SWOT non collidono (prefissi distinti).
+    assert a.proposte[0].id.startswith("idea_")
+    assert a.swot["debolezze"][0].id.startswith("swot_")
 
 
 def test_validate_keeps_funded_proposal_level() -> None:

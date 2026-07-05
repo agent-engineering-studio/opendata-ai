@@ -78,12 +78,19 @@ function finanziamentoLine(f: Finanziamento): string {
   return `**Finanziamento:** ${f.linea} ([linea](${f.fonte_url}))${stato}`;
 }
 
+/** Tag ID machine-readable per un item del report (vuoto se l'ID manca). */
+function idLine(id: string | undefined | null): string | null {
+  return id ? `\`ID: ${id}\`` : null;
+}
+
 function propostaBlock(p: Proposta): string {
   const lines: string[] = [];
   const gen = p.generatore ? GENERATORE_LABEL[p.generatore] ?? p.generatore : null;
   const lente = p.lente ? LENTE_LABEL[p.lente] ?? p.lente : null;
   const tag = [lente, gen].filter(Boolean).join(" · ");
   lines.push(`### ${p.titolo}${tag ? ` _(${tag})_` : ""}`);
+  const id = idLine(p.id);
+  if (id) lines.push(id);
 
   const liv = FATTIBILITA_LABEL[p.fattibilita.livello];
   const ratio = ratioPct(p.fattibilita.spend_ratio_storico);
@@ -122,7 +129,8 @@ export function schedaToMarkdown(s: ProgrammaResponse): string {
     for (const key of swotKeys) {
       out.push(`### ${SWOT_LABEL[key]}`, "");
       for (const voce of s.swot[key]) {
-        out.push(`- ${voce.testo.trim()}`);
+        const id = voce.id ? ` \`ID: ${voce.id}\`` : "";
+        out.push(`- ${voce.testo.trim()}${id}`);
         for (const e of voce.evidenze) out.push(`  ${evidenzaLine(e)}`);
       }
       out.push("");

@@ -909,6 +909,7 @@ function ImproveView({
 }
 
 function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfolio: Portfolio | null }) {
+  const { getToken } = useAuth();
   const radarRef = useRef<HTMLDivElement>(null);
   const slug = (scorecard.entity.name || "ente").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const insufficient = scorecard.insufficient_data && scorecard.guida;
@@ -916,10 +917,34 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
   const radarData = DIM_KEYS.map((k) => ({ dim: DIM_LABEL[k], value: dimensions[k] }));
   const levelColor = LEVEL_COLOR[level] ?? "#334155";
   const { leve, nextLevel } = buildImprovements(scorecard);
+  const [esportandoMd, setEsportandoMd] = useState(false);
 
   async function exportPdf() {
     const radarPng = radarRef.current ? (await captureNode(radarRef.current)) ?? undefined : undefined;
     await downloadScorecardPdf(scorecard, { radarPng, portfolio, improvements: { leve, nextLevel } });
+  }
+
+  // Export Markdown embeddabile (riepilogo + link, o disclaimer + guida quando i
+  // dati mancano): è il backend a renderizzarlo — un solo punto di verità.
+  async function exportMarkdown() {
+    setEsportandoMd(true);
+    try {
+      const token = await getToken();
+      const res = await apiFetch(`/maturity/entities/${scorecard.entity.id}/scorecard.md`, { token });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const md = await res.text();
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `maturita-${slug || "ente"}.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setEsportandoMd(false);
+    }
   }
 
   return (
@@ -928,6 +953,15 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
       <div className="d-flex gap-2">
         <button type="button" className="btn btn-primary btn-sm" onClick={exportPdf}>
           Esporta PDF
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline-primary btn-sm"
+          onClick={exportMarkdown}
+          disabled={esportandoMd}
+          title="Scarica un riepilogo Markdown incorporabile in siti esterni"
+        >
+          {esportandoMd ? "Generazione…" : "Esporta Markdown"}
         </button>
       </div>
 
