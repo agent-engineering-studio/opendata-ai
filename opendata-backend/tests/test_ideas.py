@@ -416,6 +416,56 @@ async def test_coach_unparsable_llm_does_not_advance_stage(monkeypatch) -> None:
     assert resp.offline is True
 
 
+@pytest.mark.asyncio
+async def test_scout_offline_builds_spunti_from_datasets(monkeypatch) -> None:
+    """Pre-analisi area: dataset+funding recuperati e spunti deterministici offline."""
+    from opendata_backend.ideas import scout as scout_mod
+    from opendata_backend.ideas.models import IdeaScoutRequest
+
+    async def _fake_datasets(settings, *, area, challenge_text, client=None):
+        return _datasets()
+
+    async def _fake_funding(settings, *, area, client=None):
+        return _funding()
+
+    monkeypatch.setattr(scout_mod, "discover_datasets", _fake_datasets)
+    monkeypatch.setattr(scout_mod, "discover_funding", _fake_funding)
+
+    resp = await scout_mod.scout_area(_settings(), IdeaScoutRequest(area="salute"))
+    assert resp.offline is True
+    assert len(resp.datasets) == 2 and len(resp.funding) == 1
+    assert len(resp.spunti) >= 3
+    assert any("Farmacie in Puglia" in s.descrizione for s in resp.spunti)
+
+
+@pytest.mark.asyncio
+async def test_report_renders_gap_caratteristiche(monkeypatch) -> None:
+    """Il report dice anche COME deve essere il dato mancante."""
+    from opendata_backend.ideas import report as report_mod
+
+    async def _fake_complete(settings, **kwargs):
+        return (
+            '{"titolo": "Osservatorio liste d\'attesa", "problema": "p", '
+            '"soluzione": "s", "beneficiari": "b", '
+            '"gap_dati": [{"dato": "Tempi di attesa per prestazione", '
+            '"perche_serve": "misurare il fenomeno", '
+            '"come_colmarlo": "pubblicare i flussi CUP", '
+            '"caratteristiche": "per reparto e prestazione, aggiornamento mensile, CSV, CC-BY"}]}'
+        )
+
+    monkeypatch.setattr(report_mod, "complete", _fake_complete)
+    resp = await build_report(
+        _settings(),
+        IdeaReportRequest(
+            messages=[ChatMessage(role="user", content="liste d'attesa")],
+            area="salute",
+            datasets=_datasets(),
+            funding=_funding(),
+        ),
+    )
+    assert "Come deve essere: per reparto e prestazione" in resp.report_md
+
+
 def test_agent_card_publishes_idea_lab_skill() -> None:
     from opendata_backend.a2a.agent_card import SKILL_IDEAS, build_agent_card
 

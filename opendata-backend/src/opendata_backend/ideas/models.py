@@ -124,6 +124,25 @@ class IdeaChatResponse(BaseModel):
     offline: bool = False
 
 
+class IdeaSpunto(BaseModel):
+    """Direzione d'idea proposta dalla pre-analisi di un'area."""
+
+    titolo: str
+    descrizione: str = ""
+
+
+class IdeaScoutRequest(BaseModel):
+    area: Area
+    territory: str | None = None
+
+
+class IdeaScoutResponse(BaseModel):
+    datasets: list[IdeaDataset] = Field(default_factory=list)
+    funding: list[FundingProject] = Field(default_factory=list)
+    spunti: list[IdeaSpunto] = Field(default_factory=list)
+    offline: bool = False
+
+
 class IdeaReportRequest(BaseModel):
     messages: list[ChatMessage]
     area: Area | None = None

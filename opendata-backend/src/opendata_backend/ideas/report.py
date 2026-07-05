@@ -60,7 +60,10 @@ def _extract_prompt(req: IdeaReportRequest, datasets: list[IdeaDataset]) -> str:
         'Rispondi SOLO con JSON: {"titolo": str, "problema": str, "soluzione": str, '
         '"beneficiari": str, "kpi": [str, max 4], '
         '"dataset_titoli": [titoli ESATTI dei dataset usati], '
-        '"gap_dati": [{"dato": str, "perche_serve": str, "come_colmarlo": str}], '
+        '"gap_dati": [{"dato": str, "perche_serve": str, "come_colmarlo": str, '
+        '"caratteristiche": "<come deve essere il dato: granularità (es. per '
+        "reparto/comune), frequenza di aggiornamento, formato machine-readable, "
+        'licenza>"}], '
         '"passi": [str, max 5 passi di implementazione]}'
     )
 
@@ -151,10 +154,14 @@ def _sezione_gap(datasets: list[IdeaDataset], gap_dati: list[dict]) -> str:
         dato = str(g.get("dato") or "").strip()
         if not dato:
             continue
-        voci.append(
+        riga = (
             f"- **{dato}** — {str(g.get('perche_serve') or 'necessario al progetto').strip()} "
             f"→ *{str(g.get('come_colmarlo') or 'pubblicare il dato sul portale regionale').strip()}*"
         )
+        caratteristiche = str(g.get("caratteristiche") or "").strip()
+        if caratteristiche:
+            riga += f"\n  - Come deve essere: {caratteristiche}"
+        voci.append(riga)
     deboli = [d for d in datasets if d.stars <= 2 or not d.license_open]
     for d in deboli:
         azioni = []

@@ -9,8 +9,11 @@ from .models import (
     IdeaChatResponse,
     IdeaReportRequest,
     IdeaReportResponse,
+    IdeaScoutRequest,
+    IdeaScoutResponse,
 )
 from .report import build_report
+from .scout import scout_area
 
 __all__ = [
     "AREAS",
@@ -20,6 +23,9 @@ __all__ = [
     "IdeaChatResponse",
     "IdeaReportRequest",
     "IdeaReportResponse",
+    "IdeaScoutRequest",
+    "IdeaScoutResponse",
     "run_chat_turn",
     "build_report",
+    "scout_area",
 ]
