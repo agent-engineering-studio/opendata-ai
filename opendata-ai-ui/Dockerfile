@@ -1,11 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:20-alpine AS deps
+# Build stages run on the BUILD host's native arch: the Next.js output is
+# `output: 'export'` (static files, arch-independent), and SWC crashes with
+# SIGILL under QEMU arm64 emulation. Only the nginx runner is multi-arch.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
