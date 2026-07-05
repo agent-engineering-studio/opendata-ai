@@ -33,9 +33,14 @@ _OPEN_LICENSE_HINTS = (
 
 
 def is_open_license(license_id: str | None, license_title: str | None, isopen: bool | None) -> bool:
-    """True se la licenza è aperta. `isopen` di CKAN ha precedenza, poi euristica."""
-    if isopen is not None:
-        return bool(isopen)
+    """True se la licenza è aperta.
+
+    `isopen=True` di CKAN è affidabile; `isopen=False` NO: i cataloghi federati
+    (es. dati.gov.it) marcano False anche le CC BY quando il license_id non è
+    nel registro CKAN del portale. Su False/None decide l'euristica sul testo.
+    """
+    if isopen:
+        return True
     blob = f"{license_id or ''} {license_title or ''}".lower()
     return any(h in blob for h in _OPEN_LICENSE_HINTS)
 

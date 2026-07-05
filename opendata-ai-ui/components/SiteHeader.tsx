@@ -30,6 +30,7 @@ const LANDING_NAV = [
 const APP_NAV = [
   { href: "/esplora", label: "Esplora" },
   { href: "/territorio", label: "Territorio" },
+  { href: "/idee", label: "Idea Lab" },
   { href: "/maturita", label: "Maturità" },
   { href: "/qualita", label: "Qualità" },
 ] as const;

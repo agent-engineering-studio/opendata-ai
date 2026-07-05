@@ -1,10 +1,11 @@
 """A2A AgentCard for the opendata-ai orchestrator.
 
-Six skills published — they all reuse existing machinery (`run_streaming` for
-search/geo, `classify_dataset` for classify, `run_assessment` for maturity,
-`run_programma` for territory, the pure `opendata_core.quality` engines for
-data_quality), so the contract on the A2A side stays a thin descriptor layer
-(R13: skills delegate, no duplicated logic).
+Seven skills published — they all reuse existing machinery (`run_streaming`
+for search/geo, `classify_dataset` for classify, `run_assessment` for
+maturity, `run_programma` for territory, the pure `opendata_core.quality`
+engines for data_quality, `ideas.build_report` for idea_lab), so the contract
+on the A2A side stays a thin descriptor layer (R13: skills delegate, no
+duplicated logic).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ SKILL_CLASSIFY = "classify_dataset"
 SKILL_MATURITY = "assess_maturity"
 SKILL_TERRITORY = "analyze_territory"
 SKILL_QUALITY = "data_quality"
+SKILL_IDEAS = "idea_lab"
 
 
 def _skills() -> list[AgentSkill]:
@@ -113,6 +115,24 @@ def _skills() -> list[AgentSkill]:
                 '{"azione":"profile","content":"comune,popolazione\\nBari,320475\\n"}',
                 '{"azione":"validate","content":"...","licenza":"CC-BY-4.0","titolo":"…"}',
                 '{"azione":"package","content":"...","licenza":"CC-BY-4.0","ente":"…"}',
+            ],
+        ),
+        AgentSkill(
+            id=SKILL_IDEAS,
+            name="Idea Lab — dalla sfida all'idea finanziabile",
+            description=(
+                "Data una sfida tematica (salute, ambiente, territorio, turismo) "
+                "produce la scheda progetto completa: idea fondata sui dataset "
+                "aperti regionali (con qualità), finanziabilità da progetti "
+                "comparabili OpenCoesione, gap di dati da colmare (domanda di "
+                "riuso) e brief di implementazione per il team di sviluppo."
+            ),
+            input_modes=["text/plain", "application/json"],
+            output_modes=["application/json"],
+            tags=["ideas", "brainstorming", "funding", "opencoesione", "italy"],
+            examples=[
+                "Migliorare l'accesso ai servizi sanitari nei piccoli comuni",
+                '{"challenge":"riduzione dei rifiuti","area":"ambiente","territory":"Bari"}',
             ],
         ),
         AgentSkill(

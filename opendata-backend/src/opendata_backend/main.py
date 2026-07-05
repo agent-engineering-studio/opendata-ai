@@ -31,6 +31,7 @@ from .routers import (
     api_keys,
     community,
     datasets,
+    ideas,
     maturity,
     me,
     programma,
@@ -180,6 +181,7 @@ app.include_router(me.router)
 app.include_router(api_keys.router)
 app.include_router(webhooks.router)
 app.include_router(programma.router)
+app.include_router(ideas.router)
 app.include_router(territorio.router)
 app.include_router(maturity.router)
 app.include_router(quality.router)
