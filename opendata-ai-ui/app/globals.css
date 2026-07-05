@@ -203,12 +203,15 @@
   }
 }
 
+/* Il reveal-allo-scroll è stato rimosso (sezioni che restavano invisibili nei
+ * browser reali). Le classi restano definite solo come no-op difensivo per
+ * eventuale markup residuo: NON nascondono mai nulla. */
 .od-reveal--armed {
-  opacity: 0;
-  transform: translateY(22px);
+  opacity: 1;
+  transform: none;
 }
 .od-reveal--in {
-  animation: odRise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation: none;
 }
 .od-card {
   transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
