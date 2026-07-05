@@ -26,6 +26,10 @@ type ChatResponse = {
 type ReportResponse = {
   report_md: string; idea_id: string; titolo: string; generato_il: string; offline: boolean;
 };
+type Spunto = { titolo: string; descrizione: string };
+type ScoutResponse = {
+  datasets: IdeaDataset[]; funding: FundingProject[]; spunti: Spunto[]; offline: boolean;
+};
 
 const AREAS: { id: Area; label: string; emoji: string }[] = [
   { id: "salute", label: "Salute", emoji: "🩺" },
@@ -65,7 +69,40 @@ export default function IdeeLabPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [spunti, setSpunti] = useState<Spunto[]>([]);
+  const [scouting, setScouting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Pre-analisi dell'area: appena scegli il tema, l'Idea Lab perlustra i
+  // dataset disponibili e propone direzioni d'idea concrete.
+  async function selectArea(next: Area) {
+    setArea(next);
+    setSpunti([]);
+    setError(null);
+    setScouting(true);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/ideas/scout", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ area: next, territory: territory || null }),
+      });
+      if (res.status === 402) {
+        throw new Error(
+          "per usare l'Idea Lab serve una chiave LLM nel tuo profilo (Account → Chiave LLM) oppure un abbonamento attivo",
+        );
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: ScoutResponse = await res.json();
+      setSpunti(data.spunti);
+      setDatasets(data.datasets);
+      setFunding(data.funding);
+    } catch (e) {
+      setError(`Pre-analisi non riuscita: ${e instanceof Error ? e.message : e}.`);
+    } finally {
+      setScouting(false);
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -150,7 +187,7 @@ export default function IdeeLabPage() {
   function restart() {
     setMessages([]); setStage(null); setDatasets([]); setFunding([]);
     setSuggestions([]); setReportReady(false); setReport(null); setError(null);
-    setChallenge(""); setInput("");
+    setChallenge(""); setInput(""); setSpunti([]); setArea(null);
   }
 
   const stageIndex = stage ? STAGES.findIndex((s) => s.id === stage) : -1;
@@ -198,12 +235,37 @@ export default function IdeeLabPage() {
                   <button
                     key={a.id}
                     className={`btn ${area === a.id ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setArea(a.id)}
+                    disabled={scouting}
+                    onClick={() => void selectArea(a.id)}
                   >
                     {a.emoji} {a.label}
                   </button>
                 ))}
               </div>
+
+              {/* Spunti dalla pre-analisi dell'area */}
+              {area && (scouting || spunti.length > 0) && (
+                <div className="mb-4">
+                  <h3 className="h6 text-muted">
+                    {scouting
+                      ? "Sto analizzando i dati disponibili per quest'area…"
+                      : "Spunti dai dati disponibili — clicca per partire da uno di questi:"}
+                  </h3>
+                  <div className="d-flex flex-column gap-2">
+                    {spunti.map((s) => (
+                      <button
+                        key={s.titolo}
+                        className={`btn btn-outline-primary text-start ${challenge.startsWith(s.titolo) ? "active" : ""}`}
+                        onClick={() => setChallenge(`${s.titolo}. ${s.descrizione}`)}
+                      >
+                        <strong>{s.titolo}</strong>
+                        <br />
+                        <small>{s.descrizione}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <h2 className="h5">2. Da dove parti?</h2>
               <div className="d-flex flex-wrap gap-2 mb-3">
