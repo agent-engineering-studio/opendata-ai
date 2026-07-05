@@ -72,13 +72,17 @@ export default function IdeeLabPage() {
   const [spunti, setSpunti] = useState<Spunto[]>([]);
   const [scouting, setScouting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Contatore delle pre-analisi: se l'utente cambia tema mentre una è in
+  // volo, la risposta vecchia viene ignorata (i bottoni restano SEMPRE attivi).
+  const scoutSeq = useRef(0);
 
   // Pre-analisi dell'area: appena scegli il tema, l'Idea Lab perlustra i
-  // dataset disponibili e propone direzioni d'idea concrete.
+  // dataset disponibili e propone direzioni d'idea concrete (~15-25 s).
   async function selectArea(next: Area) {
     setArea(next);
     setSpunti([]);
     setError(null);
+    const seq = ++scoutSeq.current;
     setScouting(true);
     try {
       const token = await getToken();
@@ -87,6 +91,7 @@ export default function IdeeLabPage() {
         token,
         body: JSON.stringify({ area: next, territory: territory || null }),
       });
+      if (seq !== scoutSeq.current) return; // tema cambiato nel frattempo
       if (res.status === 402) {
         throw new Error(
           "per usare l'Idea Lab serve una chiave LLM nel tuo profilo (Account → Chiave LLM) oppure un abbonamento attivo",
@@ -94,13 +99,16 @@ export default function IdeeLabPage() {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: ScoutResponse = await res.json();
+      if (seq !== scoutSeq.current) return;
       setSpunti(data.spunti);
       setDatasets(data.datasets);
       setFunding(data.funding);
     } catch (e) {
-      setError(`Pre-analisi non riuscita: ${e instanceof Error ? e.message : e}.`);
+      if (seq === scoutSeq.current) {
+        setError(`Pre-analisi non riuscita: ${e instanceof Error ? e.message : e}.`);
+      }
     } finally {
-      setScouting(false);
+      if (seq === scoutSeq.current) setScouting(false);
     }
   }
 
@@ -235,7 +243,6 @@ export default function IdeeLabPage() {
                   <button
                     key={a.id}
                     className={`btn ${area === a.id ? "btn-primary" : "btn-outline-primary"}`}
-                    disabled={scouting}
                     onClick={() => void selectArea(a.id)}
                   >
                     {a.emoji} {a.label}
@@ -248,7 +255,7 @@ export default function IdeeLabPage() {
                 <div className="mb-4">
                   <h3 className="h6 text-muted">
                     {scouting
-                      ? "Sto analizzando i dati disponibili per quest'area…"
+                      ? "Sto analizzando i dati disponibili per quest'area… (15-25 secondi; puoi cambiare tema o scrivere intanto)"
                       : "Spunti dai dati disponibili — clicca per partire da uno di questi:"}
                   </h3>
                   <div className="d-flex flex-column gap-2">

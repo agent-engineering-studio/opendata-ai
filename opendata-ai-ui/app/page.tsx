@@ -100,7 +100,12 @@ const ICON = {
 
 export default function Page() {
   return (
-    <div style={{ background: "#fff", overflow: "hidden" }}>
+    // NIENTE overflow:hidden e NIENTE shrink qui: il layout ha body h-screen
+    // con lo scroll dentro <main> (flex column) — un figlio restringibile con
+    // overflow hidden viene schiacciato all'altezza della viewport e la
+    // pagina appare troncata a metà. Il clip decorativo del drift SVG è già
+    // sulla sezione hero.
+    <div style={{ background: "#fff", flex: "none" }}>
       <LandingReveal />
 
       {/* ============ HERO ============ */}
