@@ -47,7 +47,7 @@ help: ## Show this help
 
 # ──────────────────────────── Local stack ────────────────────────
 
-.PHONY: up up-cpu up-gpu up-host-ollama up-claude
+.PHONY: up up-cpu up-gpu up-host-ollama up-claude up-ollama-cloud
 up: up-cpu ## Start the stack (CPU profile — default)
 
 up-cpu: ## Start the stack with CPU-only Ollama (Dockerized)
@@ -78,6 +78,14 @@ up-claude: ## Start the stack with LLM_PROVIDER=claude (no Ollama). Requires ANT
 	fi
 	@echo "✅ Using Claude as LLM provider. Bringing up stack without the Ollama container…"
 	LLM_PROVIDER=claude $(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
+
+up-ollama-cloud: ## Start the stack with LLM_PROVIDER=ollama_cloud (hosted, no local Ollama). Requires OLLAMA_CLOUD_API_KEY in $(ENV_FILE).
+	@if ! grep -qE '^OLLAMA_CLOUD_API_KEY=.+' $(ENV_FILE); then \
+		echo "⚠️  OLLAMA_CLOUD_API_KEY not set in $(ENV_FILE) — the ollama_cloud provider needs it."; \
+		exit 1; \
+	fi
+	@echo "✅ Using Ollama Cloud as LLM provider. Bringing up stack without the local Ollama container…"
+	LLM_PROVIDER=ollama_cloud $(COMPOSE) up -d $(CUSTOM_SERVICES) $(_OVERPASS_SVC)
 
 .PHONY: down logs ps overpass-up overpass-logs
 down: ## Stop the stack

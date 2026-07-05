@@ -76,6 +76,8 @@ export type Evidenza = {
 };
 
 export type VoceSwot = {
+  /** ID deterministico (content-hash) timbrato server-side, es. `swot_ab12cd34`. */
+  id?: string;
   testo: string;
   evidenze: Evidenza[];
 };
@@ -115,6 +117,8 @@ export type LenteMarketing =
   | "attrattivita_brand";
 
 export type Proposta = {
+  /** ID deterministico (content-hash) timbrato server-side, es. `idea_ab12cd34`. */
+  id?: string;
   titolo: string;
   descrizione: string;
   evidenze: Evidenza[];

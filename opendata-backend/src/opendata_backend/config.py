@@ -1371,6 +1371,11 @@ class Settings(BaseSettings):
     # (e.g. https://opendata.<your-domain>). In local dev keep localhost:3000.
     cors_allow_origins: str = Field(default="http://localhost:3000")
 
+    # Base URL pubblica del frontend OpenData AI. Usata per i link assoluti negli
+    # export embeddabili (es. la scorecard di maturità in Markdown linka la scheda
+    # `/maturita` e la guida `/guida-open-data`). In prod è il dominio pubblico.
+    public_ui_base_url: str = Field(default="https://opendata-ai.it")
+
     # ── A2A (Agent-to-Agent protocol) ────────────────────────────────
     # When enabled, the backend publishes /.well-known/agent-card.json and exposes
     # JSON-RPC at /a2a/. The public URL is baked into the AgentCard so other

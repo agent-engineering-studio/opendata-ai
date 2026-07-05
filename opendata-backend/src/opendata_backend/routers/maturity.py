@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import ClerkUser
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
+from ..maturity.markdown import build_scorecard_markdown
 from ..maturity.service import build_ranking, build_scorecard, run_assessment
 from ..shared.ratelimit import enforce_rate_limit
 
@@ -151,6 +152,30 @@ async def scorecard_csv(
     return Response(
         content=buf.getvalue(), media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="scorecard-{entity_id}.csv"'},
+    )
+
+
+@router.get("/maturity/entities/{entity_id}/scorecard.md")
+async def scorecard_markdown(
+    entity_id: int,
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> Response:
+    """Export Markdown embeddabile della scorecard (riepilogo + link).
+
+    Pensato per essere incorporato in siti esterni (es. il portale istituzionale
+    di un Comune). Quando l'ente non ha open data sufficienti, restituisce un
+    disclaimer di raccomandazione con i vantaggi dell'open data, la guida
+    operativa e i link alla documentazione di OpenData AI.
+    """
+    sc = await build_scorecard(session, entity_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="ente o assessment non trovato")
+    md = build_scorecard_markdown(sc, ui_base_url=settings.public_ui_base_url)
+    return Response(
+        content=md, media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'inline; filename="maturita-{entity_id}.md"'},
     )
 
 

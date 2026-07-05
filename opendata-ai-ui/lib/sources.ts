@@ -4,8 +4,8 @@
  * pagina-fonte riconoscibile col suo NOME. OSM/Overpass sono NASCOSTE (ritorna
  * null): la mappa mostra già il dettaglio, il link OSM non aggiunge nulla.
  *
- * Allineato 1:1 al backend `opendata_backend/orchestrator/sources.py`. Usato sia
- * dalla UI (CitationLink) sia dall'export "sito" (territorioSite). */
+ * Allineato 1:1 al backend `opendata_backend/orchestrator/sources.py`. Usato
+ * dalla UI (CitationLink). */
 
 const PORTALS: { suffix: string; url: string; name: string }[] = [
   { suffix: "isprambiente.it", url: "https://idrogeo.isprambiente.it/", name: "ISPRA IdroGEO" },
