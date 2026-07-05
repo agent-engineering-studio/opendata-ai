@@ -1195,6 +1195,17 @@ class Settings(BaseSettings):
     # Source defaults — informational, but ALSO embedded in *_INSTRUCTIONS so
     # each specialist knows which SDMX endpoint to query
     ckan_default_base_url: str = Field(default="https://www.dati.gov.it/opendata")
+
+    # Idea Lab — percorso di brainstorming dai dati all'idea finanziabile.
+    # Il portale di dati.puglia.it non espone l'Action API CKAN, ma il suo
+    # catalogo è federato su dati.gov.it: il default cerca lì, ristretto
+    # all'organizzazione regionale via fq. cod_regione 16 = Puglia
+    # (OpenCoesione, progetti comparabili finanziati).
+    ideas_portal_base_url: str | None = Field(default=None)  # None → ckan_default_base_url
+    ideas_portal_fq: str = Field(default="organization:regione-puglia")
+    ideas_max_datasets: int = Field(default=8)
+    ideas_max_funding: int = Field(default=8)
+    ideas_oc_cod_regione: int = Field(default=16)
     ods_default_base_url: str = Field(default="https://public.opendatasoft.com")
     istat_sdmx_base_url: str = Field(default=_ISTAT_BASE_URL)
     eurostat_sdmx_base_url: str = Field(default=_EUROSTAT_BASE_URL)

@@ -31,12 +31,30 @@ _OPEN_LICENSE_HINTS = (
     "iodl", "creative commons", "public domain", "dl-by", "dati aperti",
 )
 
+# Varianti Creative Commons NON aperte: "cc-by-nc-4.0" contiene l'hint
+# "cc-by", quindi vanno escluse esplicitamente prima dell'euristica positiva.
+_NON_OPEN_LICENSE_HINTS = (
+    "by-nc", "by-nd", "bync", "bynd",
+    "non-commercial", "noncommercial", "non commercial",
+    "non commerciale", "non opere derivate", "no derivatives",
+)
+
 
 def is_open_license(license_id: str | None, license_title: str | None, isopen: bool | None) -> bool:
-    """True se la licenza è aperta. `isopen` di CKAN ha precedenza, poi euristica."""
-    if isopen is not None:
-        return bool(isopen)
+    """True se la licenza è aperta.
+
+    Le varianti NC/ND non sono licenze aperte per definizione (vietano riuso
+    commerciale o derivati) e vincono su tutto — anche su un `isopen=True`
+    male impostato dal portale. Per il resto: `isopen=True` di CKAN è
+    affidabile; `isopen=False` NO: i cataloghi federati (es. dati.gov.it)
+    marcano False anche le CC BY quando il license_id non è nel registro CKAN
+    del portale. Su False/None decide l'euristica sul testo.
+    """
     blob = f"{license_id or ''} {license_title or ''}".lower()
+    if any(h in blob for h in _NON_OPEN_LICENSE_HINTS):
+        return False
+    if isopen:
+        return True
     return any(h in blob for h in _OPEN_LICENSE_HINTS)
 
 

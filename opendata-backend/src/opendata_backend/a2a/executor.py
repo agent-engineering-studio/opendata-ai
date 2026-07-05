@@ -6,6 +6,7 @@ Each skill delegates to existing orchestrator code (R13 — no duplicated logic)
 - assess_maturity                        → `maturity.service.run_assessment`
 - analyze_territory                      → `OrchestratorSession.run_programma`
 - data_quality                           → pure `opendata_core.quality` engines
+- idea_lab                               → `ideas.build_report`
 
 The skill id comes from `message.metadata.skill` (default `search_open_data`).
 """
@@ -38,6 +39,7 @@ from ..state import session_holder
 from .agent_card import (
     SKILL_CLASSIFY,
     SKILL_GEO,
+    SKILL_IDEAS,
     SKILL_MATURITY,
     SKILL_QUALITY,
     SKILL_SEARCH,
@@ -47,7 +49,10 @@ from .quality_skill import run_quality_skill
 
 log = logging.getLogger("opendata-backend.a2a")
 
-_KNOWN_SKILLS = {SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY, SKILL_MATURITY, SKILL_TERRITORY, SKILL_QUALITY}
+_KNOWN_SKILLS = {
+    SKILL_SEARCH, SKILL_GEO, SKILL_CLASSIFY, SKILL_MATURITY,
+    SKILL_TERRITORY, SKILL_QUALITY, SKILL_IDEAS,
+}
 
 # Geographic format set used to filter resources for the find_geo_resources skill.
 # Mirrors the UI-side conversion in opendata-ai-ui/lib/geoConvert.ts.
@@ -114,6 +119,9 @@ class OpenDataAgentExecutor(AgentExecutor):
             return
         if skill == SKILL_QUALITY:
             await self._run_quality(context, task_updater, query)
+            return
+        if skill == SKILL_IDEAS:
+            await self._run_ideas(context, task_updater, query)
             return
 
         # search_open_data / find_geo_resources both go through run_streaming;
@@ -483,6 +491,93 @@ class OpenDataAgentExecutor(AgentExecutor):
         await task_updater.update_status(
             state=TaskState.TASK_STATE_COMPLETED,
             message=new_text_message("Analyzed."),
+        )
+
+    async def _run_ideas(
+        self,
+        context: RequestContext,
+        task_updater: TaskUpdater,
+        query_text: str,
+    ) -> None:
+        """idea_lab → ideas.build_report (delega, no logica nuova).
+
+        Payload da `message.metadata` o da un JSON nel testo; in alternativa il
+        testo semplice È la sfida. Il motore è fail-safe (fallback offline
+        deterministico), quindi la skill risponde anche senza provider LLM.
+        """
+        settings = session_holder.settings
+        if settings is None:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message("Backend session non inizializzata."),
+            )
+            return
+
+        meta = getattr(context.message, "metadata", None) or {}
+        payload: dict = dict(meta) if isinstance(meta, dict) and meta.get("challenge") else {}
+        if not payload:
+            try:
+                parsed = json.loads(query_text)
+                payload = parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                payload = {}
+        # Payload JSON → la sfida DEVE essere nel campo "challenge" (un JSON
+        # senza challenge non va mai trattato come testo della sfida); testo
+        # semplice → è direttamente la sfida.
+        challenge = str(payload.get("challenge") or "").strip() if payload \
+            else (query_text or "").strip()
+        if not challenge:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(
+                    'idea_lab richiede una sfida: testo semplice oppure JSON '
+                    '{"challenge":"…","area":"salute|ambiente|territorio|turismo",'
+                    '"territory":"…","idea_titolo":"…"}.'
+                ),
+            )
+            return
+
+        from ..ideas import IdeaReportRequest, build_report
+        from ..ideas.models import AREAS, ChatMessage
+
+        area = payload.get("area")
+        try:
+            req = IdeaReportRequest(
+                messages=[ChatMessage(role="user", content=challenge)],
+                area=area if isinstance(area, str) and area in AREAS else None,
+                territory=payload.get("territory"),
+                idea_titolo=payload.get("idea_titolo"),
+            )
+        except Exception as exc:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Richiesta non valida: {exc}"),
+            )
+            return
+
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_WORKING,
+            message=new_text_message(f"Idea Lab: analisi della sfida ({area or 'area n/d'})…"),
+        )
+        try:
+            resp = await build_report(settings, req)
+        except Exception as exc:
+            log.exception("A2A idea_lab failed")
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Errore: {exc}"),
+            )
+            return
+
+        await task_updater.add_artifact(
+            parts=[new_text_part(
+                text=json.dumps(resp.model_dump(mode="json"), ensure_ascii=False),
+                media_type="application/json",
+            )],
+        )
+        await task_updater.update_status(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=new_text_message("Idea pronta."),
         )
 
     async def _run_quality(
