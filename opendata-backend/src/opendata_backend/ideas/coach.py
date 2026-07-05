@@ -234,9 +234,30 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
     if not funding and req.area:
         funding = await discover_funding(settings, area=req.area)
 
+    first_turn = n_user == 1
+    extra: list[str] = []
+    if req.mode == "idea":
+        extra.append(
+            "MODALITÀ 'PARTO DA UN'IDEA': l'utente ha già un'idea definita, non un "
+            "problema aperto. Il tuo compito è mappare il FABBISOGNO INFORMATIVO: "
+            "quali indicatori concreti servono per realizzarla e monitorarla (es. "
+            "per le liste d'attesa: tempi per reparto/prestazione, volumi, mobilità "
+            "sanitaria), quali di questi dati ESISTONO tra i dataset disponibili, "
+            "quali MANCANO (gap da chiedere all'ente) e cosa si può realizzare "
+            "subito con ciò che c'è."
+        )
+    if first_turn:
+        extra.append(
+            "PRIMO TURNO: non limitarti a una domanda. Apri presentando l'ANALISI "
+            "dell'evidenza disponibile — i dataset pertinenti con qualità e "
+            "aggiornamento, i punti deboli, i gap evidenti e cosa dicono i progetti "
+            "comparabili già finanziati — poi chiudi con UNA sola domanda per "
+            "mettere a fuoco. next_stage: 'esplorazione'."
+        )
     prompt = (
         f"TAPPA CORRENTE: {stage} — {_STAGE_GOALS[stage]}\n\n"
-        f"AREA: {AREAS[req.area]['label'] if req.area else 'non indicata'}"
+        + ("".join(f"{e}\n\n" for e in extra))
+        + f"AREA: {AREAS[req.area]['label'] if req.area else 'non indicata'}"
         f" | TERRITORIO: {req.territory or 'non indicato'}\n\n"
         f"DATASET DISPONIBILI (con qualità):\n{_datasets_block(datasets)}\n\n"
         f"PROGETTI COMPARABILI GIÀ FINANZIATI (OpenCoesione):\n{_funding_block(funding)}\n\n"
@@ -270,8 +291,11 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
     else:
         # Nessun provider: percorso interamente scriptato — si avanza PRIMA e
         # si risponde per la tappa nuova (l'utente ha appena risposto alla
-        # domanda della tappa precedente).
-        new_stage = _next_stage(stage) if stage != "inquadramento" or n_user >= 2 else stage
+        # domanda della tappa precedente). Il primo turno apre con l'analisi
+        # dei dati (esplorazione), coerente col percorso guidato online.
+        new_stage = (
+            "esplorazione" if first_turn and stage == "inquadramento" else _next_stage(stage)
+        )
         reply, suggestions = _offline_reply(
             new_stage, area=req.area, datasets=datasets, funding=funding
         )
