@@ -227,6 +227,19 @@
 .od-pulse {
   animation: odPulse 1.6s ease-in-out infinite;
 }
+/* Dentro un contenitore [data-anim-scope] le animazioni infinite girano solo
+ * quando è in viewport (classe od-anim-on da LandingReveal): fuori schermo
+ * restano in pausa e non appesantiscono lo scroll. */
+[data-anim-scope] .od-flow,
+[data-anim-scope] .od-flow--slow,
+[data-anim-scope] .od-pulse {
+  animation-play-state: paused;
+}
+[data-anim-scope].od-anim-on .od-flow,
+[data-anim-scope].od-anim-on .od-flow--slow,
+[data-anim-scope].od-anim-on .od-pulse {
+  animation-play-state: running;
+}
 .od-blink {
   animation: odBlink 1s step-end infinite;
 }

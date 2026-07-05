@@ -233,7 +233,7 @@ export default function Page() {
       <section style={{ background: "#fff", borderBottom: "1px solid #EDF0F3" }}>
         <div className="container">
           <div className="row g-4" style={{ paddingTop: 38, paddingBottom: 38 }}>
-            <Stat value="4" label="Fonti ufficiali in parallelo" delay={0} />
+            <Stat value="8" label="Fonti ufficiali in parallelo" delay={0} />
             <Stat value="3" label="Superfici · REST · MCP · A2A" delay={80} />
             <Stat value="100%" label="Risposte con fonte citata" delay={160} gradient />
             <Stat value="0" label="Punteggi inventati senza dati" delay={240} />
@@ -301,10 +301,79 @@ export default function Page() {
             </p>
           </div>
 
-          {/* Diagramma fan-out */}
-          <div data-reveal className="mx-auto" style={{ marginTop: 52, maxWidth: 1040 }}>
+          {/* Diagramma fan-out (le animazioni girano solo quando è in viewport) */}
+          <div data-reveal data-anim-scope className="mx-auto" style={{ marginTop: 52, maxWidth: 1040 }}>
             <FanOut />
           </div>
+
+          {/* Le funzionalità, passo per passo */}
+          <h3 style={comeSub}>Le funzionalità, passo per passo</h3>
+          <p style={{ ...lead, fontSize: 15, marginTop: -4, marginBottom: 18, maxWidth: "72ch" }}>
+            Lo stesso motore alimenta quattro percorsi diversi. Per ciascuno: cosa
+            inserisci, cosa succede dietro le quinte, cosa ottieni.
+          </p>
+          <div className="row g-3">
+            <FeatureFlow
+              tag="ESPLORA"
+              tagBg="#E7F0FD"
+              tagColor="#1959B8"
+              title="Cerca dataset con una domanda"
+              href="/esplora"
+              steps={[
+                "Scrivi una domanda in linguaggio naturale (es. “qualità dell'aria a Bari”).",
+                "Il fan-out interroga in parallelo CKAN, ISTAT/Eurostat/OCSE (e ODS se attivo); la sintesi fonde le risposte.",
+                "Le risorse geografiche (GeoJSON, Shapefile, KML) si aprono direttamente sulla mappa.",
+              ]}
+              result="Risposta in italiano con fonti citate + elenco risorse scaricabili e mappabili."
+              delay={0}
+            />
+            <FeatureFlow
+              tag="TERRITORIO"
+              tagBg="#E4F5EC"
+              tagColor="#147A52"
+              title="Analizza un comune e genera proposte"
+              href="/territorio"
+              steps={[
+                "Scegli il comune (e una zona, via tag OpenStreetMap) e la modalità di report.",
+                "Otto lenti data-anchored (commercio, turismo, lavoro, trasporti, welfare, istruzione, ambiente, sanità) + OpenCoesione e ISPRA raccolgono l'evidenza.",
+                "Il quality-gate scarta le proposte senza evidenza risolvibile; ogni voce ha un ID verificabile.",
+              ]}
+              result="Scheda programmatica: sintesi, SWOT e proposte con citazioni — esportabile in PDF."
+              delay={70}
+            />
+            <FeatureFlow
+              tag="MATURITÀ"
+              tagBg="#E1F4F4"
+              tagColor="#0B7878"
+              title="Misura il patrimonio open data di un ente"
+              href="/maturita"
+              steps={[
+                "Indica l'ente (organizzazione CKAN, opz. codice ISTAT del comune).",
+                "L'harvest raccoglie i dataset e li valuta: 5 stelle, FAIR, DCAT-AP_IT, aggiornamento, licenze.",
+                "I punteggi confluiscono nelle 4 dimensioni ODM 2025; sotto soglia: “dato insufficiente”.",
+              ]}
+              result="Scorecard 0–100 con livello, raccomandazioni e leve di miglioramento — export CSV/PNG."
+              delay={140}
+            />
+            <FeatureFlow
+              tag="IDEA LAB"
+              tagBg="#F3E8FD"
+              tagColor="#7C3AED"
+              title="Dalla sfida a un'idea finanziabile"
+              href="/idee"
+              steps={[
+                "Scegli l'area (salute, ambiente, territorio, turismo) e descrivi la sfida in chat.",
+                "Un percorso guidato in 5 tappe esplora i dataset regionali (con qualità) e i progetti simili già finanziati (OpenCoesione).",
+                "Le idee vengono messe alla prova: critica, fattibilità, gap di dati da colmare.",
+              ]}
+              result="Scheda progetto: evidenza, finanziabilità, domanda di riuso e kit di implementazione per il team di sviluppo."
+              delay={210}
+            />
+          </div>
+          <p style={{ ...lead, fontSize: 14, marginTop: 16, marginBottom: 0, color: "var(--color-text-faint)" }}>
+            C&apos;è anche il <Link href="/qualita" style={{ color: "#1B6FE3", fontWeight: 600 }}>Data Quality Lab</Link>:
+            diagnosi e preparazione di un singolo file (CSV/GeoJSON) prima della pubblicazione — deterministico, senza LLM.
+          </p>
 
           {/* Le fonti — un server MCP per ciascuna */}
           <h3 style={comeSub}>Le fonti: un server MCP per ciascuna</h3>
@@ -315,13 +384,15 @@ export default function Page() {
           </p>
           <div className="row g-3">
             <SpecCard tag="CKAN" tagBg="#E7F0FD" tagColor="#1959B8" title="Cataloghi open" body={<>Qualunque portale CKAN-compatibile. Default <code style={{ fontSize: 12, color: "#1B6FE3" }}>dati.gov.it</code>, override per portale regionale/municipale.</>} delay={0} />
-            <SpecCard tag="SDMX 2.1" tagBg="#E1F4F4" tagColor="#0B7878" title="Statistiche ufficiali" body="Una sola interfaccia per ISTAT, Eurostat e OCSE: dataflow, codelist e osservazioni normalizzate in CSV." delay={60} />
-            <SpecCard tag="OpenCoesione" tagBg="#E4F5EC" tagColor="#147A52" title="Spesa di coesione" body="Progetti finanziati sul territorio: quanto finanziato vs speso, spend ratio e capacità di realizzazione." delay={120} />
-            <SpecCard tag="OSM" tagBg="#E4F5EC" tagColor="#147A52" title="Accessibilità + mappe" body="Geocoding, POI, routing e profili di zona; GeoJSON, KML e Shapefile resi su mappa Leaflet." delay={180} />
-            <SpecCard tag="ISPRA" tagBg="#FDE9D6" tagColor="#A35B12" title="Vincoli ambientali" body="Pericolosità frane e alluvioni ed esposti per comune (IdroGEO): vincoli di pianificazione, non giudizi." delay={0} />
-            <SpecCard tag="Web" tagBg="#EEF1F4" tagColor="#5B6B7B" title="Iniziative analoghe" body="Ricerca web self-hosted (SearXNG) per best practice di altri enti — la lente del marketing territoriale." delay={60} />
-            <SpecCard tag="Memoria" tagBg="#F3E8FD" tagColor="#7C3AED" title="Riuso delle analisi" body="Le analisi già prodotte vengono richiamate per non rifare lavoro — memoria di lavoro, non fonte ufficiale." delay={120} />
-            <SpecCard tag="Sintesi" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Risposta unica" body="Un LLM fonde le risposte in italiano, citando ogni risorsa con la fonte di origine." delay={180} rail />
+            <SpecCard tag="ODS" tagBg="#E7F0FD" tagColor="#1959B8" title="Portali OpenDataSoft" body="Explore API v2.1 per i portali OpenDataSoft (molte utility e città europee): stessi risultati, altra famiglia di cataloghi." delay={60} />
+            <SpecCard tag="SDMX 2.1" tagBg="#E1F4F4" tagColor="#0B7878" title="Statistiche ufficiali" body="Una sola interfaccia per ISTAT, Eurostat e OCSE: dataflow, codelist e osservazioni normalizzate in CSV." delay={120} />
+            <SpecCard tag="OpenCoesione" tagBg="#E4F5EC" tagColor="#147A52" title="Spesa di coesione" body="Progetti finanziati sul territorio: quanto finanziato vs speso, spend ratio e capacità di realizzazione." delay={180} />
+            <SpecCard tag="OSM" tagBg="#E4F5EC" tagColor="#147A52" title="Accessibilità + mappe" body="Geocoding, POI, routing e profili di zona; GeoJSON, KML e Shapefile resi su mappa Leaflet." delay={0} />
+            <SpecCard tag="ISPRA" tagBg="#FDE9D6" tagColor="#A35B12" title="Vincoli ambientali" body="Pericolosità frane e alluvioni ed esposti per comune (IdroGEO): vincoli di pianificazione, non giudizi." delay={60} />
+            <SpecCard tag="Maturità" tagBg="#E1F4F4" tagColor="#0B7878" title="Scorecard come tool" body="Il motore di maturità ODM esposto anche come server MCP: la scorecard di un ente invocabile da qualsiasi client." delay={120} />
+            <SpecCard tag="Web" tagBg="#EEF1F4" tagColor="#5B6B7B" title="Iniziative analoghe" body="Ricerca web self-hosted (SearXNG) per best practice di altri enti — la lente del marketing territoriale." delay={180} />
+            <SpecCard tag="Memoria" tagBg="#F3E8FD" tagColor="#7C3AED" title="Riuso delle analisi" body="Le analisi già prodotte vengono richiamate per non rifare lavoro — memoria di lavoro, non fonte ufficiale." delay={0} />
+            <SpecCard tag="Sintesi" tagBg="#E7EEFE" tagColor="#1B6FE3" title="Risposta unica" body="Un LLM fonde le risposte in italiano, citando ogni risorsa con la fonte di origine." delay={60} rail />
           </div>
 
           {/* Maturità ODM 2025 */}
@@ -361,6 +432,8 @@ export default function Page() {
               <SkillRow id="classify_dataset" desc="classifica un dataset rispetto a una tassonomia" />
               <SkillRow id="assess_maturity" desc="scorecard di maturità ODM 2025 di un ente" />
               <SkillRow id="analyze_territory" desc="SWOT + proposte per un comune, con citazioni" />
+              <SkillRow id="data_quality" desc="diagnosi e preparazione di un file (CSV/GeoJSON) alla pubblicazione" />
+              <SkillRow id="idea_lab" desc="dalla sfida tematica alla scheda progetto finanziabile" />
             </div>
           </div>
         </div>
@@ -377,7 +450,7 @@ export default function Page() {
           <div className="row g-4" style={{ marginTop: 32 }}>
             <PubblicoCard iconBg="rgba(27,111,227,.2)" icon={ICON.building} iconStroke="#6BA8FF" title="Pubbliche amministrazioni" body="Misura la maturità del proprio patrimonio dati, scopri le lacune e trasformale in progetti per il territorio. Conforme agli standard del Design System italiano." delay={0} />
             <PubblicoCard iconBg="rgba(31,169,113,.2)" icon={ICON.people} iconStroke="#5FE0A8" title="Cittadini e comunità" body="Un sito civico statico, leggibile e verificabile: ogni numero linkato alla fonte e alla licenza. Trasparenza su cosa è stato fatto e cosa manca." delay={120} />
-            <PubblicoCard iconBg="rgba(15,163,163,.2)" icon={ICON.code} iconStroke="#5FD3D3" title="Sviluppatori e integratori" body="REST autenticato, tre server MCP (stdio o HTTP) e una AgentCard A2A. Tre superfici programmabili, pensate per essere componibili." delay={240} />
+            <PubblicoCard iconBg="rgba(15,163,163,.2)" icon={ICON.code} iconStroke="#5FD3D3" title="Sviluppatori e integratori" body="REST autenticato, otto server MCP (stdio o HTTP) e una AgentCard A2A con sette skill. Tre superfici programmabili, pensate per essere componibili." delay={240} />
           </div>
         </div>
       </section>
@@ -393,7 +466,7 @@ export default function Page() {
                 Scegli l&apos;interfaccia più adatta al tuo caso d&apos;uso. Stessa fonte, stessi dati, autenticazione coerente.
               </p>
               <div className="d-flex flex-column gap-2">
-                <SurfaceRow title="MCP — Model Context Protocol" sub="3 server (CKAN, ISTAT, OSM) per ogni client MCP" badge="stdio · http" />
+                <SurfaceRow title="MCP — Model Context Protocol" sub="8 server (CKAN, ODS, SDMX, OSM, OpenCoesione, ISPRA, web, maturità) per ogni client MCP" badge="stdio · http" />
                 <SurfaceRow title="A2A — Agent-to-Agent" sub="AgentCard pubblica + JSON-RPC SendMessage" badge="SDK 1.0" />
                 <SurfaceRow title="REST diretto" sub="/datasets/search/stream NDJSON · classify con cache 24h" badge="JWT" />
               </div>
@@ -613,7 +686,7 @@ function CodeBlock({ lang, langBg, caption, children }: { lang: string; langBg: 
 
 function FanOut() {
   return (
-    <svg viewBox="0 0 1040 300" style={{ width: "100%", height: "auto" }} fontFamily="Titillium Web,sans-serif" role="img" aria-label="Diagramma: una domanda in linguaggio naturale viene smistata in parallelo ai tre specialisti CKAN, SDMX 2.1 e OSM, le cui risposte convergono in un agente di sintesi che produce una risposta unica con fonti citate.">
+    <svg viewBox="0 0 1040 395" style={{ width: "100%", height: "auto" }} fontFamily="Titillium Web,sans-serif" role="img" aria-label="Diagramma: una domanda in linguaggio naturale viene smistata in parallelo agli specialisti CKAN, SDMX 2.1, OSM e agli altri specialisti (OpenCoesione, ISPRA, ODS, web, maturità), le cui risposte convergono in un agente di sintesi che produce una risposta unica con fonti citate.">
       <defs>
         <linearGradient id="fang" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#1B6FE3" />
@@ -621,24 +694,26 @@ function FanOut() {
         </linearGradient>
       </defs>
       {/* Connettori domanda → specialisti */}
-      <path className="od-flow" d="M236 150 C 330 150, 330 55, 424 55" fill="none" stroke="#1B6FE3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
-      <path className="od-flow" d="M236 150 C 330 150, 330 150, 424 150" fill="none" stroke="#0FA3A3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
-      <path className="od-flow" d="M236 150 C 330 150, 330 245, 424 245" fill="none" stroke="#1FA971" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 197 C 330 197, 330 55, 424 55" fill="none" stroke="#1B6FE3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 197 C 330 197, 330 150, 424 150" fill="none" stroke="#0FA3A3" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 197 C 330 197, 330 245, 424 245" fill="none" stroke="#1FA971" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
+      <path className="od-flow" d="M236 197 C 330 197, 330 340, 424 340" fill="none" stroke="#A35B12" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" opacity=".9" />
       {/* Connettori specialisti → sintesi */}
-      <path className="od-flow--slow" d="M612 55 C 706 55, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
-      <path className="od-flow--slow" d="M612 150 C 706 150, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
-      <path className="od-flow--slow" d="M612 245 C 706 245, 706 150, 800 150" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 55 C 706 55, 706 197, 800 197" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 150 C 706 150, 706 197, 800 197" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 245 C 706 245, 706 197, 800 197" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
+      <path className="od-flow--slow" d="M612 340 C 706 340, 706 197, 800 197" fill="none" stroke="#AFC0CE" strokeWidth="2.5" strokeDasharray="6 12" strokeLinecap="round" />
       {/* Nodo domanda */}
       <g>
-        <rect x="24" y="116" width="212" height="68" rx="16" fill="#0E2233" />
-        <text x="48" y="146" fill="#fff" fontSize="16" fontWeight="700">Una domanda</text>
-        <text x="48" y="167" fill="#AFC0CE" fontSize="12.5">in linguaggio naturale</text>
+        <rect x="24" y="163" width="212" height="68" rx="16" fill="#0E2233" />
+        <text x="48" y="193" fill="#fff" fontSize="16" fontWeight="700">Una domanda</text>
+        <text x="48" y="214" fill="#AFC0CE" fontSize="12.5">in linguaggio naturale</text>
       </g>
       {/* Specialisti */}
       <g>
         <rect x="424" y="27" width="188" height="56" rx="14" fill="#fff" stroke="#1B6FE3" strokeWidth="2" />
         <circle className="od-pulse" cx="448" cy="55" r="5" fill="#1B6FE3" />
-        <text x="466" y="51" fill="#0E2233" fontSize="14.5" fontWeight="700">CKAN</text>
+        <text x="466" y="51" fill="#0E2233" fontSize="14.5" fontWeight="700">CKAN · ODS</text>
         <text x="466" y="69" fill="#7E8F9C" fontSize="11.5">Cataloghi open</text>
       </g>
       <g>
@@ -653,12 +728,51 @@ function FanOut() {
         <text x="466" y="241" fill="#0E2233" fontSize="14.5" fontWeight="700">OSM</text>
         <text x="466" y="259" fill="#7E8F9C" fontSize="11.5">Geocoding + mappa</text>
       </g>
+      <g>
+        <rect x="424" y="312" width="188" height="56" rx="14" fill="#fff" stroke="#A35B12" strokeWidth="2" />
+        <circle className="od-pulse" cx="448" cy="340" r="5" fill="#A35B12" />
+        <text x="466" y="336" fill="#0E2233" fontSize="14.5" fontWeight="700">Altri specialisti</text>
+        <text x="466" y="354" fill="#7E8F9C" fontSize="11.5">OpenCoesione · ISPRA · web…</text>
+      </g>
       {/* Sintesi */}
       <g>
-        <rect x="800" y="112" width="216" height="76" rx="18" fill="url(#fang)" />
-        <text x="826" y="146" fill="#fff" fontSize="16" fontWeight="700">Sintesi</text>
-        <text x="826" y="167" fill="rgba(255,255,255,.88)" fontSize="12">Risposta unica · fonti citate</text>
+        <rect x="800" y="159" width="216" height="76" rx="18" fill="url(#fang)" />
+        <text x="826" y="193" fill="#fff" fontSize="16" fontWeight="700">Sintesi</text>
+        <text x="826" y="214" fill="rgba(255,255,255,.88)" fontSize="12">Risposta unica · fonti citate</text>
       </g>
     </svg>
+  );
+}
+
+function FeatureFlow({ tag, tagBg, tagColor, title, href, steps, result, delay }: {
+  tag: string; tagBg: string; tagColor: string; title: string; href: string;
+  steps: string[]; result: string; delay: number;
+}) {
+  return (
+    <div className="col-12 col-lg-6" data-reveal data-delay={delay}>
+      <div className="od-card" style={{ ...cardBase, padding: "26px 28px" }}>
+        <div className="d-flex align-items-center justify-content-between gap-2" style={{ marginBottom: 12 }}>
+          <span className="d-inline-block" style={{ padding: "5px 11px", borderRadius: 999, background: tagBg, color: tagColor, fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: 11, letterSpacing: "0.05em" }}>{tag}</span>
+          <Link href={href} className="d-inline-flex align-items-center gap-1" style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 13.5, color: "#1B6FE3", textDecoration: "none", whiteSpace: "nowrap" }}>
+            Apri <Icon path={ICON.arrow} stroke="currentColor" size={14} />
+          </Link>
+        </div>
+        <h4 style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18, lineHeight: 1.25, color: "#0E2233", margin: "0 0 14px" }}>{title}</h4>
+        <div className="d-flex flex-column" style={{ gap: 9 }}>
+          {steps.map((s, i) => (
+            <div key={i} className="d-flex align-items-start gap-2">
+              <span style={{ flex: "none", width: 22, height: 22, borderRadius: 7, background: "var(--color-bg-muted)", border: "1px solid var(--color-border)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 11.5, color: "#5B6B7B" }}>{i + 1}</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: 14, lineHeight: 1.5, color: "#42535F" }}>{s}</span>
+            </div>
+          ))}
+          <div className="d-flex align-items-start gap-2" style={{ marginTop: 3, padding: "10px 13px", borderRadius: 10, background: "#E7F0FD" }}>
+            <span style={{ flex: "none", marginTop: 2 }}>
+              <Icon path={ICON.arrow} stroke="#1B6FE3" size={15} />
+            </span>
+            <span style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: 14, lineHeight: 1.5, color: "#1959B8" }}>{result}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
