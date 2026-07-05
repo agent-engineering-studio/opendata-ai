@@ -224,15 +224,16 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
     stage = resolve_stage(req.stage, n_user)
     challenge = _challenge_text(req.messages)
 
-    # Evidenza deterministica: si scopre una volta sola (poi il client la rimanda).
+    # Evidenza deterministica: si scopre appena c'è il testo della sfida (già
+    # al primo turno, così il coach non dichiara falsi "gap di dati"), una
+    # volta sola — poi il client la rimanda a ogni turno.
     datasets = list(req.datasets or [])
     funding = list(req.funding or [])
-    needs_evidence = stage != "inquadramento" or n_user >= 2
-    if not datasets and needs_evidence and challenge:
+    if not datasets and challenge:
         datasets = await discover_datasets(
             settings, area=req.area, challenge_text=challenge, base_url=req.base_url
         )
-    if not funding and needs_evidence and req.area:
+    if not funding and req.area:
         funding = await discover_funding(settings, area=req.area)
 
     prompt = (
@@ -247,8 +248,10 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
         + ", ".join(STAGES)
         + ">\", \"suggestions\": [\"<max 3 risposte rapide>\"]}"
     )
+    # 1400 token: le tappe di divergenza/convergenza producono elenchi di idee
+    # e stress-test articolati — a 900 le risposte arrivavano troncate a metà.
     raw = await complete(
-        settings, prompt=prompt, system=_SYSTEM, max_tokens=900, temperature=0.3
+        settings, prompt=prompt, system=_SYSTEM, max_tokens=1400, temperature=0.3
     )
 
     if raw is not None and (data := parse_coach_json(raw)) and data.get("reply"):
