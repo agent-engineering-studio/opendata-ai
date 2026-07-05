@@ -521,7 +521,11 @@ class OpenDataAgentExecutor(AgentExecutor):
                 payload = parsed if isinstance(parsed, dict) else {}
             except Exception:
                 payload = {}
-        challenge = str(payload.get("challenge") or query_text or "").strip()
+        # Payload JSON → la sfida DEVE essere nel campo "challenge" (un JSON
+        # senza challenge non va mai trattato come testo della sfida); testo
+        # semplice → è direttamente la sfida.
+        challenge = str(payload.get("challenge") or "").strip() if payload \
+            else (query_text or "").strip()
         if not challenge:
             await task_updater.update_status(
                 state=TaskState.TASK_STATE_FAILED,
@@ -537,12 +541,19 @@ class OpenDataAgentExecutor(AgentExecutor):
         from ..ideas.models import AREAS, ChatMessage
 
         area = payload.get("area")
-        req = IdeaReportRequest(
-            messages=[ChatMessage(role="user", content=challenge)],
-            area=area if area in AREAS else None,
-            territory=payload.get("territory"),
-            idea_titolo=payload.get("idea_titolo"),
-        )
+        try:
+            req = IdeaReportRequest(
+                messages=[ChatMessage(role="user", content=challenge)],
+                area=area if isinstance(area, str) and area in AREAS else None,
+                territory=payload.get("territory"),
+                idea_titolo=payload.get("idea_titolo"),
+            )
+        except Exception as exc:
+            await task_updater.update_status(
+                state=TaskState.TASK_STATE_FAILED,
+                message=new_text_message(f"Richiesta non valida: {exc}"),
+            )
+            return
 
         await task_updater.update_status(
             state=TaskState.TASK_STATE_WORKING,

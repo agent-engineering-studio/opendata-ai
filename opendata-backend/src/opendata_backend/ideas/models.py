@@ -93,13 +93,15 @@ class FundingProject(BaseModel):
 
 
 class IdeaChatRequest(BaseModel):
+    """Il portale CKAN NON è per-richiesta: è fissato dai settings (ideas_portal_
+    base_url + fq coerenti tra loro), sia per evitare SSRF verso host arbitrari
+    sia perché l'fq regionale avrebbe senso solo sul portale configurato."""
+
     messages: list[ChatMessage]
     area: Area | None = None
     territory: str | None = None
     # Tappa corrente: il client rimanda quella dell'ultima risposta.
     stage: str | None = None
-    # Portale CKAN alternativo (default: settings → dati.gov.it / Puglia).
-    base_url: str | None = None
     # Dataset e progetti finanziati già scoperti, rimandati dal client.
     datasets: list[IdeaDataset] | None = None
     funding: list[FundingProject] | None = None
@@ -122,7 +124,6 @@ class IdeaReportRequest(BaseModel):
     messages: list[ChatMessage]
     area: Area | None = None
     territory: str | None = None
-    base_url: str | None = None
     datasets: list[IdeaDataset] | None = None
     funding: list[FundingProject] | None = None
     # Titolo dell'idea scelta in convergenza (se l'utente ne ha selezionata una).

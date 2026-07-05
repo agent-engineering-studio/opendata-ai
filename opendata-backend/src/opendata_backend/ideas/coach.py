@@ -230,9 +230,7 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
     datasets = list(req.datasets or [])
     funding = list(req.funding or [])
     if not datasets and challenge:
-        datasets = await discover_datasets(
-            settings, area=req.area, challenge_text=challenge, base_url=req.base_url
-        )
+        datasets = await discover_datasets(settings, area=req.area, challenge_text=challenge)
     if not funding and req.area:
         funding = await discover_funding(settings, area=req.area)
 
@@ -259,16 +257,25 @@ async def run_chat_turn(settings: Settings, req: IdeaChatRequest) -> IdeaChatRes
         suggestions = [str(s) for s in (data.get("suggestions") or [])][:3]
         reply = str(data["reply"])
         offline = False
+    elif raw is not None:
+        # LLM attivo ma output non parsabile: risposta canonica SENZA avanzare
+        # di tappa — avanzare qui farebbe scorrere il percorso ignorando ciò
+        # che l'utente scrive. offline=True: la UI può segnalare il degrado.
+        log.warning("ideas coach: risposta LLM non parsabile, uso il fallback")
+        new_stage = stage
+        reply, suggestions = _offline_reply(
+            new_stage, area=req.area, datasets=datasets, funding=funding
+        )
+        offline = True
     else:
-        if raw is not None:
-            log.warning("ideas coach: risposta LLM non parsabile, uso il fallback")
-        # Offline si avanza PRIMA e si risponde per la tappa nuova: l'utente ha
-        # appena risposto alla domanda della tappa precedente.
+        # Nessun provider: percorso interamente scriptato — si avanza PRIMA e
+        # si risponde per la tappa nuova (l'utente ha appena risposto alla
+        # domanda della tappa precedente).
         new_stage = _next_stage(stage) if stage != "inquadramento" or n_user >= 2 else stage
         reply, suggestions = _offline_reply(
             new_stage, area=req.area, datasets=datasets, funding=funding
         )
-        offline = raw is None
+        offline = True
 
     return IdeaChatResponse(
         reply=reply,

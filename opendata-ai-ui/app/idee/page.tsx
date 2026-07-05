@@ -95,7 +95,10 @@ export default function IdeeLabPage() {
       setReportReady(data.report_ready);
     } catch (e) {
       setError(`Non sono riuscito a rispondere: ${e instanceof Error ? e.message : e}. Riprova.`);
+      // Ripristina sia la chat sia il testo digitato: l'utente non deve
+      // riscrivere il messaggio per ritentare.
       setMessages(messages);
+      setInput(text.trim());
     } finally {
       setLoading(false);
     }

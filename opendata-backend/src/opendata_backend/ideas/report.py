@@ -146,16 +146,12 @@ def _sezione_finanziabilita(funding: list[FundingProject], area: str | None) -> 
 
 
 def _sezione_gap(datasets: list[IdeaDataset], gap_dati: list[dict]) -> str:
-    lines: list[str] = [
-        "Il progetto vale anche come **domanda di riuso**: ogni gap qui sotto è "
-        "una richiesta motivata all'ente per migliorare la base di dati aperti.",
-        "",
-    ]
+    voci: list[str] = []
     for g in gap_dati:
         dato = str(g.get("dato") or "").strip()
         if not dato:
             continue
-        lines.append(
+        voci.append(
             f"- **{dato}** — {str(g.get('perche_serve') or 'necessario al progetto').strip()} "
             f"→ *{str(g.get('come_colmarlo') or 'pubblicare il dato sul portale regionale').strip()}*"
         )
@@ -168,12 +164,14 @@ def _sezione_gap(datasets: list[IdeaDataset], gap_dati: list[dict]) -> str:
             azioni.append("pubblicare in formato aperto machine-readable (CSV/JSON)")
         if d.freshness_days and d.freshness_days > 365:
             azioni.append("ripristinare l'aggiornamento periodico")
-        lines.append(
-            f"- **Migliorare “{d.title}”** ({d.quality_note}) → *{'; '.join(azioni)}*"
-        )
-    if len(lines) == 2:
-        lines.append("- Nessun gap bloccante individuato: la base dati regge il progetto.")
-    return "\n".join(lines) + "\n"
+        voci.append(f"- **Migliorare “{d.title}”** ({d.quality_note}) → *{'; '.join(azioni)}*")
+    if not voci:
+        voci.append("- Nessun gap bloccante individuato: la base dati regge il progetto.")
+    intro = (
+        "Il progetto vale anche come **domanda di riuso**: ogni gap qui sotto è "
+        "una richiesta motivata all'ente per migliorare la base di dati aperti."
+    )
+    return intro + "\n\n" + "\n".join(voci) + "\n"
 
 
 def _kit_implementazione(
@@ -244,9 +242,7 @@ async def build_report(settings: Settings, req: IdeaReportRequest) -> IdeaReport
     datasets = list(req.datasets or [])
     funding = list(req.funding or [])
     if not datasets and challenge:
-        datasets = await discover_datasets(
-            settings, area=req.area, challenge_text=challenge, base_url=req.base_url
-        )
+        datasets = await discover_datasets(settings, area=req.area, challenge_text=challenge)
     if not funding and req.area:
         funding = await discover_funding(settings, area=req.area)
 
@@ -257,12 +253,15 @@ async def build_report(settings: Settings, req: IdeaReportRequest) -> IdeaReport
         max_tokens=1600,
         temperature=0.2,
     )
-    fields = parse_coach_json(raw) if raw is not None else None
-    offline = fields is None or not fields.get("titolo")
-    if offline:
-        if raw is not None:
-            log.warning("ideas report: estrazione LLM non parsabile, uso il fallback")
-        fields = _offline_fields(req, datasets)
+    parsed = parse_coach_json(raw) if raw is not None else None
+    offline = parsed is None or not str(parsed.get("titolo") or "").strip()
+    # I default offline sono SEMPRE la base: un JSON LLM parziale (titolo ok ma
+    # senza problema/beneficiari) integra i campi che ha, senza mai KeyError.
+    fields = _offline_fields(req, datasets)
+    if not offline:
+        fields.update({k: v for k, v in parsed.items() if v})
+    elif raw is not None:
+        log.warning("ideas report: estrazione LLM non parsabile, uso il fallback")
 
     titolo = str(fields["titolo"]).strip()
     idea_id = stable_idea_id(titolo)

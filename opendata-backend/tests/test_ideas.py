@@ -338,6 +338,66 @@ def test_stable_idea_id_normalizes() -> None:
     assert a == b
 
 
+def test_is_open_license_rejects_nc_nd_variants() -> None:
+    from opendata_core.maturity.models import is_open_license
+
+    # NC/ND non sono aperte, nemmeno se il portale dice isopen=True
+    assert is_open_license("cc-by-nc-4.0", None, True) is False
+    assert is_open_license(None, "CC BY-NC-ND 4.0", False) is False
+    assert is_open_license(None, "Creative Commons Attribuzione - Non commerciale", None) is False
+    # le CC BY federate con isopen=False restano aperte (euristica)
+    assert is_open_license("Creative Commons Attribuzione 4.0 (CC BY 4.0)", None, False) is True
+
+
+@pytest.mark.asyncio
+async def test_report_survives_partial_llm_json(monkeypatch) -> None:
+    """JSON LLM con solo 'titolo': i campi mancanti vengono dai default, no KeyError."""
+    from opendata_backend.ideas import report as report_mod
+
+    async def _fake_complete(settings, **kwargs):
+        return '{"titolo": "Solo titolo dal modello"}'
+
+    monkeypatch.setattr(report_mod, "complete", _fake_complete)
+    resp = await build_report(
+        _settings(),
+        IdeaReportRequest(
+            messages=[ChatMessage(role="user", content="sfida rifiuti")],
+            area="ambiente",
+            datasets=_datasets(),
+            funding=_funding(),
+        ),
+    )
+    assert resp.offline is False
+    assert resp.titolo == "Solo titolo dal modello"
+    assert "## In sintesi" in resp.report_md  # problema/beneficiari dai default
+
+
+@pytest.mark.asyncio
+async def test_coach_unparsable_llm_does_not_advance_stage(monkeypatch) -> None:
+    from opendata_backend.ideas import coach as coach_mod
+
+    async def _fake_complete(settings, **kwargs):
+        return "risposta in prosa, niente JSON qui"
+
+    monkeypatch.setattr(coach_mod, "complete", _fake_complete)
+    resp = await run_chat_turn(
+        _settings(),
+        IdeaChatRequest(
+            messages=[
+                ChatMessage(role="user", content="sfida"),
+                ChatMessage(role="assistant", content="domanda"),
+                ChatMessage(role="user", content="risposta"),
+            ],
+            area="salute",
+            stage="divergenza",
+            datasets=_datasets(),
+            funding=_funding(),
+        ),
+    )
+    assert resp.stage == "divergenza"  # nessun avanzamento silenzioso
+    assert resp.offline is True
+
+
 def test_agent_card_publishes_idea_lab_skill() -> None:
     from opendata_backend.a2a.agent_card import SKILL_IDEAS, build_agent_card
 
