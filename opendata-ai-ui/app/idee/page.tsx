@@ -47,10 +47,14 @@ function euro(v?: number | null): string {
   return v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 }
 
+type Mode = "sfida" | "idea";
+
 export default function IdeeLabPage() {
   const { getToken } = useAuth();
   const [area, setArea] = useState<Area | null>(null);
   const [territory, setTerritory] = useState("");
+  const [mode, setMode] = useState<Mode>("sfida");
+  const [challenge, setChallenge] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [stage, setStage] = useState<string | null>(null);
   const [datasets, setDatasets] = useState<IdeaDataset[]>([]);
@@ -80,11 +84,16 @@ export default function IdeeLabPage() {
         method: "POST",
         token,
         body: JSON.stringify({
-          messages: next, area, territory: territory || null, stage,
+          messages: next, area, territory: territory || null, mode, stage,
           datasets: datasets.length ? datasets : null,
           funding: funding.length ? funding : null,
         }),
       });
+      if (res.status === 402) {
+        throw new Error(
+          "per usare l'Idea Lab serve una chiave LLM nel tuo profilo (Account → Chiave LLM) oppure un abbonamento attivo",
+        );
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: ChatResponse = await res.json();
       setMessages([...next, { role: "assistant", content: data.reply }]);
@@ -141,6 +150,7 @@ export default function IdeeLabPage() {
   function restart() {
     setMessages([]); setStage(null); setDatasets([]); setFunding([]);
     setSuggestions([]); setReportReady(false); setReport(null); setError(null);
+    setChallenge(""); setInput("");
   }
 
   const stageIndex = stage ? STAGES.findIndex((s) => s.id === stage) : -1;
@@ -178,13 +188,12 @@ export default function IdeeLabPage() {
           </div>
         </div>
 
-        {/* Setup iniziale: area + territorio */}
+        {/* Setup iniziale: area + territorio + sfida/idea → avvia l'analisi */}
         {messages.length === 0 && !report && (
           <div className="card shadow-sm mb-4">
             <div className="card-body">
-              <h2 className="h5">Da dove partiamo?</h2>
-              <p className="text-muted">Scegli l&apos;area della tua sfida:</p>
-              <div className="d-flex flex-wrap gap-2 mb-3">
+              <h2 className="h5">1. Scegli l&apos;area</h2>
+              <div className="d-flex flex-wrap gap-2 mb-4">
                 {AREAS.map((a) => (
                   <button
                     key={a.id}
@@ -195,6 +204,33 @@ export default function IdeeLabPage() {
                   </button>
                 ))}
               </div>
+
+              <h2 className="h5">2. Da dove parti?</h2>
+              <div className="d-flex flex-wrap gap-2 mb-3">
+                <button
+                  className={`btn btn-sm ${mode === "sfida" ? "btn-secondary" : "btn-outline-secondary"}`}
+                  onClick={() => setMode("sfida")}
+                >
+                  Ho un problema / una sfida
+                </button>
+                <button
+                  className={`btn btn-sm ${mode === "idea" ? "btn-secondary" : "btn-outline-secondary"}`}
+                  onClick={() => setMode("idea")}
+                >
+                  Ho già un&apos;idea: quali dati mi servono?
+                </button>
+              </div>
+              <textarea
+                className="form-control mb-2"
+                rows={3}
+                placeholder={
+                  mode === "sfida"
+                    ? "Descrivi il problema: es. “nei piccoli comuni gli anziani fanno fatica a raggiungere i servizi sanitari”"
+                    : "Descrivi l'idea: es. “voglio monitorare le liste d'attesa: su quali reparti intervenire e con quali dati?”"
+                }
+                value={challenge}
+                onChange={(e) => setChallenge(e.target.value)}
+              />
               <label className="form-label" htmlFor="territorio-input">
                 Territorio (facoltativo)
               </label>
@@ -206,26 +242,35 @@ export default function IdeeLabPage() {
                 value={territory}
                 onChange={(e) => setTerritory(e.target.value)}
               />
-              <p className="text-muted mb-0">
-                Poi descrivi la sfida nella casella qui sotto: il percorso si adatta
-                alle tue risposte, una domanda alla volta.
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  className="btn btn-primary"
+                  disabled={!area || !challenge.trim() || loading}
+                  onClick={() => sendMessage(challenge)}
+                >
+                  {loading ? "Analizzo i dati…" : "Avvia l'analisi"}
+                </button>
+                {!area && <span className="text-muted">Scegli prima un&apos;area.</span>}
+                {area && !challenge.trim() && (
+                  <span className="text-muted">Descrivi la sfida o l&apos;idea per partire.</span>
+                )}
+              </div>
+              <p className="text-muted mt-3 mb-0">
+                Cosa succede: analizzo i dataset aperti pertinenti (con la loro qualità) e i
+                progetti simili già finanziati, poi proseguiamo in chat — brainstorming a tappe
+                fino alla scheda progetto finale.
               </p>
+              {error && <div className="alert alert-warning py-2 mt-3 mb-0">{error}</div>}
             </div>
           </div>
         )}
 
         <div className="row g-4">
-          {/* Colonna chat */}
+          {/* Colonna chat (visibile a percorso avviato) */}
           <div className="col-lg-8">
+            {messages.length > 0 && (
             <div className="card shadow-sm mb-3">
               <div className="card-body" style={{ minHeight: 260 }}>
-                {messages.length === 0 && (
-                  <p className="text-muted mb-0">
-                    {area
-                      ? "Descrivi la tua sfida per iniziare il percorso."
-                      : "Scegli prima un'area tematica."}
-                  </p>
-                )}
                 {messages.map((m, i) =>
                   m.role === "user" ? (
                     <p key={i} className="text-end">
@@ -244,6 +289,7 @@ export default function IdeeLabPage() {
                 <div ref={bottomRef} />
               </div>
             </div>
+            )}
 
             {/* Suggerimenti rapidi */}
             {suggestions.length > 0 && !report && (
@@ -261,8 +307,8 @@ export default function IdeeLabPage() {
               </div>
             )}
 
-            {/* Input */}
-            {!report && (
+            {/* Input (solo a percorso avviato; per iniziare c'è "Avvia l'analisi") */}
+            {!report && messages.length > 0 && (
               <form
                 className="d-flex gap-2"
                 onSubmit={(e) => {
@@ -272,12 +318,16 @@ export default function IdeeLabPage() {
               >
                 <input
                   className="form-control"
-                  placeholder={area ? "Scrivi qui…" : "Scegli prima un'area"}
+                  placeholder="Rispondi qui per proseguire il brainstorming…"
                   value={input}
-                  disabled={!area || loading}
+                  disabled={loading}
                   onChange={(e) => setInput(e.target.value)}
                 />
-                <button className="btn btn-primary" type="submit" disabled={!area || loading}>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={!input.trim() || loading}
+                >
                   Invia
                 </button>
               </form>
@@ -313,7 +363,9 @@ export default function IdeeLabPage() {
               <div className="card-body">
                 <h2 className="h6">Dataset trovati</h2>
                 {datasets.length === 0 && (
-                  <p className="text-muted mb-0">Compariranno durante l&apos;esplorazione.</p>
+                  <p className="text-muted mb-0">
+                    Compariranno con l&apos;analisi, valutati in stelle di qualità.
+                  </p>
                 )}
                 <ul className="list-unstyled mb-0">
                   {datasets.map((d) => (

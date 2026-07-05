@@ -100,6 +100,10 @@ class IdeaChatRequest(BaseModel):
     messages: list[ChatMessage]
     area: Area | None = None
     territory: str | None = None
+    # "sfida": si parte da un problema aperto e si converge verso un'idea.
+    # "idea": l'idea c'è già — il percorso mappa il fabbisogno di dati
+    # (quali servono, quali esistono, quali mancano) per realizzarla.
+    mode: Literal["sfida", "idea"] = "sfida"
     # Tappa corrente: il client rimanda quella dell'ultima risposta.
     stage: str | None = None
     # Dataset e progetti finanziati già scoperti, rimandati dal client.

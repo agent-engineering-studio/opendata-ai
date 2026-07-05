@@ -141,9 +141,27 @@ async def test_offline_journey_advances_through_all_stages() -> None:
             ChatMessage(role="user", content="ok, avanti"),
         ]
         stage = resp.stage
-    assert seen[0] == "inquadramento"
+    # Il primo turno apre direttamente con l'analisi dei dati (esplorazione).
+    assert seen[0] == "esplorazione"
     assert seen[-1] == "sintesi"
     assert seen == sorted(seen, key=STAGES.index)  # mai indietro
+
+
+@pytest.mark.asyncio
+async def test_offline_first_turn_presents_data_analysis() -> None:
+    """L'“Avvia l'analisi” della UI: primo messaggio → analisi con i dataset."""
+    resp = await run_chat_turn(
+        _settings(),
+        IdeaChatRequest(
+            messages=[ChatMessage(role="user", content="Monitorare le liste d'attesa")],
+            area="salute",
+            mode="idea",
+            datasets=_datasets(),
+            funding=_funding(),
+        ),
+    )
+    assert resp.stage == "esplorazione"
+    assert "Farmacie in Puglia" in resp.reply  # l'analisi cita i dataset trovati
 
 
 @pytest.mark.asyncio
