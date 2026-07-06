@@ -79,13 +79,12 @@ const ROADMAP: Punto[] = [
     icon: "🗺️",
     titolo: "Leggere un comune da più punti di vista",
     perche:
-      "L'analisi del territorio legge un comune attraverso “lenti”: incroci tra dati pubblici e ciò che è stato fatto, per far emergere punti di forza, bisogni e idee. Oggi sono attive nove lenti; il passo avanti è aggiungerne di nuove, sempre con dati comunali e fonti citate.",
+      "L'analisi del territorio legge un comune attraverso “lenti”: incroci tra dati pubblici e ciò che è stato fatto, per far emergere punti di forza, bisogni e idee. Oggi sono attive dieci lenti; il passo avanti è aggiungerne di nuove, sempre con dati comunali e fonti citate.",
     issue: 94,
     voci: [
-      { titolo: "Le 9 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Casa & abitazioni, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
-      { titolo: "Reddito e benessere economico", stato: "explore", testo: "Reddito medio dichiarato e fasce di reddito per comune (dati del Ministero dell'Economia): un'àncora socio-economica accanto a lavoro e welfare." },
-      { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune — entrate, spese, capacità di spesa — da SIOPE e dalla banca dati dei bilanci pubblici: trasparenza sui soldi pubblici." },
-      { titolo: "Connettività digitale", stato: "explore", testo: "Copertura della rete veloce (fibra) nel comune: il divario digitale, da verificare sulla disponibilità dei dati aperti." },
+      { titolo: "Le 10 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Casa & abitazioni, Reddito, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
+      { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune restano il gap più evidente: il codice ente si ricava (registro BDAP), ma i dati veri (entrate/spese) sono dietro un form SIOPE senza API aperta — servirebbe una verifica manuale con un browser prima di costruire. Issue #92." },
+      { titolo: "Connettività digitale", stato: "explore", testo: "Verificato: né Infratel né AGCOM pubblicano la copertura fibra/FWA per comune come dataset aperto — solo mappe interattive senza esportazione, o un endpoint non ufficiale che copre solo lo stato dei cantieri, non le percentuali di copertura. Issue #93." },
     ],
   },
   {

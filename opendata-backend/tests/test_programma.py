@@ -801,8 +801,8 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
     for name in (
         "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
         "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti",
-        "_resolve_welfare", "_resolve_istruzione", "_resolve_casa", "_resolve_ambiente",
-        "_resolve_sanita", "_resolve_comparabili", "_resolve_aree_candidate",
+        "_resolve_welfare", "_resolve_istruzione", "_resolve_casa", "_resolve_reddito",
+        "_resolve_ambiente", "_resolve_sanita", "_resolve_comparabili", "_resolve_aree_candidate",
     ):
         setattr(sess, name, _none)
 
@@ -810,14 +810,14 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
                            modalita="completa")
     out = await OrchestratorSession._resolve_all_lenses(sess, req, emit=events.append)
 
-    # ritorno invariato: le 13 chiavi presenti, tutte None
+    # ritorno invariato: le 14 chiavi presenti, tutte None
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-        "welfare", "istruzione", "casa", "ambiente", "sanita", "comparabili", "aree",
+        "welfare", "istruzione", "casa", "reddito", "ambiente", "sanita", "comparabili", "aree",
     }
     starts = [e for e in events if e["phase"] == "start"]
     ends = [e for e in events if e["phase"] == "end"]
-    assert len(starts) == 13 and len(ends) == 13
+    assert len(starts) == 14 and len(ends) == 14
     assert {e["source"] for e in starts} == set(_LENS_SOURCES.values())
     assert all("elapsed_ms" in e for e in ends)
     assert all(e.get("error") == "nessun dato" for e in ends)  # None ⇒ saltata
@@ -1434,6 +1434,73 @@ async def test_casa_info_injects_citable_census_anchor() -> None:
     assert [p.generatore for p in resp.proposte] == ["casa"]
     # 8milaCensus in display = portale 8milaCensus (mai il CSV profondo).
     assert any(r.url == "https://ottomilacensus.istat.it/" for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
+async def test_reddito_requires_local_anchor() -> None:
+    """reddito (lente Reddito): premessa = dichiarazioni IRPEF MEF (host in
+    _REDDITO_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    mef_url = (
+        "https://www1.finanze.gov.it/finanze3/analisi_stat/v_4_0_0/contenuti/"
+        "Redditi_e_principali_variabili_IRPEF_su_base_comunale_CSV_2022.zip"
+    )
+    ev_mef = {"fonte": "mef", "url": mef_url, "dettaglio": "reddito imponibile medio 19.229€ (2022)"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("reddito", [ev_mef]),  # ok (MEF)
+                _idea("reddito", [ev_oc]),   # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("istat", "Reddito.", [
+        {"name": "irpef", "url": mef_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["reddito"]
+
+
+@pytest.mark.asyncio
+async def test_reddito_info_injects_citable_mef_anchor() -> None:
+    """L'ancora Reddito deterministica (MEF) iniettata dal backend è citabile:
+    una proposta reddito che la cita sopravvive senza risorsa MEF dagli specialisti."""
+    mef_url = (
+        "https://www1.finanze.gov.it/finanze3/analisi_stat/v_4_0_0/contenuti/"
+        "Redditi_e_principali_variabili_IRPEF_su_base_comunale_CSV_2022.zip"
+    )
+    reddito_info = {
+        "comune": "110002", "anno": "2022",
+        "numero_contribuenti": 18191, "reddito_medio_imponibile": 19229.0,
+        "quota_fascia_bassa_pct": 46.1, "quota_fascia_alta_pct": 1.6,
+        "source_url": mef_url,
+    }
+    ev_mef = {"fonte": "mef", "url": mef_url, "dettaglio": "reddito imponibile medio 19.229€ (2022)"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("reddito", [ev_mef])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, reddito_info=reddito_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["reddito"]
+    # MEF in display = portale catalogo (mai lo zip profondo).
+    assert any(
+        r.url == "https://www.finanze.gov.it/it/statistiche-fiscali/open-data-comunale-principali-variabili-irpef/"
+        for r in resp.citazioni
+    )
 
 
 @pytest.mark.asyncio

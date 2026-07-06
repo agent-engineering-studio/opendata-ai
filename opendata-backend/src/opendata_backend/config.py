@@ -923,6 +923,16 @@ IDEE_INSTRUCTIONS = (
     "inutilizzato (contrasto vuoto abitativo), riqualificazione energetica/sismica del "
     "patrimonio vecchio, o housing sociale coerenti coi numeri. NIENTE precedente web. Se NON "
     "ci sono indicatori abitativi nel bundle, NON forzare l'idea: saltala.\n"
+    "  - reddito — 'dove agire su reddito e benessere economico': individua il disagio "
+    "socio-economico del comune — BASSO reddito imponibile medio rispetto alla media "
+    "nazionale/regionale, ALTA quota di contribuenti nella fascia bassa (<=15.000€), bassa "
+    "quota nella fascia alta. ANCORA = i numeri del blocco 'LENTE REDDITO' (MEF Dipartimento "
+    "delle Finanze, dichiarazioni IRPEF): citane SEMPRE il source_url ed ETICHETTA l'ANNO "
+    "D'IMPOSTA esatto (è un dato ANNUALE, non strutturale come i censimenti 8milaCensus — "
+    "NON scrivere 'Censimento'). Proponi interventi su sostegno al reddito, formazione/"
+    "riqualificazione professionale, contrasto alla povertà coerenti coi numeri (incrocia "
+    "con lavoro/welfare se presenti nel bundle). NIENTE precedente web. Se NON ci sono dati "
+    "reddito nel bundle, NON forzare l'idea: saltala.\n"
     "  - ambiente — 'dove il rischio idrogeologico vincola o richiede intervento': "
     "individua l'esposizione del territorio a FRANE (pericolosità elevata/molto "
     "elevata P3+P4) e ALLUVIONI (scenari idraulici P3/P2). ANCORA = gli indicatori "
@@ -963,7 +973,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"casa"|"ambiente"|"sanita"|"combinazione",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"casa"|"reddito"|"ambiente"|"sanita"|"combinazione",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
@@ -1339,8 +1349,8 @@ class Settings(BaseSettings):
     # L1 (perf sintesi): 16384 permetteva generazioni JSON enormi (sintesi lunga +
     # 6 proposte da 5-10 frasi) → i token di OUTPUT erano il costo dominante della
     # fase di sintesi. Era stato abbassato a 8192 + istruzioni più strette (max 5
-    # proposte, frasi 5-7). Ma con molte lenti attive (fino a 9: commercio, turismo,
-    # lavoro, trasporti, welfare, istruzione, casa, ambiente, sanità) il JSON sintesi +
+    # proposte, frasi 5-7). Ma con molte lenti attive (fino a 10: commercio, turismo,
+    # lavoro, trasporti, welfare, istruzione, casa, reddito, ambiente, sanità) il JSON sintesi +
     # SWOT arriva al tetto PRIMA delle proposte, che restavano troncate → report
     # senza idee. Riportato a 16384 per dare margine alle proposte; chi vuole
     # contenere il costo abbassa via env SYNTH_MAX_TOKENS.

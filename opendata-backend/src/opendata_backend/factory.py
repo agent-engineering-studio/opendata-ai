@@ -137,6 +137,7 @@ _LENS_SOURCES: dict[str, str] = {
     "welfare": "Welfare e coesione sociale",
     "istruzione": "Istruzione · scuole",
     "casa": "Casa · condizioni abitative",
+    "reddito": "Reddito · dichiarazioni IRPEF",
     "ambiente": "Ambiente · rischio idrogeologico",
     "sanita": "Sanità di prossimità",
     "comparabili": "Comparabili · progetti peer (OpenCoesione)",
@@ -1168,6 +1169,34 @@ class OrchestratorSession:
             return None
 
     @staticmethod
+    async def _resolve_reddito(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora REDDITO con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa"):
+            return None
+        return await _lens_cached(
+            ("reddito", req.cod_comune),
+            lambda: OrchestratorSession._resolve_reddito_uncached(req),
+            force=req.force_refresh,
+        )
+
+    @staticmethod
+    async def _resolve_reddito_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Ancora REDDITO deterministica: dichiarazioni IRPEF comunali dal MEF
+        (Dipartimento delle Finanze) — reddito imponibile medio, numero
+        contribuenti, quota nelle fasce di reddito basse/alte. Dato ANNUALE
+        (pubblicato con ~2 anni di ritardo). Best-effort: MEF giù → lente saltata.
+        """
+        try:
+            from opendata_core.mef import fetch_redditi_comune
+
+            res = await asyncio.wait_for(fetch_redditi_comune(req.cod_comune), timeout=60.0)
+            return res if res and res.get("trovato") else None
+        except Exception as exc:
+            _log_lens_skip("ancora reddito MEF non risolta per %s",
+                           req.cod_comune, exc=exc)
+            return None
+
+    @staticmethod
     async def _resolve_ambiente(req: ProgrammaRequest) -> dict[str, Any] | None:
         """Ancora AMBIENTE con cache Redis 24h (vedi `_lens_cached`)."""
         if req.modalita not in ("idee", "completa"):
@@ -1396,7 +1425,7 @@ class OrchestratorSession:
         emit: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         """Risolve TUTTE le lenti in PARALLELO (zona, zone commerciali, commercio,
-        turismo, lavoro, trasporti, welfare, istruzione, casa, ambiente, sanita).
+        turismo, lavoro, trasporti, welfare, istruzione, casa, reddito, ambiente, sanita).
 
         Prima erano awaited in sequenza: con timeout per-lente di 30-40s la somma
         dominava la latenza dell'analisi (path critico ~150-200s). In parallelo il
@@ -1407,7 +1436,7 @@ class OrchestratorSession:
         Se `emit` è fornito, OGNI lente pubblica un evento `status` start/end
         appena parte/conclude — con `elapsed_ms` e l'esito (None ⇒ `error`:
         "nessun dato", marcata "–" dalla UI). Così la fase "evidenze territoriali"
-        diventa una checklist live delle 11 lenti invece di una barra opaca.
+        diventa una checklist live delle 12 lenti invece di una barra opaca.
         """
         lenses: list[tuple[str, Any]] = [
             ("zona", self._resolve_zona(req)),
@@ -1419,6 +1448,7 @@ class OrchestratorSession:
             ("welfare", self._resolve_welfare(req)),
             ("istruzione", self._resolve_istruzione(req)),
             ("casa", self._resolve_casa(req)),
+            ("reddito", self._resolve_reddito(req)),
             ("ambiente", self._resolve_ambiente(req)),
             ("sanita", self._resolve_sanita(req)),
             ("comparabili", self._resolve_comparabili(req)),
@@ -1522,6 +1552,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 casa_info=lenses["casa"],
+                reddito_info=lenses["reddito"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
@@ -1534,6 +1565,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 casa_info=lenses["casa"],
+                reddito_info=lenses["reddito"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 aree_info=lenses["aree"],
@@ -1729,6 +1761,7 @@ class OrchestratorSession:
                 welfare_info=lenses["welfare"],
                 istruzione_info=lenses["istruzione"],
                 casa_info=lenses["casa"],
+                reddito_info=lenses["reddito"],
                 ambiente_info=lenses["ambiente"],
                 sanita_info=lenses["sanita"],
                 comparabili_info=lenses["comparabili"],
@@ -1743,6 +1776,7 @@ class OrchestratorSession:
                     welfare_info=lenses["welfare"],
                     istruzione_info=lenses["istruzione"],
                     casa_info=lenses["casa"],
+                    reddito_info=lenses["reddito"],
                     ambiente_info=lenses["ambiente"],
                     sanita_info=lenses["sanita"],
                     aree_info=lenses["aree"],
