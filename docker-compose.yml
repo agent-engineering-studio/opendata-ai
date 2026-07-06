@@ -191,6 +191,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── Socrata MCP server (Streamable HTTP) ─────
+  socrata-mcp:
+    build:
+      context: .
+      dockerfile: socrata-mcp-server/Dockerfile
+    image: socrata-mcp-server:local
+    container_name: socrata-mcp
+    ports:
+      - "${SOCRATA_MCP_PORT:-18084}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      SOCRATA_DEFAULT_BASE_URL: ${SOCRATA_DEFAULT_BASE_URL:-https://opendata.socrata.com}
+      SOCRATA_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:
