@@ -56,6 +56,7 @@ _LENS_GENERATORE: dict[str, str] = {
     "trasporti": "trasporti",
     "welfare": "welfare",
     "istruzione": "istruzione",
+    "casa": "casa",
     "ambiente": "ambiente",
     "sanita": "sanita",
 }
@@ -201,7 +202,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-06-26-item-ids"
+PROMPT_VERSION = "2026-07-06-lente-casa"
 
 
 class QualitaControllo(BaseModel):
@@ -332,6 +333,7 @@ def build_programma_task(
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
+    casa_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
     aree_info: dict[str, Any] | None = None,
@@ -589,6 +591,20 @@ def build_programma_task(
                     "analfabetismo, uscita precoce = capitale umano da rafforzare); un'idea "
                     "'istruzione' deve ancorarsi a questi numeri e citare la fonte."
                 )
+        if casa_info:
+            parts.append(
+                "LENTE CASA/ABITAZIONI — DATI ISTAT 8milaCensus (CENSIMENTO 2011, dato "
+                f"STRUTTURALE): incidenza abitazioni in proprietà={casa_info.get('incidenza_proprieta')}%, "
+                f"abitazioni non occupate nei centri abitati={casa_info.get('abitazioni_non_occupate_centri')}%, "
+                f"età media del patrimonio recente={casa_info.get('eta_media_patrimonio_recente')} anni, "
+                f"disponibilità servizi essenziali={casa_info.get('disponibilita_servizi')}%, "
+                f"superficie per occupante={casa_info.get('superficie_media_per_occupante')} mq, "
+                f"affollamento={casa_info.get('affollamento_abitazioni')}%. "
+                f"FONTE DA CITARE VERBATIM: {casa_info.get('source_url')} . "
+                "ETICHETTA SEMPRE il dato come 'Censimento 2011' (fotografia strutturale, "
+                "non congiunturale). Un'idea 'casa' deve ancorarsi a questi numeri (specie "
+                "abitazioni non occupate, affollamento, età del patrimonio) e citare questa fonte."
+            )
         if ambiente_info:
             parts.append(
                 "LENTE AMBIENTE / RISCHIO IDROGEOLOGICO — DATI ISPRA IdroGEO GIÀ "
@@ -1103,6 +1119,7 @@ def build_programma_aggregator(
     trasporti_info: dict[str, Any] | None = None,
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
+    casa_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
     comparabili_info: dict[str, Any] | None = None,
@@ -1417,6 +1434,33 @@ def build_programma_aggregator(
                     "un'idea 'istruzione' ancori su questi numeri e citi la fonte."
                 )
                 _add_anchor("istruzione", narrative, ist_resources)
+
+        # Ancora CASA/ABITAZIONI deterministica (8milaCensus, censimento 2011):
+        # Resource citabile (host ottomilacensus.istat.it ⊃ istat.it → _CASA_HOSTS)
+        # + sezione evidenza, come lavoro/istruzione. Dato 2011 etichettato.
+        if casa_info and casa_info.get("source_url"):
+            src = casa_info["source_url"].strip()
+            casa_res = Resource(
+                name="ISTAT 8milaCensus — Condizioni abitative del comune (Censimento 2011)",
+                url=src,
+                format="CSV",
+                source="istat",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(casa_res)
+            narrative = (
+                "Condizioni abitative del comune (ISTAT 8milaCensus, Censimento 2011 — "
+                "dato strutturale). Abitazioni in proprietà: "
+                f"{casa_info.get('incidenza_proprieta')}%, non occupate nei centri abitati: "
+                f"{casa_info.get('abitazioni_non_occupate_centri')}%, età media del patrimonio "
+                f"recente: {casa_info.get('eta_media_patrimonio_recente')} anni, disponibilità "
+                f"servizi essenziali: {casa_info.get('disponibilita_servizi')}%, superficie per "
+                f"occupante: {casa_info.get('superficie_media_per_occupante')} mq, affollamento: "
+                f"{casa_info.get('affollamento_abitazioni')}%. Un'idea 'casa' ancori su questi "
+                "numeri (specie non occupate, affollamento, età del patrimonio) e citi questa "
+                "fonte; etichetta 'Censimento 2011'."
+            )
+            _add_anchor("casa", narrative, [casa_res])
 
         # Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica (ISPRA IdroGEO):
         # pericolosità frane (P3+P4) e idraulica (alluvioni P3/P2) come Resource

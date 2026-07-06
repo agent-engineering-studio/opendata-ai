@@ -79,11 +79,10 @@ const ROADMAP: Punto[] = [
     icon: "🗺️",
     titolo: "Leggere un comune da più punti di vista",
     perche:
-      "L'analisi del territorio legge un comune attraverso “lenti”: incroci tra dati pubblici e ciò che è stato fatto, per far emergere punti di forza, bisogni e idee. Oggi sono attive otto lenti; il passo avanti è aggiungerne di nuove, sempre con dati comunali e fonti citate.",
+      "L'analisi del territorio legge un comune attraverso “lenti”: incroci tra dati pubblici e ciò che è stato fatto, per far emergere punti di forza, bisogni e idee. Oggi sono attive nove lenti; il passo avanti è aggiungerne di nuove, sempre con dati comunali e fonti citate.",
     issue: 94,
     voci: [
-      { titolo: "Le 8 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
-      { titolo: "Casa e abitazioni", stato: "near", testo: "Affollamento, case non occupate, proprietà o affitto: le condizioni abitative del comune, dal Censimento ISTAT." },
+      { titolo: "Le 9 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Casa & abitazioni, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
       { titolo: "Reddito e benessere economico", stato: "explore", testo: "Reddito medio dichiarato e fasce di reddito per comune (dati del Ministero dell'Economia): un'àncora socio-economica accanto a lavoro e welfare." },
       { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune — entrate, spese, capacità di spesa — da SIOPE e dalla banca dati dei bilanci pubblici: trasparenza sui soldi pubblici." },
       { titolo: "Connettività digitale", stato: "explore", testo: "Copertura della rete veloce (fibra) nel comune: il divario digitale, da verificare sulla disponibilità dei dati aperti." },
