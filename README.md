@@ -22,9 +22,12 @@ Sopra l'accesso ai dati, la piattaforma offre un **capability layer** (Fasi 0–
 maturità open-data degli enti (ODM 2025), valore del dato (art. 14 Dir. UE
 2019/1024), modalità Territorio (profilo + investimenti OpenCoesione), use case
 applicativi (ApriQui AI, PugliaTrip Brain), **sito civico** statico esportabile con
-accountability di community, e un **anello valore⇄maturità** (i gap di dato
-penalizzano l'Impact dell'ente). Diagramma e flussi: **`docs/architettura.md`**;
-modello dati: **`docs/data-model.md`**. Pilota: Comune di Gioia del Colle.
+accountability di community, un **anello valore⇄maturità** (i gap di dato
+penalizzano l'Impact dell'ente) e un **agente di monitoraggio schedulato**
+(cron) che controlla in automatico freshness/qualità/link dei dataset e
+notifica via webhook o email quando qualcosa cambia o si rompe. Diagramma e
+flussi: **`docs/architettura.md`**; modello dati: **`docs/data-model.md`**.
+Pilota: Comune di Gioia del Colle.
 
 ## Le quattro modalità: Esplora · Territorio · Maturità · Qualità
 
@@ -248,6 +251,28 @@ Con il CSV di sopra, compila anche titolo/descrizione/licenza/ente nella
 scheda descrittiva e genera **sia** "Scheda DCAT-AP_IT" **che** "Scheda
 schema.org (Dataset)": stessi dati del file, due vocabolari, ciascuno
 validabile con il proprio punteggio FAIR.
+
+## Monitoraggio automatico — i controlli girano da soli
+
+**Cos'è.** Un agente schedulato (cron) che ripete in automatico, per una lista
+di risorse configurate, gli stessi controlli della Qualità: la risorsa è
+ancora **raggiungibile** (non è sparita o rotta)? è **aggiornata** entro la
+cadenza dichiarata (mensile, annuale, …) o è diventata stantia? il punteggio
+di qualità è **peggiorato** rispetto all'ultima volta? Quando succede qualcosa
+di nuovo — non ogni volta, solo quando cambia — **notifica** su un webhook o
+via email (entrambi opzionali, configurati per singola risorsa).
+
+**Come si usa.** Console-script `opendata-monitor` (stesso schema di
+`opendata-batch`): lanciato da cron, legge le risorse da controllare dalla
+tabella `opendata.monitor_targets`, salva ogni controllo come snapshot in
+`opendata.monitor_runs` (storicizzato, mai sovrascritto) e confronta con
+l'ultimo per capire cosa è nuovo. Lo stato più recente è consultabile anche
+via `GET /monitor/{entity_id}`.
+
+**A cosa serve / per chi.** È il "non devo controllare io ogni giorno" per
+chi pubblica: un ente collega le proprie risorse una volta e riceve un avviso
+solo quando serve davvero — un link rotto, un dataset che non si aggiorna più,
+un formato che si è rotto.
 
 ## Supported open data sources
 

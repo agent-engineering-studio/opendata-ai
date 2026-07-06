@@ -68,6 +68,7 @@ opendata-opencoesione-sync = "opendata_backend.ingest.opencoesione:main"
 opendata-comuni-sync = "opendata_backend.ingest.comuni:main"
 opendata-territorio-seed = "opendata_backend.ingest.territory_seed:main"
 opendata-batch = "opendata_backend.ingest.batch:main"
+opendata-monitor = "opendata_backend.monitor.runner:main"
 opendata-byok-keygen = "opendata_backend.byok:_keygen_cli"
 
 [build-system]

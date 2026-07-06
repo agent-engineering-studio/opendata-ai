@@ -34,6 +34,7 @@ from .routers import (
     ideas,
     maturity,
     me,
+    monitor,
     programma,
     quality,
     showcases,
@@ -184,6 +185,7 @@ app.include_router(programma.router)
 app.include_router(ideas.router)
 app.include_router(territorio.router)
 app.include_router(maturity.router)
+app.include_router(monitor.router)
 app.include_router(quality.router)
 app.include_router(value.router)
 app.include_router(territory.router)

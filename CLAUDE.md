@@ -48,7 +48,9 @@ Colle (ISTAT 072021).
 - **Endpoint backend**: `/maturity/*` (+`scorecard.csv`), `/value/*` (+`value_card`
   additivo in `/datasets/search`), `/territory/{istat}/report|profile|snapshot|site/*`,
   `/usecases/{apriqui,pugliatrip}`, `/showcases/*`, `/community/*`.
-- **Console-script**: `opendata-territorio-seed`, `opendata-batch` (cron, idempotente).
+- **Console-script**: `opendata-territorio-seed`, `opendata-batch` (cron, idempotente),
+  `opendata-monitor` (cron, agente di monitoraggio #88: freshness/qualità/link +
+  notifica webhook/email opt-in, motore puro in `opendata_core/monitor/`).
 - **Anello valore⇄maturità (Fase 5)**: i gap dei report Territorio penalizzano
   l'Impact dell'ente (`reuse_demand_penalty` iniettato) e compaiono come "domanda di
   riuso non soddisfatta". Sotto soglia dataset → **"dato insufficiente"** (no punteggi
@@ -174,6 +176,10 @@ Azure code anymore.
 - `BigInteger` primary keys don't auto-increment on SQLite. Use the
   `_PK = BigInteger().with_variant(Integer(), "sqlite")` alias defined in
   `db/models.py`.
+- `opendata-monitor`'s email notification is opt-in: it no-ops (logs, never
+  raises) unless `SMTP_HOST` + `SMTP_FROM` are both set. Webhook notification
+  always runs the same anti-SSRF check as the dataset proxy
+  (`_validate_proxy_url` on `webhook_url`, not just on the monitored `url`).
 
 ## Operational rules
 
