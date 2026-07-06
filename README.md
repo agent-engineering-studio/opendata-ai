@@ -151,9 +151,17 @@ fuorvianti. La scorecard è **esportabile** (CSV, e PNG/PDF della scheda).
 **A cosa serve / per chi.** È lo strumento del **Responsabile per la Transizione
 Digitale (RTD)** e dell'open data manager: dà una fotografia oggettiva e
 comparabile dello stato di pubblicazione, evidenzia le priorità d'azione, e
-permette **benchmarking** tra enti e nel tempo. Per chi riusa i dati è un segnale
-di affidabilità della fonte; per chi li pubblica, una roadmap concreta di
-miglioramento.
+permette **benchmarking** tra enti — e, quando ci sono almeno due misurazioni
+salvate, anche un piccolo **grafico dell'andamento nel tempo** (il punteggio
+sale o scende? di quanto?). Per chi riusa i dati è un segnale di affidabilità
+della fonte; per chi li pubblica, una roadmap concreta di miglioramento.
+
+**Provalo subito.** Vai su `/maturita`, digita il nome di un ente (es. *"Regione
+Puglia"* o *"Comune di Bari"*) e premi **Valuta**. La prima volta ottieni la
+scorecard con radar e leve di miglioramento; se rivaluti lo **stesso ente** in
+un momento successivo (giorni o settimane dopo), dalla seconda valutazione in
+poi compare anche la sezione **"Andamento nel tempo"** con il grafico del
+punteggio.
 
 ---
 
@@ -163,7 +171,19 @@ miglioramento.
 
 **Cos'è.** Il **Data Quality Lab**: porti un file di dati (o apri una risorsa
 trovata in Esplora) e ottieni una **diagnosi automatica** della sua qualità, la
-versione già sistemata da scaricare e la scheda descrittiva pronta da pubblicare.
+versione già sistemata da scaricare, i suggerimenti per arricchirlo e la scheda
+descrittiva pronta da pubblicare — passo per passo, senza dover essere un
+esperto di database:
+
+```mermaid
+flowchart LR
+  A["📄 Carica un file<br/>CSV o GeoJSON"] --> B["🔍 Diagnosi<br/>errori + punteggio"]
+  B --> C["🩹 Correggi<br/>con un clic"]
+  C --> D["✨ Arricchisci<br/>codici ISTAT · indirizzi · vocabolari"]
+  D --> E["🗂️ Organizza<br/>schema SQL/PostGIS · tabelle · viste"]
+  E --> F["🏷️ Descrivi<br/>scheda DCAT-AP_IT"]
+  F --> G["📦 Pubblica<br/>pacchetto pronto (.zip)"]
+```
 
 **Come si misura.** La qualità non è un'opinione: parte dal **profilo automatico**
 del dato — già visibile nell'anteprima di ogni risorsa, che rileva *righe,
@@ -177,12 +197,49 @@ propone le **correzioni** applicabili con un clic. Quando il dato è sotto la
 soglia minima per un giudizio attendibile dichiara *"dato insufficiente"* invece
 di assegnare punteggi fuorvianti.
 
+**Oltre la diagnosi: arricchire e organizzare.** Una volta pulito, il Lab
+suggerisce come renderlo più utile:
+- **Arricchimento** — se ci sono nomi di comuni senza codice ISTAT, indirizzi
+  senza coordinate, o colonne con poche parole ripetute ma scritte in modo
+  incoerente, propone rispettivamente un *join* con l'anagrafica ISTAT, una
+  *geocodifica* (indirizzo → coordinate) e un *vocabolario controllato*.
+- **Da dato a schema** — genera il comando pronto (`CREATE TABLE`) per caricare
+  il dato in un database: tipi di colonna, chiave primaria, indici. Per i dati
+  geografici (GeoJSON), lo stesso ma per **PostGIS**/**GeoPackage**.
+- **Normalizzazione** — le colonne ripetute (es. una "zona" con pochi valori
+  ripetuti mille volte) diventano **tabelle di lookup** vere e proprie, più
+  **viste** già pronte per i riepiloghi più richiesti (totali per categoria,
+  andamento nel tempo, incroci tra le due).
+
 **A cosa serve / per chi.** È lo strumento di chi *pubblica* — uffici dati,
 RTD, open data manager — per alzare la qualità prima della pubblicazione e
 rispettare gli standard europei; e di chi *riusa*, per capire in fretta se un
-dataset è davvero pronto all'uso. Si integra con la **Maturità**: i problemi di
-qualità trovati qui sono le leve concrete che fanno salire la dimensione Qualità
-della scorecard dell'ente.
+dataset è davvero pronto all'uso, come arricchirlo e come portarlo in un
+database. Si integra con la **Maturità**: i problemi di qualità trovati qui
+sono le leve concrete che fanno salire la dimensione Qualità della scorecard
+dell'ente.
+
+**Provalo subito.** Vai su `/qualita`, incolla uno di questi esempi e premi
+**Analizza**:
+
+Tabellare (CSV) — mostra diagnosi, **arricchimento** e **normalizzazione**:
+```csv
+comune,zona,indirizzo,anno
+Gioia del Colle,Nord,Via Roma 1,2023
+Bari,Sud,Via Garibaldi 5,2023
+Modugno,Nord,Via Dante 12,2024
+Bari,Sud,Via Cavour 3,2024
+```
+Poi apri **"Suggerimenti di arricchimento"** (join ISTAT per `comune`,
+geocodifica per `indirizzo`) e **"Normalizzazione & modello"** (tabella di
+lookup per `zona` + viste di totali/andamento/pivot).
+
+Geografico (GeoJSON) — mostra diagnosi e **schema PostGIS/GeoPackage**:
+```json
+{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[16.92,40.79]},"properties":{"nome":"Gioia del Colle","popolazione":27889}}]}
+```
+Poi apri **"Schema geografico (PostGIS / GeoPackage)"** per il `CREATE TABLE`
+con colonna `geom` + indice spaziale, e il comando `ogr2ogr`.
 
 ## Supported open data sources
 
@@ -271,8 +328,9 @@ The same rule guards the A2A JSON-RPC endpoint (`/a2a/`); only the AgentCard
 discovery (`/.well-known/agent-card.json`) is public. Six skills are published
 (selected via `message.metadata.skill`): `search_open_data`, `find_geo_resources`,
 `classify_dataset`, `assess_maturity`, `analyze_territory` and `data_quality`
-(the Data Quality Lab — diagnosi, fix, schema, riepiloghi, scala, conversione
-GeoJSON, validazione DCAT-AP_IT + FAIR e pacchetto di pubblicazione).
+(the Data Quality Lab — diagnosi, fix, arricchimento, schema, normalizzazione,
+schema geografico, riepiloghi, scala, conversione GeoJSON, validazione
+DCAT-AP_IT + FAIR e pacchetto di pubblicazione).
 
 | Method | Path | Description |
 |---|---|---|

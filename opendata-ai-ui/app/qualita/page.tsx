@@ -72,6 +72,22 @@ type ScaleResult = {
 type EnrichResult = {
   arricchimenti: { codice: string; titolo: string; dettaglio: string; colonne: string[] }[];
 };
+type NormalizeResult = {
+  tabelle_lookup: {
+    colonna_originale: string; tabella: string; colonna_fk_suggerita: string;
+    n_valori: number; valori_troncati: boolean; ddl: string; insert_sql: string; nota: string;
+  }[];
+  viste: { nome: string; colonna: string; tipo: "serie_storica" | "totali_categoria" | "pivot"; ddl: string }[];
+  note: string[];
+};
+type GeoSchemaResult = {
+  tabella: string | null;
+  geometria: string | null;
+  colonne: { name: string; original: string; sql_type: string; nullable: boolean }[];
+  ddl_postgis: string | null;
+  comando_geopackage: string | null;
+  note: string[];
+};
 const PRIORITA_BADGE: Record<"alta" | "media" | "bassa", string> = {
   alta: "bg-danger",
   media: "bg-warning text-dark",
@@ -105,6 +121,36 @@ function scoreColor(p: number): string {
 const ESEMPIO_CSV =
   "comune;popolazione;data rilevazione\nGioia del Colle;27.889;01/01/2023\nBari;320475;2023-01-01\nModugno;;2023-01-01\n";
 
+// Percorso del Data Quality Lab, in breve: le sezioni della pagina seguono questo ordine.
+const PASSI_QUALITA = [
+  { emoji: "🔍", label: "Diagnosi" },
+  { emoji: "🩹", label: "Correggi" },
+  { emoji: "✨", label: "Arricchisci" },
+  { emoji: "🗂️", label: "Organizza" },
+  { emoji: "🏷️", label: "Descrivi" },
+  { emoji: "📦", label: "Pubblica" },
+] as const;
+
+/** Schema visivo del percorso: dalla diagnosi alla pubblicazione, in 6 passi. */
+function PercorsoQualita() {
+  return (
+    <div className="d-flex flex-wrap align-items-center gap-1 mb-4" aria-hidden="true">
+      {PASSI_QUALITA.map((p, i) => (
+        <div key={p.label} className="d-flex align-items-center gap-1">
+          <span
+            className="badge rounded-pill bg-light text-dark border d-flex align-items-center gap-1"
+            style={{ fontWeight: 500, fontSize: 12.5, padding: "6px 10px" }}
+          >
+            <span>{p.emoji}</span>
+            {p.label}
+          </span>
+          {i < PASSI_QUALITA.length - 1 && <span className="text-muted small">→</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function QualitaInner() {
   const { getToken } = useAuth();
   const [text, setText] = useState("");
@@ -133,6 +179,10 @@ function QualitaInner() {
   const [scaleBusy, setScaleBusy] = useState(false);
   const [enrich, setEnrich] = useState<EnrichResult | null>(null);
   const [enrichBusy, setEnrichBusy] = useState(false);
+  const [normalize, setNormalize] = useState<NormalizeResult | null>(null);
+  const [normalizeBusy, setNormalizeBusy] = useState(false);
+  const [geoSchema, setGeoSchema] = useState<GeoSchemaResult | null>(null);
+  const [geoSchemaBusy, setGeoSchemaBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -324,6 +374,69 @@ function QualitaInner() {
     _download(schema.ddl + "\n", `${schema.table_name}.sql`, "application/sql;charset=utf-8");
   }
 
+  // Normalizzazione & modello: tabelle di lookup + viste (POST /quality/normalize).
+  async function generaNormalize() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setNormalizeBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = tableName.trim() ? { table_name: tableName.trim() } : {};
+      const res = await apiFetch("/quality/normalize", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setNormalize((await res.json()) as NormalizeResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setNormalizeBusy(false);
+    }
+  }
+
+  function scaricaNormalize() {
+    if (!normalize) return;
+    const parti = [
+      ...normalize.tabelle_lookup.flatMap((t) => [t.ddl, t.insert_sql]),
+      ...normalize.viste.map((v) => v.ddl),
+    ];
+    _download(parti.join("\n\n") + "\n", "normalizzazione.sql", "application/sql;charset=utf-8");
+  }
+
+  // Da GeoJSON a schema geografico: DDL PostGIS + comando GeoPackage (POST /quality/geo-schema).
+  async function generaGeoSchema() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un GeoJSON (incollalo o indica un URL)."); return; }
+    setGeoSchemaBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = tableName.trim() ? { table_name: tableName.trim() } : {};
+      const res = await apiFetch("/quality/geo-schema", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setGeoSchema((await res.json()) as GeoSchemaResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setGeoSchemaBusy(false);
+    }
+  }
+
+  function scaricaGeoSchema() {
+    if (!geoSchema?.ddl_postgis) return;
+    const testo = `${geoSchema.ddl_postgis}\n\n-- GeoPackage:\n-- ${geoSchema.comando_geopackage}\n`;
+    _download(testo, `${geoSchema.tabella ?? "dataset"}.sql`, "application/sql;charset=utf-8");
+  }
+
   // Convertitore 1-click: tabella con coordinate → GeoJSON (POST /quality/to-geojson).
   async function convertiGeoJSON() {
     const body = _body();
@@ -436,6 +549,8 @@ function QualitaInner() {
     setSummary(null);
     setScale(null);
     setEnrich(null);
+    setNormalize(null);
+    setGeoSchema(null);
     try {
       const body = _body();
       if (!body) {
@@ -469,10 +584,11 @@ function QualitaInner() {
       <h1 className="h3 mb-1">Qualità dei dati</h1>
       <p className="text-muted">
         Incolla un <strong>CSV</strong> o un <strong>GeoJSON</strong> (o caricane il file, o indica
-        un URL pubblico) e ricevi una diagnosi automatica: per le tabelle tipo colonne, valori
-        mancanti e problemi; per i dati geografici il <strong>sistema di coordinate</strong> e la
-        validità delle geometrie. Più un punteggio. Tutto deterministico, nessun dato inventato.
+        un URL pubblico): il Data Quality Lab lo esamina e ti accompagna passo per passo, dalla
+        diagnosi alla pubblicazione — senza bisogno di essere un esperto di database. Tutto
+        deterministico: nessun dato inventato, solo ciò che si misura sul file.
       </p>
+      <PercorsoQualita />
 
       {/* INPUT */}
       <div className="card shadow-sm mb-4">
@@ -517,7 +633,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); }}
               >
                 Pulisci
               </button>
@@ -730,6 +846,113 @@ function QualitaInner() {
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* NORMALIZZAZIONE & MODELLO (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Normalizzazione & modello</h2>
+                <p className="text-muted small">
+                  Completa lo schema: le colonne categoriali ripetute diventano <strong>tabelle di
+                  lookup</strong> (con i valori reali già pronti da inserire), e vengono proposte
+                  <strong> viste</strong> di aggregazione — totali per categoria, andamento per anno
+                  e, quando categoria e data coesistono, un incrocio (pivot) tra le due.
+                </p>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaNormalize} disabled={normalizeBusy}>
+                  {normalizeBusy ? "Genero…" : "Genera lookup + viste"}
+                </button>
+
+                {normalize && (
+                  <div className="mt-3">
+                    {(normalize.tabelle_lookup.length > 0 || normalize.viste.length > 0) && (
+                      <div className="d-flex align-items-center gap-2 mb-2">
+                        <button type="button" className="btn btn-success btn-sm" onClick={scaricaNormalize}>⬇ Scarica SQL</button>
+                      </div>
+                    )}
+                    {normalize.note.map((n, i) => (
+                      <div key={i} className="alert alert-warning py-2 small mb-2">{n}</div>
+                    ))}
+                    {normalize.tabelle_lookup.map((t) => (
+                      <div key={t.tabella} className="mb-3">
+                        <div className="fw-semibold small">
+                          Lookup <code>{t.tabella}</code> — colonna <code>{t.colonna_originale}</code> ({t.n_valori} valori{t.valori_troncati ? ", troncati" : ""})
+                        </div>
+                        <div className="text-muted small mb-1">{t.nota}</div>
+                        <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 160, overflow: "auto" }}>
+                          {t.ddl}
+                          {"\n\n"}
+                          {t.insert_sql}
+                        </pre>
+                      </div>
+                    ))}
+                    {normalize.viste.map((v) => (
+                      <div key={v.nome} className="mb-3">
+                        <div className="fw-semibold small">
+                          Vista <code>{v.nome}</code>{" "}
+                          <span className="badge bg-light text-dark border">{v.tipo.replace("_", " ")}</span>
+                        </div>
+                        <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 160, overflow: "auto" }}>
+                          {v.ddl}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* SCHEMA GEOGRAFICO — PostGIS/GeoPackage (solo GeoJSON) */}
+          {geo && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Schema geografico (PostGIS / GeoPackage)</h2>
+                <p className="text-muted small">
+                  Deduce il tipo di geometria e lo schema delle proprietà, e genera il
+                  <code> CREATE TABLE</code> <strong>PostGIS</strong> pronto (colonna geometria +
+                  indice spaziale) e il comando <code>ogr2ogr</code> per esportare in
+                  <strong> GeoPackage</strong>.
+                </p>
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <input
+                    className="form-control form-control-sm"
+                    style={{ maxWidth: 280 }}
+                    placeholder="Nome tabella (es. comuni_puglia)"
+                    value={tableName}
+                    onChange={(e) => setTableName(e.target.value)}
+                  />
+                  <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaGeoSchema} disabled={geoSchemaBusy}>
+                    {geoSchemaBusy ? "Genero…" : "Genera schema geografico"}
+                  </button>
+                </div>
+
+                {geoSchema && geoSchema.ddl_postgis && (
+                  <div className="mt-3">
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <button type="button" className="btn btn-success btn-sm" onClick={scaricaGeoSchema}>⬇ Scarica DDL (.sql)</button>
+                      <span className="text-muted small">
+                        Tabella <code>{geoSchema.tabella}</code> · geometria <code>{geoSchema.geometria}</code> ·{" "}
+                        {geoSchema.colonne.length} proprietà
+                      </span>
+                    </div>
+                    {geoSchema.note.map((n, i) => (
+                      <div key={i} className="alert alert-warning py-2 small mb-2">{n}</div>
+                    ))}
+                    <pre className="bg-light border rounded p-2 small mb-2" style={{ maxHeight: 320, overflow: "auto" }}>
+                      {geoSchema.ddl_postgis}
+                    </pre>
+                    <div className="small">
+                      <span className="fw-semibold">Esporta in GeoPackage:</span>{" "}
+                      <code>{geoSchema.comando_geopackage}</code>
+                    </div>
+                  </div>
+                )}
+                {geoSchema && !geoSchema.ddl_postgis && geoSchema.note.length > 0 && (
+                  <div className="alert alert-warning py-2 small mt-3 mb-0">{geoSchema.note[0]}</div>
                 )}
               </div>
             </div>

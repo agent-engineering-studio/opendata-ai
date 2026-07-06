@@ -13,10 +13,12 @@ from typing import Any
 from opendata_core.quality import (
     advise_enrichment,
     advise_scale,
+    build_normalization,
     build_publish_package,
     csv_to_geojson,
     fix_csv,
     generate_dcat,
+    infer_geo_schema,
     infer_schema,
     json_to_geojson,
     profile_csv,
@@ -26,7 +28,10 @@ from opendata_core.quality import (
 )
 
 # Azioni esposte (mirror della superficie REST /quality/*).
-AZIONI = ("profile", "fix", "schema", "summary", "scale", "enrich", "to-geojson", "validate", "package")
+AZIONI = (
+    "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
+    "geo-schema", "to-geojson", "validate", "package",
+)
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -82,6 +87,14 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
         if geo:
             return _err("'enrich' supporta solo i CSV.")
         return ok(advise_enrichment(profile_csv(text)))
+    if azione == "normalize":
+        if geo:
+            return _err("'normalize' supporta solo i CSV.")
+        return ok(build_normalization(text, table_name=payload.get("table_name") or "dataset"))
+    if azione == "geo-schema":
+        if not geo:
+            return _err("'geo-schema' supporta solo i GeoJSON.")
+        return ok(infer_geo_schema(text, table_name=payload.get("table_name") or "dataset"))
     if azione == "to-geojson":
         is_json = text.lstrip()[:1] in ("[", "{") or fmt in ("json", "geojson")
         fn = json_to_geojson if is_json else csv_to_geojson
