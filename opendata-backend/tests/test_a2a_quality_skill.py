@@ -87,6 +87,22 @@ def test_geo_schema_rejects_csv() -> None:
     assert r["ok"] is False and "GeoJSON" in r["error"]
 
 
+def test_metadata_schema_org() -> None:
+    r = run_quality_skill({"azione": "metadata-schema-org", "content": _CSV, "titolo": "Pop"})
+    assert r["ok"] is True and r["azione"] == "metadata-schema-org"
+    assert r["result"]["profilo"] == "schema.org/Dataset"
+    assert r["result"]["dataset"]["name"] == "Pop"
+
+
+def test_validate_schema_org_via_vocabolario() -> None:
+    r = run_quality_skill({"azione": "validate", "content": _CSV, "vocabolario": "schema_org",
+                           "titolo": "Pop", "descrizione": "x", "licenza": "CC-BY-4.0",
+                           "ente": "Regione Puglia", "tema": "SOCI", "frequenza": "ANNUAL"})
+    assert r["ok"] is True
+    assert r["result"]["metadata"]["profilo"] == "schema.org/Dataset"
+    assert r["result"]["validazione"]["valido"] is True
+
+
 def test_fix_rejects_geojson() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     r = run_quality_skill({"azione": "fix", "content": gj, "format": "geojson"})
@@ -105,5 +121,5 @@ def test_agent_card_publishes_quality_skill() -> None:
     assert SKILL_QUALITY in ids
     assert set(AZIONI) >= {
         "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
-        "geo-schema", "to-geojson", "validate",
+        "geo-schema", "to-geojson", "validate", "metadata-schema-org",
     }

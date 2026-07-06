@@ -292,3 +292,39 @@ def test_geo_schema_csv_rejected() -> None:
 
 def test_geo_schema_requires_input() -> None:
     assert _client().post("/quality/geo-schema", json={}).status_code == 400
+
+
+def test_metadata_schema_org_generates_dataset_jsonld() -> None:
+    res = _client().post(
+        "/quality/metadata-schema-org",
+        json={"content": "comune,popolazione\nBari,320475\n", "titolo": "Popolazione", "licenza": "CC-BY-4.0"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["profilo"] == "schema.org/Dataset"
+    assert body["dataset"]["@type"] == "Dataset"
+    assert body["dataset"]["name"] == "Popolazione"
+
+
+def test_validate_schema_org_from_file() -> None:
+    res = _client().post(
+        "/quality/validate",
+        json={"content": "comune,popolazione\nBari,320475\n", "vocabolario": "schema_org"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["metadata"]["profilo"] == "schema.org/Dataset"
+    assert body["validazione"]["valido"] is False  # campi editoriali mancanti
+
+
+def test_validate_dispatches_by_metadata_profilo() -> None:
+    meta = _client().post(
+        "/quality/metadata-schema-org",
+        json={"content": "comune,popolazione\nBari,320475\n", "titolo": "Pop", "descrizione": "x",
+              "licenza": "CC-BY-4.0", "ente": "Regione Puglia", "tema": "SOCI", "frequenza": "ANNUAL"},
+    ).json()
+    res = _client().post("/quality/validate", json={"metadata": meta})
+    assert res.status_code == 200
+    v = res.json()["validazione"]
+    assert v["valido"] is True
+    assert v["licenza"]["aperta"] is True

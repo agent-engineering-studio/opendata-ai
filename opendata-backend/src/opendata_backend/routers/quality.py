@@ -24,6 +24,7 @@ from opendata_core.quality import (
     csv_to_geojson,
     fix_csv,
     generate_dcat,
+    generate_schema_org,
     infer_geo_schema,
     infer_schema,
     json_to_geojson,
@@ -31,6 +32,7 @@ from opendata_core.quality import (
     profile_geojson,
     summarize_csv,
     validate_dcat,
+    validate_schema_org,
 )
 
 from ..auth import ClerkUser
@@ -75,9 +77,13 @@ class MetadataIn(ProfileIn):
 
 
 class ValidateIn(MetadataIn):
-    # Si può validare una scheda DCAT già pronta (`metadata`) oppure generarla al
-    # volo dal file (content/url + campi editoriali) e validarla.
+    # Si può validare una scheda già pronta (`metadata`, DCAT o schema.org — il
+    # vocabolario si riconosce dal campo `profilo`) oppure generarla al volo dal
+    # file (content/url + campi editoriali) e validarla.
     metadata: dict | None = None
+    # Vocabolario da generare al volo quando `metadata` non è passato: "dcat"
+    # (default, compatibilità) o "schema_org".
+    vocabolario: str | None = None
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -366,31 +372,70 @@ async def quality_metadata(
     )
 
 
+@router.post("/quality/metadata-schema-org")
+async def quality_metadata_schema_org(
+    body: MetadataIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Genera lo scheletro schema.org/Dataset (JSON-LD) da un file.
+
+    Gemello di `/quality/metadata` ma nel vocabolario schema.org (quello letto
+    da Google Dataset Search), sugli stessi campi dedotti dal profilo del file.
+    """
+    text = await _resolve_input(body)
+    geo = _is_geojson(text, (body.format or "").lower())
+    profile = profile_geojson(text) if geo else profile_csv(text)
+    log.info(
+        "/quality/metadata-schema-org subject=%s tipo=%s source=%s",
+        user.subject, "geojson" if geo else "csv", "url" if body.url else "content",
+    )
+    return generate_schema_org(
+        profile,
+        titolo=body.titolo,
+        descrizione=body.descrizione,
+        licenza=body.licenza,
+        ente=body.ente,
+        tema=body.tema,
+        frequenza=body.frequenza,
+        url=body.url,
+    )
+
+
 @router.post("/quality/validate")
 async def quality_validate(
     body: ValidateIn,
     user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict:
-    """Valida una scheda DCAT-AP_IT: campi obbligatori, licenza aperta, punteggio FAIR.
+    """Valida una scheda DCAT-AP_IT o schema.org/Dataset: campi obbligatori,
+    licenza aperta, punteggio FAIR.
 
-    Si passa una scheda già pronta (`metadata`, l'output di /quality/metadata) oppure
-    un file (content/url + campi editoriali) da cui generarla al volo e validarla.
-    Restituisce `{validazione, metadata}`.
+    Si passa una scheda già pronta (`metadata`, l'output di /quality/metadata o
+    /quality/metadata-schema-org — il vocabolario si riconosce dal campo
+    `profilo`) oppure un file (content/url + campi editoriali) da cui generarla
+    al volo, scegliendo il vocabolario con `vocabolario: "dcat"|"schema_org"`
+    (default "dcat"). Restituisce `{validazione, metadata}`.
     """
+    schema_org = (
+        body.metadata.get("profilo") == "schema.org/Dataset" if body.metadata is not None
+        else (body.vocabolario or "dcat").lower() == "schema_org"
+    )
     if body.metadata is not None:
         meta = body.metadata
     else:
         text = await _resolve_input(body)
         geo = _is_geojson(text, (body.format or "").lower())
         profile = profile_geojson(text) if geo else profile_csv(text)
-        meta = generate_dcat(
+        genera = generate_schema_org if schema_org else generate_dcat
+        meta = genera(
             profile, titolo=body.titolo, descrizione=body.descrizione,
             licenza=body.licenza, ente=body.ente, tema=body.tema,
             frequenza=body.frequenza, url=body.url,
         )
-    log.info("/quality/validate subject=%s source=%s",
-             user.subject, "metadata" if body.metadata is not None else "file")
-    return {"validazione": validate_dcat(meta), "metadata": meta}
+    log.info("/quality/validate subject=%s source=%s vocabolario=%s",
+             user.subject, "metadata" if body.metadata is not None else "file",
+             "schema_org" if schema_org else "dcat")
+    valida = validate_schema_org if schema_org else validate_dcat
+    return {"validazione": valida(meta), "metadata": meta}
 
 
 @router.post("/quality/package")

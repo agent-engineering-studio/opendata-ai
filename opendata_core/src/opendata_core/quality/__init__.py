@@ -17,10 +17,13 @@ from .package import build_publish_package
 from .profile import profile_csv
 from .scale import advise_scale
 from .schema import infer_schema
+from .schemaorg import generate_schema_org
+from .schemaorg_validate import validate_schema_org
 from .summarize import summarize_csv
 
 __all__ = [
     "profile_csv", "fix_csv", "profile_geojson", "generate_dcat", "validate_dcat",
     "infer_schema", "csv_to_geojson", "json_to_geojson", "summarize_csv", "advise_scale",
     "build_publish_package", "advise_enrichment", "build_normalization", "infer_geo_schema",
+    "generate_schema_org", "validate_schema_org",
 ]
