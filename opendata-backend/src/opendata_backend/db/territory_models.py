@@ -312,6 +312,57 @@ class RawIngest(Base):
     payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
 
 
+# ── Monitoraggio schedulato (#88) ────────────────────────────────────
+
+
+class MonitorTarget(Base):
+    """Un dataset/risorsa da controllare periodicamente (freshness/qualità/link)."""
+
+    __tablename__ = "monitor_targets"
+    __table_args__ = (
+        Index("ix_monitor_targets_entity", "entity_id"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    entity_id: Mapped[int | None] = mapped_column(
+        ForeignKey("opendata.entities.id", ondelete="SET NULL"), nullable=True
+    )
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)  # es. "ckan"
+    dataset_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)  # risorsa da controllare
+    accrual_periodicity: Mapped[str | None] = mapped_column(Text, nullable=True)  # DCAT-AP_IT
+    webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notify_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class MonitorRun(Base):
+    """Uno snapshot di controllo per un `MonitorTarget` (append-only → trend/diff)."""
+
+    __tablename__ = "monitor_runs"
+    __table_args__ = (
+        Index("ix_monitor_runs_target", "target_id", "run_at"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    target_id: Mapped[int] = mapped_column(
+        ForeignKey("opendata.monitor_targets.id", ondelete="CASCADE"), nullable=False
+    )
+    run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    esito: Mapped[str] = mapped_column(Text, nullable=False)  # ok|attenzione|critico
+    quality_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    findings_jsonb: Mapped[list[Any] | None] = mapped_column(_JSONB, nullable=True)
+    diff_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+    notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 # ── Sito civico + community (Fase 4) ─────────────────────────────────
 
 
@@ -401,6 +452,8 @@ class CommunityPost(Base):
 __all__ = [
     "Entity",
     "RawIngest",
+    "MonitorTarget",
+    "MonitorRun",
     "CivicSnapshot",
     "CommunityMember",
     "CommunityThread",

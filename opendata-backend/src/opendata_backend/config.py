@@ -1454,6 +1454,21 @@ class Settings(BaseSettings):
     # TTL della scorecard in Redis (default 24h).
     maturity_cache_ttl_seconds: int = Field(default=86400)
 
+    # ── Monitoraggio schedulato (#88) ─────────────────────────────────
+    # Timeout HTTP per i controlli di freshness/link del runner `opendata-monitor`.
+    monitor_http_timeout_seconds: float = Field(default=15.0)
+    # Notifica email: OUTWARD-FACING, quindi opt-in esplicito. Se `smtp_host` è
+    # vuoto l'invio email è saltato (loggato, mai un errore che blocca il run —
+    # fail-safe come il resto del monitor). Nessuna dipendenza nuova: smtplib
+    # di libreria standard.
+    smtp_host: str | None = Field(default=None)
+    smtp_port: int = Field(default=587)
+    smtp_user: str | None = Field(default=None)
+    smtp_password: str | None = Field(default=None)
+    smtp_use_tls: bool = Field(default=True)
+    # Mittente delle notifiche email (richiesto solo se smtp_host è configurato).
+    smtp_from: str | None = Field(default=None)
+
 
 def rate_limit_for(tier: str | None, settings: Settings) -> int:
     """Requests-per-minute allowed for `tier`.
