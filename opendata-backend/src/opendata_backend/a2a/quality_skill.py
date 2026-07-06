@@ -18,6 +18,7 @@ from opendata_core.quality import (
     csv_to_geojson,
     fix_csv,
     generate_dcat,
+    generate_schema_org,
     infer_geo_schema,
     infer_schema,
     json_to_geojson,
@@ -25,12 +26,13 @@ from opendata_core.quality import (
     profile_geojson,
     summarize_csv,
     validate_dcat,
+    validate_schema_org,
 )
 
 # Azioni esposte (mirror della superficie REST /quality/*).
 AZIONI = (
     "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
-    "geo-schema", "to-geojson", "validate", "package",
+    "geo-schema", "to-geojson", "validate", "metadata-schema-org", "package",
 )
 
 
@@ -99,14 +101,24 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
         is_json = text.lstrip()[:1] in ("[", "{") or fmt in ("json", "geojson")
         fn = json_to_geojson if is_json else csv_to_geojson
         return ok(fn(text, lat_field=payload.get("lat_field"), lon_field=payload.get("lon_field")))
-    if azione == "validate":
+    if azione == "metadata-schema-org":
         profile = profile_geojson(text) if geo else profile_csv(text)
-        dcat = generate_dcat(
+        return ok(generate_schema_org(
+            profile, titolo=payload.get("titolo"), descrizione=payload.get("descrizione"),
+            licenza=payload.get("licenza"), ente=payload.get("ente"), tema=payload.get("tema"),
+            frequenza=payload.get("frequenza"), url=payload.get("url"),
+        ))
+    if azione == "validate":
+        schema_org = str(payload.get("vocabolario") or "dcat").lower() == "schema_org"
+        profile = profile_geojson(text) if geo else profile_csv(text)
+        genera = generate_schema_org if schema_org else generate_dcat
+        meta = genera(
             profile, titolo=payload.get("titolo"), descrizione=payload.get("descrizione"),
             licenza=payload.get("licenza"), ente=payload.get("ente"), tema=payload.get("tema"),
             frequenza=payload.get("frequenza"), url=payload.get("url"),
         )
-        return ok({"validazione": validate_dcat(dcat), "metadata": dcat})
+        valida = validate_schema_org if schema_org else validate_dcat
+        return ok({"validazione": valida(meta), "metadata": meta})
     if azione == "package":
         # publish-assistant: dato pulito + scheda DCAT-AP_IT + licenza + README.
         if geo:

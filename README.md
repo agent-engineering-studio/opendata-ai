@@ -210,6 +210,9 @@ suggerisce come renderlo più utile:
   ripetuti mille volte) diventano **tabelle di lookup** vere e proprie, più
   **viste** già pronte per i riepiloghi più richiesti (totali per categoria,
   andamento nel tempo, incroci tra le due).
+- **Schede standard** — genera la scheda descrittiva in due vocabolari: **DCAT-AP_IT**
+  (il catalogo nazionale) e **schema.org/Dataset** (quello letto da *Google
+  Dataset Search*), entrambe validabili con lo stesso controllo FAIR + licenza.
 
 **A cosa serve / per chi.** È lo strumento di chi *pubblica* — uffici dati,
 RTD, open data manager — per alzare la qualità prima della pubblicazione e
@@ -240,6 +243,11 @@ Geografico (GeoJSON) — mostra diagnosi e **schema PostGIS/GeoPackage**:
 ```
 Poi apri **"Schema geografico (PostGIS / GeoPackage)"** per il `CREATE TABLE`
 con colonna `geom` + indice spaziale, e il comando `ogr2ogr`.
+
+Con il CSV di sopra, compila anche titolo/descrizione/licenza/ente nella
+scheda descrittiva e genera **sia** "Scheda DCAT-AP_IT" **che** "Scheda
+schema.org (Dataset)": stessi dati del file, due vocabolari, ciascuno
+validabile con il proprio punteggio FAIR.
 
 ## Supported open data sources
 
@@ -330,7 +338,7 @@ discovery (`/.well-known/agent-card.json`) is public. Six skills are published
 `classify_dataset`, `assess_maturity`, `analyze_territory` and `data_quality`
 (the Data Quality Lab — diagnosi, fix, arricchimento, schema, normalizzazione,
 schema geografico, riepiloghi, scala, conversione GeoJSON, validazione
-DCAT-AP_IT + FAIR e pacchetto di pubblicazione).
+DCAT-AP_IT/schema.org + FAIR e pacchetto di pubblicazione).
 
 | Method | Path | Description |
 |---|---|---|

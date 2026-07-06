@@ -35,6 +35,8 @@ type ValidationResult = {
   licenza: { dichiarata: string | null; aperta: boolean | null; suggerita: string | null };
   fair: { findable: number; accessible: number; interoperable: number; reusable: number; overall: number };
 };
+// schema.org/Dataset ha la stessa forma di DcatResult (dataset + schema_campi + campi_mancanti).
+type SchemaOrgResult = DcatResult;
 type SchemaResult = {
   table_name: string;
   row_estimate: number;
@@ -151,6 +153,55 @@ function PercorsoQualita() {
   );
 }
 
+/** Esito di validazione (DCAT-AP_IT o schema.org): conformità, licenza, punteggio FAIR. */
+function ValidazionePanel({ validation }: { validation: ValidationResult }) {
+  return (
+    <div className="border rounded p-3 mb-2">
+      <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+        <span className={`badge ${validation.valido ? "bg-success" : "bg-danger"}`}>
+          {validation.valido ? "Conforme" : "Non ancora conforme"}
+        </span>
+        <span className="small">
+          Licenza:{" "}
+          {validation.licenza.aperta === true
+            ? <span className="text-success">aperta ({validation.licenza.dichiarata})</span>
+            : validation.licenza.aperta === false
+              ? <span className="text-danger">non aperta ({validation.licenza.dichiarata}) → usa {validation.licenza.suggerita}</span>
+              : <span className="text-muted">non indicata → suggerita {validation.licenza.suggerita}</span>}
+        </span>
+      </div>
+
+      <div className="row g-2 text-center mb-2">
+        {([
+          ["Trovabile", validation.fair.findable],
+          ["Accessibile", validation.fair.accessible],
+          ["Interoperabile", validation.fair.interoperable],
+          ["Riutilizzabile", validation.fair.reusable],
+          ["FAIR", validation.fair.overall],
+        ] as [string, number][]).map(([label, val]) => (
+          <div className="col" key={label}>
+            <div className={`h5 mb-0 ${scoreColor(val)}`}>{val}</div>
+            <div className="small text-muted">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {validation.findings.length > 0 && (
+        <ul className="list-group list-group-flush">
+          {validation.findings.map((f) => (
+            <li key={f.codice} className="list-group-item px-0 py-1 d-flex gap-2 align-items-start border-0">
+              <span className={`badge ${LIVELLO[f.livello].badge} flex-shrink-0`} style={{ minWidth: 96 }}>
+                {LIVELLO[f.livello].label}
+              </span>
+              <span className="small">{f.messaggio} <span className="text-muted">— <code>{f.campo}</code></span></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function QualitaInner() {
   const { getToken } = useAuth();
   const [text, setText] = useState("");
@@ -164,6 +215,10 @@ function QualitaInner() {
   const [dcatBusy, setDcatBusy] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [validateBusy, setValidateBusy] = useState(false);
+  const [schemaOrg, setSchemaOrg] = useState<SchemaOrgResult | null>(null);
+  const [schemaOrgBusy, setSchemaOrgBusy] = useState(false);
+  const [schemaOrgValidation, setSchemaOrgValidation] = useState<ValidationResult | null>(null);
+  const [schemaOrgValidateBusy, setSchemaOrgValidateBusy] = useState(false);
   const [packageBusy, setPackageBusy] = useState(false);
   const [meta, setMeta] = useState<MetaForm>({ titolo: "", descrizione: "", licenza: "", ente: "", tema: "", frequenza: "" });
   const [schema, setSchema] = useState<SchemaResult | null>(null);
@@ -319,6 +374,58 @@ function QualitaInner() {
   function scaricaDcat() {
     if (!dcat) return;
     _download(JSON.stringify(dcat, null, 2), "metadati-dcat-ap_it.json", "application/ld+json;charset=utf-8");
+  }
+
+  // Scheda schema.org/Dataset — gemella della DCAT-AP_IT ma per Google Dataset Search.
+  async function generaSchemaOrg() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un file (incolla CSV/GeoJSON o un URL)."); return; }
+    setSchemaOrgBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = Object.fromEntries(Object.entries(meta).filter(([, v]) => v.trim()));
+      const res = await apiFetch("/quality/metadata-schema-org", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setSchemaOrg((await res.json()) as SchemaOrgResult);
+      setSchemaOrgValidation(null);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSchemaOrgBusy(false);
+    }
+  }
+
+  async function validaSchemaOrg() {
+    if (!schemaOrg) return;
+    setSchemaOrgValidateBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/validate", { method: "POST", token, body: JSON.stringify({ metadata: schemaOrg }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      const data = (await res.json()) as { validazione: ValidationResult };
+      setSchemaOrgValidation(data.validazione);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSchemaOrgValidateBusy(false);
+    }
+  }
+
+  function scaricaSchemaOrg() {
+    if (!schemaOrg) return;
+    _download(JSON.stringify(schemaOrg, null, 2), "metadati-schema-org.json", "application/ld+json;charset=utf-8");
   }
 
   // Pacchetto ZIP pronto da pubblicare: dato pulito + metadati + licenza + README.
@@ -551,6 +658,8 @@ function QualitaInner() {
     setEnrich(null);
     setNormalize(null);
     setGeoSchema(null);
+    setSchemaOrg(null);
+    setSchemaOrgValidation(null);
     try {
       const body = _body();
       if (!body) {
@@ -633,7 +742,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); setSchemaOrg(null); setSchemaOrgValidation(null); }}
               >
                 Pulisci
               </button>
@@ -1262,54 +1371,53 @@ function QualitaInner() {
                     <span className="text-muted small">{dcat.schema_campi.length} campi nello schema</span>
                   </div>
 
-                  {validation && (
-                    <div className="border rounded p-3 mb-2">
-                      <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                        <span className={`badge ${validation.valido ? "bg-success" : "bg-danger"}`}>
-                          {validation.valido ? "Conforme" : "Non ancora conforme"}
-                        </span>
-                        <span className="small">
-                          Licenza:{" "}
-                          {validation.licenza.aperta === true
-                            ? <span className="text-success">aperta ({validation.licenza.dichiarata})</span>
-                            : validation.licenza.aperta === false
-                              ? <span className="text-danger">non aperta ({validation.licenza.dichiarata}) → usa {validation.licenza.suggerita}</span>
-                              : <span className="text-muted">non indicata → suggerita {validation.licenza.suggerita}</span>}
-                        </span>
-                      </div>
-
-                      <div className="row g-2 text-center mb-2">
-                        {([
-                          ["Trovabile", validation.fair.findable],
-                          ["Accessibile", validation.fair.accessible],
-                          ["Interoperabile", validation.fair.interoperable],
-                          ["Riutilizzabile", validation.fair.reusable],
-                          ["FAIR", validation.fair.overall],
-                        ] as [string, number][]).map(([label, val]) => (
-                          <div className="col" key={label}>
-                            <div className={`h5 mb-0 ${scoreColor(val)}`}>{val}</div>
-                            <div className="small text-muted">{label}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {validation.findings.length > 0 && (
-                        <ul className="list-group list-group-flush">
-                          {validation.findings.map((f) => (
-                            <li key={f.codice} className="list-group-item px-0 py-1 d-flex gap-2 align-items-start border-0">
-                              <span className={`badge ${LIVELLO[f.livello].badge} flex-shrink-0`} style={{ minWidth: 96 }}>
-                                {LIVELLO[f.livello].label}
-                              </span>
-                              <span className="small">{f.messaggio} <span className="text-muted">— <code>{f.campo}</code></span></span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
+                  {validation && <ValidazionePanel validation={validation} />}
 
                   <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 320, overflow: "auto" }}>
                     {JSON.stringify(dcat.dataset, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SCHEDA SCHEMA.ORG/DATASET */}
+          <div className="card shadow-sm mt-4">
+            <div className="card-body">
+              <h2 className="h5 mb-1">Scheda schema.org (Dataset)</h2>
+              <p className="text-muted small">
+                Gemella della scheda DCAT-AP_IT ma nel vocabolario <strong>schema.org</strong>,
+                quello letto da <strong>Google Dataset Search</strong> e da molti portali. Usa gli
+                stessi campi editoriali compilati sopra.
+              </p>
+              <div className="d-flex flex-wrap gap-2">
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaSchemaOrg} disabled={schemaOrgBusy}>
+                  {schemaOrgBusy ? "Genero…" : "Genera scheda schema.org"}
+                </button>
+              </div>
+
+              {schemaOrg && (
+                <div className="mt-3">
+                  {schemaOrg.campi_mancanti.length > 0 && (
+                    <div className="alert alert-warning py-2">
+                      <strong>Da completare prima di pubblicare:</strong>
+                      <ul className="mb-0 mt-1 small">
+                        {schemaOrg.campi_mancanti.map((c) => (<li key={c}>{c}</li>))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <button type="button" className="btn btn-success btn-sm" onClick={scaricaSchemaOrg}>⬇ Scarica metadati (JSON-LD)</button>
+                    <button type="button" className="btn btn-outline-primary btn-sm" onClick={validaSchemaOrg} disabled={schemaOrgValidateBusy}>
+                      {schemaOrgValidateBusy ? "Valido…" : "Valida (schema.org + FAIR)"}
+                    </button>
+                    <span className="text-muted small">{schemaOrg.schema_campi.length} campi nello schema</span>
+                  </div>
+
+                  {schemaOrgValidation && <ValidazionePanel validation={schemaOrgValidation} />}
+
+                  <pre className="bg-light border rounded p-2 small mb-0" style={{ maxHeight: 320, overflow: "auto" }}>
+                    {JSON.stringify(schemaOrg.dataset, null, 2)}
                   </pre>
                 </div>
               )}
