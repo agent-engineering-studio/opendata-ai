@@ -382,8 +382,10 @@ function MaturitaInner() {
       <p className="text-slate-500 mb-3" style={{ fontSize: 14 }}>
         Valuta quanto sono completi, aperti e riutilizzabili gli open data di un{" "}
         <strong>ente</strong> (comune, Regione, provincia, agenzia…) secondo il modello
-        ODM 2025, e indica concretamente dove intervenire per migliorare. Per gli enti
-        senza open data viene proposta una guida operativa per avviarli.
+        ODM 2025, e indica concretamente <strong>dove intervenire per primo</strong> per
+        migliorare. Mostra anche come l&apos;ente si posiziona rispetto a enti simili e,
+        se ci sono almeno due valutazioni salvate, come il punteggio è cambiato nel
+        tempo. Per gli enti senza open data viene proposta una guida operativa per avviarli.
       </p>
 
       <form onSubmit={assess} className="d-flex flex-wrap gap-2 mb-4" style={{ maxWidth: 720 }}>

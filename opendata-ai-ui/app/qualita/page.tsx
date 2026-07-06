@@ -121,6 +121,36 @@ function scoreColor(p: number): string {
 const ESEMPIO_CSV =
   "comune;popolazione;data rilevazione\nGioia del Colle;27.889;01/01/2023\nBari;320475;2023-01-01\nModugno;;2023-01-01\n";
 
+// Percorso del Data Quality Lab, in breve: le sezioni della pagina seguono questo ordine.
+const PASSI_QUALITA = [
+  { emoji: "🔍", label: "Diagnosi" },
+  { emoji: "🩹", label: "Correggi" },
+  { emoji: "✨", label: "Arricchisci" },
+  { emoji: "🗂️", label: "Organizza" },
+  { emoji: "🏷️", label: "Descrivi" },
+  { emoji: "📦", label: "Pubblica" },
+] as const;
+
+/** Schema visivo del percorso: dalla diagnosi alla pubblicazione, in 6 passi. */
+function PercorsoQualita() {
+  return (
+    <div className="d-flex flex-wrap align-items-center gap-1 mb-4" aria-hidden="true">
+      {PASSI_QUALITA.map((p, i) => (
+        <div key={p.label} className="d-flex align-items-center gap-1">
+          <span
+            className="badge rounded-pill bg-light text-dark border d-flex align-items-center gap-1"
+            style={{ fontWeight: 500, fontSize: 12.5, padding: "6px 10px" }}
+          >
+            <span>{p.emoji}</span>
+            {p.label}
+          </span>
+          {i < PASSI_QUALITA.length - 1 && <span className="text-muted small">→</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function QualitaInner() {
   const { getToken } = useAuth();
   const [text, setText] = useState("");
@@ -554,10 +584,11 @@ function QualitaInner() {
       <h1 className="h3 mb-1">Qualità dei dati</h1>
       <p className="text-muted">
         Incolla un <strong>CSV</strong> o un <strong>GeoJSON</strong> (o caricane il file, o indica
-        un URL pubblico) e ricevi una diagnosi automatica: per le tabelle tipo colonne, valori
-        mancanti e problemi; per i dati geografici il <strong>sistema di coordinate</strong> e la
-        validità delle geometrie. Più un punteggio. Tutto deterministico, nessun dato inventato.
+        un URL pubblico): il Data Quality Lab lo esamina e ti accompagna passo per passo, dalla
+        diagnosi alla pubblicazione — senza bisogno di essere un esperto di database. Tutto
+        deterministico: nessun dato inventato, solo ciò che si misura sul file.
       </p>
+      <PercorsoQualita />
 
       {/* INPUT */}
       <div className="card shadow-sm mb-4">

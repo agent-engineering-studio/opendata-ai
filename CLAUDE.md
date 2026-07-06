@@ -320,6 +320,29 @@ a **How to apply** (when it kicks in).
     but creates infinite delegation under load. Use a separate process
     or a different agent in production.
 
+### R14 — Ship docs with the feature: README + the UI page's own copy
+
+- **Why:** `README.md`'s four-mode section (Esplora/Territorio/Maturità/
+  Qualità) and the intro copy on `/qualita` and `/maturita` are the only
+  plain-language explanation of what the product does — for non-technical
+  readers (RTD, open data manager) as much as for future contributors. They
+  drift out of date fast because feature PRs land in `opendata_core`/routers/
+  UI sections without touching prose. Diagrams (Mermaid in README, the small
+  step-badges component on `/qualita`) make the pipeline scannable without
+  reading paragraphs.
+- **How to apply:** any PR that adds or changes a user-visible capability
+  (a new `/quality/*` or `/maturity/*` capability, a new UI section) updates,
+  in the same PR: (1) the matching README section — plain language, no
+  jargon, keep the existing "Cos'è / Come funziona / A cosa serve" structure;
+  (2) the page's own intro paragraph in `opendata-ai-ui/app/{qualita,maturita}/
+  page.tsx`; (3) a diagram when the change adds a step to a pipeline or a new
+  relationship worth seeing at a glance — Mermaid `flowchart` in README
+  (see the Qualità section for the pattern), a lightweight Bootstrap-only
+  component in the UI (see `PercorsoQualita` in `qualita/page.tsx` — no new
+  chart dependency for a step diagram; recharts is already a dependency and
+  is fine for actual data charts like the Maturità trend line). Skip only for
+  internal-only changes (refactors, perf, test-only diffs).
+
 ## Skill routing
 
 Skills available in this workspace and when to invoke them.
