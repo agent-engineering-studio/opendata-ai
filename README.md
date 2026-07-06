@@ -156,6 +156,13 @@ salvate, anche un piccolo **grafico dell'andamento nel tempo** (il punteggio
 sale o scende? di quanto?). Per chi riusa i dati è un segnale di affidabilità
 della fonte; per chi li pubblica, una roadmap concreta di miglioramento.
 
+**Provalo subito.** Vai su `/maturita`, digita il nome di un ente (es. *"Regione
+Puglia"* o *"Comune di Bari"*) e premi **Valuta**. La prima volta ottieni la
+scorecard con radar e leve di miglioramento; se rivaluti lo **stesso ente** in
+un momento successivo (giorni o settimane dopo), dalla seconda valutazione in
+poi compare anche la sezione **"Andamento nel tempo"** con il grafico del
+punteggio.
+
 ---
 
 ### 4. Qualità — come si misura la qualità di un dataset
@@ -211,6 +218,28 @@ dataset è davvero pronto all'uso, come arricchirlo e come portarlo in un
 database. Si integra con la **Maturità**: i problemi di qualità trovati qui
 sono le leve concrete che fanno salire la dimensione Qualità della scorecard
 dell'ente.
+
+**Provalo subito.** Vai su `/qualita`, incolla uno di questi esempi e premi
+**Analizza**:
+
+Tabellare (CSV) — mostra diagnosi, **arricchimento** e **normalizzazione**:
+```csv
+comune,zona,indirizzo,anno
+Gioia del Colle,Nord,Via Roma 1,2023
+Bari,Sud,Via Garibaldi 5,2023
+Modugno,Nord,Via Dante 12,2024
+Bari,Sud,Via Cavour 3,2024
+```
+Poi apri **"Suggerimenti di arricchimento"** (join ISTAT per `comune`,
+geocodifica per `indirizzo`) e **"Normalizzazione & modello"** (tabella di
+lookup per `zona` + viste di totali/andamento/pivot).
+
+Geografico (GeoJSON) — mostra diagnosi e **schema PostGIS/GeoPackage**:
+```json
+{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[16.92,40.79]},"properties":{"nome":"Gioia del Colle","popolazione":27889}}]}
+```
+Poi apri **"Schema geografico (PostGIS / GeoPackage)"** per il `CREATE TABLE`
+con colonna `geom` + indice spaziale, e il comando `ogr2ogr`.
 
 ## Supported open data sources
 
