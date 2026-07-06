@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { downloadScorecardPdf, type Guida } from "@/lib/scorecardPdf";
@@ -98,6 +98,20 @@ type Gap = {
 // Andamento nel tempo (#50): un punto per ogni assessment salvato.
 type TrendPoint = { assessed_at: string; overall: number; level: string };
 
+// Monitoraggio automatico (#88): stato dell'ultimo controllo per le risorse dell'ente.
+type MonitorFinding = { livello: "alto" | "medio" | "basso"; codice: string; messaggio: string };
+type MonitorTargetStatus = {
+  id: number;
+  url: string;
+  accrual_periodicity: string | null;
+  ultimo_run: {
+    run_at: string;
+    esito: "ok" | "attenzione" | "critico";
+    quality_score: number | null;
+    findings: MonitorFinding[];
+  } | null;
+};
+
 // Confronto con enti simili (#50): posizione nel cluster + mediane.
 type PeerComparison = {
   cluster_label: string;
@@ -182,6 +196,12 @@ const SEVERITY_COLOR: Record<string, string> = {
   alta: "#dc2626",
   media: "#d97706",
   bassa: "#64748b",
+};
+
+const ESITO_BADGE: Record<"ok" | "attenzione" | "critico", { label: string; badge: string }> = {
+  ok: { label: "Tutto ok", badge: "bg-success" },
+  attenzione: { label: "Da controllare", badge: "bg-warning text-dark" },
+  critico: { label: "Critico", badge: "bg-danger" },
 };
 
 const DIM_KEYS = ["policy", "portal", "quality", "impact"] as const;
@@ -894,6 +914,77 @@ function TrendView({ trend, fileSlug }: { trend: TrendPoint[]; fileSlug: string 
   );
 }
 
+/**
+ * Monitoraggio automatico (#88): ultimo esito di freshness/qualità/link per le
+ * risorse dell'ente sotto controllo schedulato (`GET /monitor/{entity_id}`,
+ * sola lettura — le risorse da controllare si configurano lato backend).
+ */
+function MonitorView({ entityId }: { entityId: number }) {
+  const { getToken } = useAuth();
+  const [targets, setTargets] = useState<MonitorTargetStatus[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = await getToken();
+        const res = await apiFetch(`/monitor/${entityId}`, { token });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { targets: MonitorTargetStatus[] };
+        if (!cancelled) setTargets(data.targets);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [entityId, getToken]);
+
+  if (loading) return null; // silenzioso: è un arricchimento, non blocca la scorecard
+  if (error || !targets) return null; // fail-safe: un problema qui non deve rompere la pagina
+
+  return (
+    <div>
+      <h3 className="h6 text-slate-500 mb-2">Monitoraggio automatico</h3>
+      {targets.length === 0 ? (
+        <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
+          Nessuna risorsa di questo ente è sotto controllo automatico. L&apos;agente di
+          monitoraggio (freshness, qualità, link) si configura per singola risorsa lato backend.
+        </p>
+      ) : (
+        <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
+          {targets.map((t) => (
+            <li key={t.id} className="d-flex align-items-start gap-2" style={{ fontSize: 13 }}>
+              {t.ultimo_run ? (
+                <span className={`badge ${ESITO_BADGE[t.ultimo_run.esito].badge} flex-shrink-0`} style={{ minWidth: 96 }}>
+                  {ESITO_BADGE[t.ultimo_run.esito].label}
+                </span>
+              ) : (
+                <span className="badge bg-light text-dark border flex-shrink-0" style={{ minWidth: 96 }}>
+                  In attesa
+                </span>
+              )}
+              <div className="text-truncate">
+                <span className="text-slate-700">{t.url}</span>
+                {t.ultimo_run && t.ultimo_run.findings.length > 0 && (
+                  <div className="text-slate-500" style={{ fontSize: 12 }}>
+                    {t.ultimo_run.findings.map((f) => f.messaggio).join(" · ")}
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** "Come migliorare": leve ordinate per impatto sul punteggio complessivo. */
 function ImproveView({
   leve,
@@ -1097,6 +1188,9 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
 
             {/* Valore del patrimonio (unito alla maturità) */}
             {portfolio && portfolio.count > 0 ? <ValoreCard pf={portfolio} /> : null}
+
+            {/* Monitoraggio automatico (#88): ultimo esito freshness/qualità/link */}
+            <MonitorView entityId={scorecard.entity.id} />
 
             {/* IN BASSO: come migliorare (leve) + raccomandazioni su come colmarle */}
             <ImproveView leve={leve} nextLevel={nextLevel} />

@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Roadmap — OpenData AI",
   description:
-    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma. Sette punti — qualità del dato, maturità open data, ottimizzazione, pubblicazione secondo gli standard, nuove fonti e automazione, nuove lenti per l'analisi del territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
+    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma da qui. Il Data Quality Lab, la maturità open data e il monitoraggio automatico sono già attivi; restano aperti gli avvisi di maturità nel tempo, i dataset ad alto valore, nuove fonti collegate, nuove lenti per il territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
 };
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
@@ -31,83 +31,51 @@ type Punto = {
 const ROADMAP: Punto[] = [
   {
     n: "01",
-    icon: "🩺",
-    titolo: "Porta un file di dati, ti diciamo come migliorarlo",
+    icon: "📊",
+    titolo: "Avvisi di maturità nel tempo",
     perche:
-      "Carichi un file (un foglio di calcolo, un elenco, una mappa) e ricevi un controllo automatico, la versione già sistemata e la scheda descrittiva pronta. Così il dato diventa più pulito, comprensibile e facile da riusare.",
-    issue: 49,
-    wip: true,
+      "La pagella in quattro aree, il piano su misura per salire di livello e il confronto con enti simili sono già attivi. Resta l'ultimo passo: avvisare in automatico quando la maturità di un ente peggiora, non solo mostrarne l'andamento.",
+    issue: 103,
     voci: [
-      { titolo: "Controllo automatico", stato: "wip", testo: "Trova gli errori più comuni — celle vuote, date scritte in modi diversi, accenti sbagliati, doppioni — e dice quanto è “in salute” il dato, prima e dopo. Disponibile nella pagina Qualità, in fase di test." },
-      { titolo: "Versione corretta da scaricare", stato: "wip", testo: "Intestazioni più chiare, formato uniforme, date ISO, separatore standard: riscarichi il file già sistemato, con l'elenco delle modifiche. Disponibile, in fase di test." },
-      { titolo: "Dati sulla mappa sempre al posto giusto", stato: "explore", testo: "Se le posizioni sono indicate in modo diverso, le rimette a posto perché compaiano correttamente sulla mappa." },
-      { titolo: "Scheda descrittiva pronta", stato: "explore", testo: "Titolo, descrizione, licenza, ogni quanto si aggiorna: già compilata, da incollare sul portale dei dati." },
-      { titolo: "Suggerimenti per arricchire", stato: "explore", testo: "Collega il dato ad altre informazioni utili (il comune di riferimento, la posizione sulla mappa) per renderlo più completo." },
+      { titolo: "Regressioni di maturità", stato: "explore", testo: "Confronta la pagella tra una valutazione e la successiva e segnala i cali di punteggio o di livello, appena succedono — si appoggia all'agente di monitoraggio automatico già attivo (freshness/qualità/link). Issue #103." },
     ],
   },
   {
     n: "02",
-    icon: "📊",
-    titolo: "Quanto è “aperto” il tuo ente, e cosa fare per migliorare",
+    icon: "⚙️",
+    titolo: "Convertitori avanzati per i formati più diffusi",
     perche:
-      "Già oggi misuriamo quanto bene un ente pubblica i suoi dati. Il passo avanti è dire, in modo concreto, cosa conviene fare per primo e in quale direzione crescere.",
-    issue: 50,
-    wip: true,
+      "Mettere ordine in una tabella, i riepiloghi pronti, i consigli per i file grandi e la conversione in mappa (GeoJSON) sono già attivi nella pagina Qualità. Resta da leggere i formati più \"pesanti\": fogli Excel e mappe Shapefile.",
+    issue: 101,
     voci: [
-      { titolo: "Pagella in quattro aree", stato: "now", testo: "Quanto è aperto e ben tenuto il patrimonio dati dell'ente. C'è già: va resa più “azionabile”." },
-      { titolo: "Le mosse che contano di più", stato: "wip", testo: "Le azioni che migliorano di più la situazione, separate tra quelle facili e rapide (correzioni sui dati già pubblicati) e quelle più strategiche (pubblicare nuovi dati). Disponibile, in fase di test." },
-      { titolo: "Un percorso su misura", stato: "wip", testo: "Quanti punti mancano al livello successivo e qual è il “collo di bottiglia” su cui conviene concentrarsi: una strada chiara verso il passo successivo. Disponibile, in fase di test." },
-      { titolo: "Confronto con enti simili", stato: "wip", testo: "Come si posiziona rispetto agli enti dello stesso tipo: posizione nel gruppo e confronto, area per area, con la mediana dei pari. Disponibile, in fase di test." },
-      { titolo: "Controllo nel tempo e avvisi", stato: "explore", testo: "Segnala dati non aggiornati, collegamenti che non funzionano e peggioramenti, appena succedono. Tracciata nelle issue #103 (avvisi di maturità) e #88 (monitoraggio schedulato)." },
+      { titolo: "Excel e Shapefile", stato: "explore", testo: "Convertitori dedicati per i formati più diffusi negli enti ma non ancora supportati: fogli Excel (XLSX→CSV), mappe Shapefile (→GeoJSON) ed esportazione in formato compresso (Parquet). Issue #101." },
     ],
   },
   {
     n: "03",
-    icon: "⚙️",
-    titolo: "Rendere il dato più ordinato e veloce da usare",
+    icon: "🔗",
+    titolo: "I dati che contano di più, dataset per dataset",
     perche:
-      "Trasformare un elenco disordinato in qualcosa di ben organizzato e facile da consultare, anche quando i dati sono davvero tanti.",
-    issue: 51,
-    wip: true,
+      "Il controllo della scheda descrittiva (in due standard: DCAT-AP_IT e schema.org), il pacchetto pronto da pubblicare e il controllo della licenza sono già attivi nella pagina Qualità. Resta da capire, file per file, quali dataset rientrano tra quelli ad alto valore per l'Europa.",
+    issue: 102,
     voci: [
-      { titolo: "Mettere ordine", stato: "wip", testo: "Dal file ricava una tabella ben organizzata: tipi delle colonne, chiave primaria e indici utili, con il comando pronto da eseguire (CREATE TABLE). Disponibile, in fase di test." },
-      { titolo: "Riepiloghi pronti", stato: "wip", testo: "Crea sintesi utili dal file: statistiche delle colonne numeriche, totali per categoria e andamenti nel tempo, pronti da consultare o pubblicare. Disponibile, in fase di test." },
-      { titolo: "Veloce anche quando è grande", stato: "wip", testo: "In base a dimensione e contenuto del file, suggerisce come tenerlo veloce: formato compresso (Parquet), indici, suddivisione e pubblicazione via API. Disponibile, in fase di test." },
-      { titolo: "Cambio formato con un clic", stato: "wip", testo: "Trasforma una tabella con coordinate in una mappa (GeoJSON) pronta da pubblicare, riconoscendo da solo le colonne di latitudine e longitudine. Disponibile, in fase di test. Convertitori avanzati (Excel, Shapefile, Parquet) tracciati nell'issue #101." },
+      { titolo: "High-Value Dataset per singolo file", stato: "explore", testo: "Oggi la copertura degli High-Value Dataset UE si vede a livello di ente, nella pagina Maturità. Resta da stimarla anche per il singolo file caricato in Qualità, con priorità di pubblicazione. Issue #102." },
     ],
   },
   {
     n: "04",
-    icon: "🔗",
-    titolo: "Pubblicare bene, seguendo gli standard",
+    icon: "🤖",
+    titolo: "Più fonti collegate e un accesso unico per gli assistenti",
     perche:
-      "Rendere il dato facile da trovare e riusare per tutti, seguendo le regole comuni europee e italiane per i dati aperti.",
-    issue: 52,
-    wip: true,
+      "Il connettore OpenDataSoft, le funzioni richiamabili da altri programmi via API e il monitoraggio automatico (aggiornamento, qualità, link) sono già attivi. Restano da collegare altre banche dati pubbliche e un punto d'accesso unico per gli assistenti esterni.",
+    issue: 98,
     voci: [
-      { titolo: "Controllo della scheda dati", stato: "wip", testo: "Verifica che la scheda del dato rispetti lo standard europeo (DCAT-AP_IT), segnala i campi obbligatori mancanti e calcola un punteggio FAIR (trovabile, accessibile, interoperabile, riutilizzabile). Disponibile, in fase di test." },
-      { titolo: "Pacchetto pronto da pubblicare", stato: "wip", testo: "Scarichi in un clic un unico pacchetto (.zip) con dato pulito, scheda dei metadati, licenza e una guida con i passi per pubblicarlo sul portale. Disponibile, in fase di test." },
-      { titolo: "I dati che “contano di più”", stato: "explore", testo: "Verifica quali dei dataset più importanti (quelli indicati a livello europeo) l'ente già pubblica e quali mancano; a livello di singolo file, stima se rientra tra gli High-Value Dataset UE. Tracciata nell'issue #102." },
-      { titolo: "La licenza giusta", stato: "wip", testo: "Riconosce se la licenza dichiarata è davvero aperta e, in caso contrario, suggerisce quella corretta (es. CC-BY-4.0). Disponibile, in fase di test." },
+      { titolo: "Nuovi connettori", stato: "explore", testo: "Altri portali e banche dati pubbliche italiane: Socrata #98, appalti ANAC #99, bilanci degli enti BDAP #100, e — da definire — il catasto #147 (per ora senza una fonte open data generalista ovvia)." },
+      { titolo: "Tutte le funzioni come strumenti per altri assistenti (MCP)", stato: "near", testo: "Un connettore unico che mette le quattro modalità — Esplora, Territorio, Maturità e Qualità — a disposizione di assistenti e agenti esterni (es. OpenClaw, Claude Desktop) come strumenti pronti all'uso, riusando l'orchestrazione e l'accesso già esistenti. Issue #131." },
     ],
   },
   {
     n: "05",
-    icon: "🤖",
-    titolo: "Più fonti collegate e processi che lavorano da soli",
-    perche:
-      "Collegare nuove banche dati pubbliche e far girare i controlli in automatico, così il lavoro ripetitivo lo fa la piattaforma.",
-    issue: 53,
-    wip: true,
-    voci: [
-      { titolo: "Nuove fonti collegate", stato: "wip", testo: "Più portali e banche dati pubbliche: aggiunto il connettore per i portali OpenDataSoft (molti enti regionali e comunali), già collegato alla ricerca. Prossimi connettori tracciati: Socrata #98, ANAC appalti #99, BDAP bilanci #100." },
-      { titolo: "Funzioni usabili da altri strumenti", stato: "wip", testo: "Le capacità della piattaforma rese disponibili ad altri software e assistenti: il Data Quality Lab (diagnosi, schema, riepiloghi, validazione DCAT-AP_IT, pacchetto di pubblicazione) è ora richiamabile da agenti esterni via API. Disponibile, in fase di test." },
-      { titolo: "Tutte le funzioni come strumenti per altri assistenti (MCP)", stato: "near", testo: "Un connettore unico che mette le quattro modalità — Esplora, Territorio, Maturità e Qualità — a disposizione di assistenti e agenti esterni (es. OpenClaw, Claude Desktop) come strumenti pronti all'uso, riusando l'orchestrazione e l'accesso già esistenti. Issue #131." },
-      { titolo: "Controlli automatici programmati", stato: "explore", testo: "La piattaforma verifica da sola lo stato dei dati (aggiornamento, qualità, link rotti) e avvisa quando qualcosa cambia o si rompe. Progettata in dettaglio (issue #88), da sviluppare nelle prossime sessioni." },
-    ],
-  },
-  {
-    n: "06",
     icon: "🗺️",
     titolo: "Leggere un comune da più punti di vista",
     perche:
@@ -122,7 +90,7 @@ const ROADMAP: Punto[] = [
     ],
   },
   {
-    n: "07",
+    n: "06",
     icon: "🏗️",
     titolo: "Dal dato alla realtà: cosa c'è davvero su quel terreno",
     perche:
@@ -160,11 +128,12 @@ export default function Page() {
             </p>
             <h1 className="display-5 fw-bold mb-3">Dove può crescere OpenData AI</h1>
             <p className="lead mb-0" style={{ opacity: 0.95 }}>
-              Oggi la piattaforma permette di <strong>esplorare i dati pubblici parlando</strong>.
-              Domani può aiutare gli enti a capire <strong>quanto bene li pubblicano</strong>, a{" "}
-              <strong>migliorarne la qualità</strong> e a <strong>renderli più utili</strong> a
-              tutti. Niente scadenze: sono direzioni, non promesse con una data — e ogni punto è
-              tracciato pubblicamente su GitHub.
+              Oggi la piattaforma permette di <strong>esplorare i dati pubblici parlando</strong>,
+              misura <strong>quanto bene un ente li pubblica</strong>, aiuta a{" "}
+              <strong>migliorarne la qualità</strong> e <strong>controlla da sola</strong> che
+              tutto resti in ordine nel tempo. Da qui si cresce ancora: nuove fonti, nuovi
+              controlli, nuove lenti per leggere il territorio. Niente scadenze: sono direzioni,
+              non promesse con una data — e ogni punto è tracciato pubblicamente su GitHub.
             </p>
           </div>
         </div>
