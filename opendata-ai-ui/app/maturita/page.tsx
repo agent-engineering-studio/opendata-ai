@@ -6,6 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { downloadScorecardPdf, type Guida } from "@/lib/scorecardPdf";
 import { GUIDA_PATH, guideHref, recGuide, GAP_GUIDE } from "@/lib/maturityGuidance";
 import {
+  CartesianGrid,
+  Line,
+  LineChart,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
@@ -13,6 +16,8 @@ import {
   RadarChart,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
@@ -21,8 +26,9 @@ import { DashboardGate } from "@/components/DashboardGate";
 /*
  * Maturità open data di un ente (modello ODM 2025). POST /maturity/assess →
  * 4 dimensioni + livello + raccomandazioni + pesi; in più carichiamo il valore del
- * patrimonio (GET /value/portfolio?entity_id=) per lo stesso ente. Niente trend:
- * al suo posto un piano "come salire di livello" ordinato per impatto sul punteggio.
+ * patrimonio (GET /value/portfolio?entity_id=) per lo stesso ente. Oltre al radar,
+ * un piano "come salire di livello" ordinato per impatto sul punteggio e — quando
+ * ci sono almeno due assessment — l'andamento del punteggio nel tempo.
  */
 
 type Recommendation = {
@@ -89,6 +95,9 @@ type Gap = {
   strategiche: AzioneGap[];
 };
 
+// Andamento nel tempo (#50): un punto per ogni assessment salvato.
+type TrendPoint = { assessed_at: string; overall: number; level: string };
+
 // Confronto con enti simili (#50): posizione nel cluster + mediane.
 type PeerComparison = {
   cluster_label: string;
@@ -111,6 +120,7 @@ type Scorecard = {
   coverage?: Coverage | null;
   gap?: Gap | null;
   peer_comparison?: PeerComparison | null;
+  trend?: TrendPoint[];
   n_datasets: number | null;
   truncated: boolean | null;
   insufficient_data?: boolean;
@@ -841,6 +851,47 @@ function PeerComparisonView({
   );
 }
 
+/**
+ * Andamento nel tempo (#50): punteggio complessivo per ogni assessment salvato,
+ * con il livello ODM raggiunto in ciascun punto. Serve almeno due assessment —
+ * con uno solo non c'è un andamento da mostrare.
+ */
+function TrendView({ trend, fileSlug }: { trend: TrendPoint[]; fileSlug: string }) {
+  const data = trend.map((p) => ({
+    data: new Date(p.assessed_at).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "2-digit" }),
+    overall: Math.round(p.overall),
+    level: p.level,
+  }));
+  const first = data[0];
+  const last = data[data.length - 1];
+  const delta = Math.round(last.overall - first.overall);
+  const deltaColor = delta > 0 ? "#059669" : delta < 0 ? "#dc2626" : "#64748b";
+  const hint = (
+    <p className="text-slate-600 mb-3" style={{ fontSize: 13 }}>
+      Dal primo assessment (<strong>{first.overall}/100</strong>, {first.data}) a oggi (
+      <strong>{last.overall}/100</strong>, {last.data}):{" "}
+      <strong style={{ color: deltaColor }}>{delta > 0 ? `+${delta}` : delta} punti</strong>.
+    </p>
+  );
+  return (
+    <ChartFrame title="Andamento nel tempo" fileSlug={fileSlug} hint={hint}>
+      <div style={{ height: 220, backgroundColor: "#ffffff" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#eef0f3" />
+            <XAxis dataKey="data" tick={{ fontSize: 11 }} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(value: number, _name, item) => [`${value}/100 — ${item.payload.level}`, "Punteggio"]}
+            />
+            <Line type="monotone" dataKey="overall" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </ChartFrame>
+  );
+}
+
 /** "Come migliorare": leve ordinate per impatto sul punteggio complessivo. */
 function ImproveView({
   leve,
@@ -1015,6 +1066,16 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
                     dimensions={scorecard.dimensions}
                     entityName={scorecard.entity.name}
                     fileSlug={`maturita-${slug || "ente"}-confronto`}
+                  />
+                </div>
+              ) : null}
+
+              {/* Andamento nel tempo (#50): serve almeno due assessment salvati */}
+              {scorecard.trend && scorecard.trend.length >= 2 ? (
+                <div className="col-lg-6">
+                  <TrendView
+                    trend={scorecard.trend}
+                    fileSlug={`maturita-${slug || "ente"}-andamento`}
                   />
                 </div>
               ) : null}
