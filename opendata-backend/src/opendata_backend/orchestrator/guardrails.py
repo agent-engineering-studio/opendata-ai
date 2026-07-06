@@ -69,7 +69,7 @@ def _has_resolvable_evidence(evidenze: list, evidence_urls: set[str]) -> bool:
 # URL sarebbe fragile; il dominio della premessa invece è inequivocabile).
 GENERATORI = ("gap_comparativo", "fabbisogno", "incompiuto", "finestra_finanziamento",
               "commercio_duc", "turismo_cultura", "lavoro", "trasporti", "welfare",
-              "istruzione", "ambiente", "sanita", "combinazione")
+              "istruzione", "casa", "ambiente", "sanita", "combinazione")
 
 # Host validi come premessa per QUALSIASI lente (usati dal generatore "combinazione",
 # che incrocia ≥2 segnali di domini diversi — Fase 3, "serendipità guidata").
@@ -105,6 +105,9 @@ _WELFARE_HOSTS = ("istat.it",)
 # Host validi come premessa di ISTRUZIONE: anagrafe scuole MIUR (offerta) +
 # grado di istruzione ISTAT 8milaCensus (esiti, host ottomilacensus.istat.it).
 _ISTRUZIONE_HOSTS = ("dati.istruzione.it", "ottomilacensus.istat.it")
+# Host valido come premessa di CASA/ABITAZIONI: condizioni abitative ISTAT
+# 8milaCensus (censimento 2011, host ottomilacensus.istat.it ⊃ istat.it).
+_CASA_HOSTS = ("ottomilacensus.istat.it", "istat.it")
 # Host valido come premessa di AMBIENTE: pericolosità idrogeologica ISPRA IdroGEO
 # (host idrogeo.isprambiente.it ⊃ isprambiente.it).
 _AMBIENTE_HOSTS = ("isprambiente.it",)
@@ -173,6 +176,10 @@ def _generatore_ok(prop) -> bool:
         # Lente Istruzione: premessa LOCALE = dotazione scolastica MIUR Open Data.
         # Nessun requisito web.
         return any(any(d in h for d in _ISTRUZIONE_HOSTS) for h in hosts)
+    if prop.generatore == "casa":
+        # Lente Casa/Abitazioni: premessa LOCALE = condizioni abitative ISTAT
+        # 8milaCensus (censimento 2011). Nessun requisito web.
+        return any(any(d in h for d in _CASA_HOSTS) for h in hosts)
     if prop.generatore == "ambiente":
         # Lente Ambiente/Rischio idrogeologico: premessa LOCALE = pericolosità
         # frane/alluvioni ISPRA IdroGEO. Nessun requisito web.

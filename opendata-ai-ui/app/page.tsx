@@ -340,7 +340,7 @@ export default function Page() {
               href="/territorio"
               steps={[
                 "Scegli il comune (e una zona, via tag OpenStreetMap) e la modalità di report.",
-                "Otto lenti data-anchored (commercio, turismo, lavoro, trasporti, welfare, istruzione, ambiente, sanità) + OpenCoesione e ISPRA raccolgono l'evidenza.",
+                "Nove lenti data-anchored (commercio, turismo, lavoro, trasporti, welfare, istruzione, casa, ambiente, sanità) + OpenCoesione e ISPRA raccolgono l'evidenza.",
                 "Il quality-gate scarta le proposte senza evidenza risolvibile; ogni voce ha un ID verificabile.",
               ]}
               result="Scheda programmatica: sintesi, SWOT e proposte con citazioni — esportabile in PDF."

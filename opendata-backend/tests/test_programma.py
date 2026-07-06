@@ -801,7 +801,7 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
     for name in (
         "_resolve_zona", "_resolve_zone_commerciali", "_resolve_commercio",
         "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti",
-        "_resolve_welfare", "_resolve_istruzione", "_resolve_ambiente",
+        "_resolve_welfare", "_resolve_istruzione", "_resolve_casa", "_resolve_ambiente",
         "_resolve_sanita", "_resolve_comparabili", "_resolve_aree_candidate",
     ):
         setattr(sess, name, _none)
@@ -810,14 +810,14 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
                            modalita="completa")
     out = await OrchestratorSession._resolve_all_lenses(sess, req, emit=events.append)
 
-    # ritorno invariato: le 12 chiavi presenti, tutte None
+    # ritorno invariato: le 13 chiavi presenti, tutte None
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
-        "welfare", "istruzione", "ambiente", "sanita", "comparabili", "aree",
+        "welfare", "istruzione", "casa", "ambiente", "sanita", "comparabili", "aree",
     }
     starts = [e for e in events if e["phase"] == "start"]
     ends = [e for e in events if e["phase"] == "end"]
-    assert len(starts) == 12 and len(ends) == 12
+    assert len(starts) == 13 and len(ends) == 13
     assert {e["source"] for e in starts} == set(_LENS_SOURCES.values())
     assert all("elapsed_ms" in e for e in ends)
     assert all(e.get("error") == "nessun dato" for e in ends)  # None ⇒ saltata
@@ -1375,6 +1375,65 @@ async def test_istruzione_info_injects_citable_miur_anchor() -> None:
     assert [p.generatore for p in resp.proposte] == ["istruzione"]
     # display-clean: MIUR → portale opendata (mai il link CSV in profondità).
     assert any(r.url == "https://dati.istruzione.it/opendata/" for r in resp.citazioni)
+
+
+@pytest.mark.asyncio
+async def test_casa_requires_local_anchor() -> None:
+    """casa (lente Casa/Abitazioni): premessa = indicatori ISTAT 8milaCensus (host in
+    _CASA_HOSTS). Solo OpenCoesione → out; nessun requisito web."""
+    census_url = "https://ottomilacensus.istat.it/fileadmin/download/16/confini/confini_16.csv"
+    ev_census = {"fonte": "istat", "url": census_url, "dettaglio": "affollamento 0,3% (Cens. 2011)"}
+    ev_oc = {"fonte": "opencoesione", "url": _OC_URL, "dettaglio": "x"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[
+                _idea("casa", [ev_census]),  # ok (8milaCensus)
+                _idea("casa", [ev_oc]),      # solo OpenCoesione → out
+            ],
+        )
+    )
+    parts = _participants()
+    parts[0] = _participant("istat", "Casa.", [
+        {"name": "8milaCensus", "url": census_url, "format": "CSV", "content": None},
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])
+    aggregate = build_programma_aggregator(agent, _IDEE_REQ)  # type: ignore[arg-type]
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["casa"]
+
+
+@pytest.mark.asyncio
+async def test_casa_info_injects_citable_census_anchor() -> None:
+    """L'ancora Casa/Abitazioni deterministica (8milaCensus) iniettata dal backend è
+    citabile: una proposta casa che la cita sopravvive senza risorsa ISTAT dagli specialisti."""
+    census_url = "https://ottomilacensus.istat.it/fileadmin/download/16/confini/confini_16.csv"
+    casa_info = {
+        "comune": "110002", "anno": "2011",
+        "incidenza_proprieta": 74.3, "abitazioni_non_occupate_centri": 11.8,
+        "eta_media_patrimonio_recente": 28.7, "disponibilita_servizi": 98.2,
+        "superficie_media_per_occupante": 41.7, "affollamento_abitazioni": 0.3,
+        "source_url": census_url,
+    }
+    ev_census = {"fonte": "istat", "url": census_url, "dettaglio": "affollamento 0,3% (Censimento 2011)"}
+    agent = _StubProgrammaAgent(
+        _llm_json(
+            swot={"forze": [], "debolezze": [], "opportunita": [], "minacce": []},
+            proposte=[_idea("casa", [ev_census])],
+        )
+    )
+    parts = [_participant("opencoesione", "Narrativa.", [
+        {"name": "aggregati", "url": _OC_URL, "format": "JSON", "content": None},
+    ])]
+    aggregate = build_programma_aggregator(
+        agent, _IDEE_REQ, casa_info=casa_info  # type: ignore[arg-type]
+    )
+    resp = (await aggregate(parts)).response
+    assert resp is not None
+    assert [p.generatore for p in resp.proposte] == ["casa"]
+    # 8milaCensus in display = portale 8milaCensus (mai il CSV profondo).
+    assert any(r.url == "https://ottomilacensus.istat.it/" for r in resp.citazioni)
 
 
 @pytest.mark.asyncio

@@ -913,6 +913,16 @@ IDEE_INSTRUCTIONS = (
     "interventi su offerta formativa/edilizia scolastica/poli infanzia E su contrasto "
     "dispersione/formazione adulti/innalzamento competenze, coerenti coi numeri. NIENTE "
     "precedente web. Se NON ci sono dati istruzione nel bundle, NON forzare l'idea: saltala.\n"
+    "  - casa — 'dove agire su condizioni abitative e patrimonio edilizio': individua il "
+    "disagio abitativo del comune — quota di abitazioni NON occupate nei centri abitati "
+    "(patrimonio inutilizzato), AFFOLLAMENTO delle abitazioni occupate, patrimonio edilizio "
+    "vecchio (età media alta) o carente di servizi essenziali. ANCORA = gli indicatori ISTAT "
+    "8milaCensus del blocco 'LENTE CASA/ABITAZIONI' (non occupate/affollamento/età/servizi/"
+    "proprietà/superficie): citane SEMPRE il source_url ed ETICHETTA il dato come 'Censimento "
+    "2011' (è strutturale, non congiunturale). Proponi interventi su recupero del patrimonio "
+    "inutilizzato (contrasto vuoto abitativo), riqualificazione energetica/sismica del "
+    "patrimonio vecchio, o housing sociale coerenti coi numeri. NIENTE precedente web. Se NON "
+    "ci sono indicatori abitativi nel bundle, NON forzare l'idea: saltala.\n"
     "  - ambiente — 'dove il rischio idrogeologico vincola o richiede intervento': "
     "individua l'esposizione del territorio a FRANE (pericolosità elevata/molto "
     "elevata P3+P4) e ALLUVIONI (scenari idraulici P3/P2). ANCORA = gli indicatori "
@@ -953,7 +963,7 @@ IDEE_INSTRUCTIONS = (
     '  "swot": {"forze": [], "debolezze": [], "opportunita": [], "minacce": []},\n'
     '  "proposte": [{\n'
     '    "titolo": str, "descrizione": str,\n'
-    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"ambiente"|"sanita"|"combinazione",\n'
+    '    "generatore": "gap_comparativo"|"fabbisogno"|"incompiuto"|"finestra_finanziamento"|"commercio_duc"|"turismo_cultura"|"lavoro"|"trasporti"|"welfare"|"istruzione"|"casa"|"ambiente"|"sanita"|"combinazione",\n'
     '    "evidenze": [{"fonte": str, "url": str, "dettaglio": str}],\n'
     '    "finanziamento": {"linea": str, "fonte_url": str, "stato": str} | null,\n'
     '    "fattibilita": {"livello": "alta"|"media"|"bassa"|"da_verificare", '
@@ -1329,8 +1339,8 @@ class Settings(BaseSettings):
     # L1 (perf sintesi): 16384 permetteva generazioni JSON enormi (sintesi lunga +
     # 6 proposte da 5-10 frasi) → i token di OUTPUT erano il costo dominante della
     # fase di sintesi. Era stato abbassato a 8192 + istruzioni più strette (max 5
-    # proposte, frasi 5-7). Ma con molte lenti attive (fino a 8: commercio, turismo,
-    # lavoro, trasporti, welfare, istruzione, ambiente, sanità) il JSON sintesi +
+    # proposte, frasi 5-7). Ma con molte lenti attive (fino a 9: commercio, turismo,
+    # lavoro, trasporti, welfare, istruzione, casa, ambiente, sanità) il JSON sintesi +
     # SWOT arriva al tetto PRIMA delle proposte, che restavano troncate → report
     # senza idee. Riportato a 16384 per dare margine alle proposte; chi vuole
     # contenere il costo abbassa via env SYNTH_MAX_TOKENS.
