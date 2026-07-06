@@ -59,6 +59,34 @@ def test_enrich_rejects_geojson() -> None:
     assert r["ok"] is False and "CSV" in r["error"]
 
 
+def test_normalize_generates_lookup_and_views() -> None:
+    csv_ripetuto = "id,zona\n" + "".join(f"{i},{'Nord' if i % 2 == 0 else 'Sud'}\n" for i in range(20))
+    r = run_quality_skill({"azione": "normalize", "content": csv_ripetuto})
+    assert r["ok"] is True and r["azione"] == "normalize"
+    assert any(t["colonna_originale"] == "zona" for t in r["result"]["tabelle_lookup"])
+
+
+def test_normalize_rejects_geojson() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    r = run_quality_skill({"azione": "normalize", "content": gj, "format": "geojson"})
+    assert r["ok"] is False and "CSV" in r["error"]
+
+
+def test_geo_schema_generates_postgis_ddl() -> None:
+    gj = (
+        '{"type":"FeatureCollection","features":'
+        '[{"type":"Feature","geometry":{"type":"Point","coordinates":[11.37,44.49]},"properties":{}}]}'
+    )
+    r = run_quality_skill({"azione": "geo-schema", "content": gj})
+    assert r["ok"] is True and r["azione"] == "geo-schema"
+    assert "CREATE TABLE" in r["result"]["ddl_postgis"]
+
+
+def test_geo_schema_rejects_csv() -> None:
+    r = run_quality_skill({"azione": "geo-schema", "content": _CSV})
+    assert r["ok"] is False and "GeoJSON" in r["error"]
+
+
 def test_fix_rejects_geojson() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     r = run_quality_skill({"azione": "fix", "content": gj, "format": "geojson"})
@@ -75,4 +103,7 @@ def test_agent_card_publishes_quality_skill() -> None:
     card = build_agent_card("http://localhost:8000")
     ids = {s.id for s in card.skills}
     assert SKILL_QUALITY in ids
-    assert set(AZIONI) >= {"profile", "fix", "schema", "summary", "scale", "enrich", "to-geojson", "validate"}
+    assert set(AZIONI) >= {
+        "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
+        "geo-schema", "to-geojson", "validate",
+    }

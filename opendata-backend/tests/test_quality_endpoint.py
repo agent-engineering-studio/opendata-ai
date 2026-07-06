@@ -252,3 +252,43 @@ def test_enrich_geojson_rejected() -> None:
 
 def test_enrich_requires_input() -> None:
     assert _client().post("/quality/enrich", json={}).status_code == 400
+
+
+def test_normalize_generates_lookup_and_views() -> None:
+    righe = "".join(f"{i},{'Nord' if i % 2 == 0 else 'Sud'}\n" for i in range(20))
+    res = _client().post("/quality/normalize", json={"content": "id,zona\n" + righe, "table_name": "t"})
+    assert res.status_code == 200
+    body = res.json()
+    assert any(t["colonna_originale"] == "zona" for t in body["tabelle_lookup"])
+    assert any(v["tipo"] == "totali_categoria" for v in body["viste"])
+
+
+def test_normalize_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    assert _client().post("/quality/normalize", json={"content": gj, "format": "geojson"}).status_code == 415
+
+
+def test_normalize_requires_input() -> None:
+    assert _client().post("/quality/normalize", json={}).status_code == 400
+
+
+def test_geo_schema_generates_postgis_ddl() -> None:
+    gj = (
+        '{"type":"FeatureCollection","features":'
+        '[{"type":"Feature","geometry":{"type":"Point","coordinates":[11.37,44.49]},"properties":{"nome":"Bari"}}]}'
+    )
+    res = _client().post("/quality/geo-schema", json={"content": gj, "table_name": "comuni"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["tabella"] == "comuni"
+    assert "CREATE TABLE comuni" in body["ddl_postgis"]
+    assert body["comando_geopackage"] == "ogr2ogr -f GPKG comuni.gpkg input.geojson"
+
+
+def test_geo_schema_csv_rejected() -> None:
+    res = _client().post("/quality/geo-schema", json={"content": "a,b\n1,2\n"})
+    assert res.status_code == 415
+
+
+def test_geo_schema_requires_input() -> None:
+    assert _client().post("/quality/geo-schema", json={}).status_code == 400

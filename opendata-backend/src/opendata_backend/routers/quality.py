@@ -19,10 +19,12 @@ from pydantic import BaseModel
 from opendata_core.quality import (
     advise_enrichment,
     advise_scale,
+    build_normalization,
     build_publish_package,
     csv_to_geojson,
     fix_csv,
     generate_dcat,
+    infer_geo_schema,
     infer_schema,
     json_to_geojson,
     profile_csv,
@@ -259,6 +261,56 @@ async def quality_schema(
         user.subject, "url" if body.url else "content", len(text),
     )
     return infer_schema(profile_csv(text), table_name=(body.table_name or "dataset"))
+
+
+@router.post("/quality/normalize")
+async def quality_normalize(
+    body: SchemaIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Normalizzazione & modello: tabelle di lookup + viste SQL da un CSV.
+
+    Completa `/quality/schema`: `build_normalization` estrae le colonne
+    categoriali ripetute in tabelle di lookup (DDL + INSERT con i valori reali)
+    e propone viste di aggregazione (totali per categoria, andamento per anno,
+    pivot categoria×anno quando entrambe esistono). Solo CSV (→ 415 per GeoJSON).
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="La normalizzazione (lookup/viste) vale per i CSV tabellari; i GeoJSON hanno un altro schema.",
+        )
+    log.info(
+        "/quality/normalize subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return build_normalization(text, table_name=(body.table_name or "dataset"))
+
+
+@router.post("/quality/geo-schema")
+async def quality_geo_schema(
+    body: SchemaIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Da GeoJSON a schema geografico: DDL PostGIS + comando GeoPackage.
+
+    Completa `/quality/schema` sul lato geografico: `infer_geo_schema` deduce
+    tipo di geometria e schema delle proprietà, genera il `CREATE TABLE`
+    PostGIS (colonna `geom` + indice GIST) e il comando `ogr2ogr` equivalente
+    per il GeoPackage. Solo GeoJSON (→ 415 per CSV).
+    """
+    text = await _resolve_input(body)
+    if not _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="Lo schema geografico vale per i GeoJSON; per i CSV usa /quality/schema.",
+        )
+    log.info(
+        "/quality/geo-schema subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return infer_geo_schema(text, table_name=(body.table_name or "dataset"))
 
 
 @router.post("/quality/to-geojson")
