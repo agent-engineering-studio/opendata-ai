@@ -233,3 +233,22 @@ def test_package_zip_contains_files() -> None:
 
 def test_package_requires_input() -> None:
     assert _client().post("/quality/package", json={}).status_code == 400
+
+
+def test_enrich_suggests_istat_join() -> None:
+    res = _client().post(
+        "/quality/enrich",
+        json={"content": "comune,popolazione\nGioia del Colle,27889\nBari,320475\n"},
+    )
+    assert res.status_code == 200
+    codici = {a["codice"] for a in res.json()["arricchimenti"]}
+    assert "join_istat" in codici
+
+
+def test_enrich_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    assert _client().post("/quality/enrich", json={"content": gj, "format": "geojson"}).status_code == 415
+
+
+def test_enrich_requires_input() -> None:
+    assert _client().post("/quality/enrich", json={}).status_code == 400
