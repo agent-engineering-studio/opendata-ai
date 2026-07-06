@@ -46,6 +46,19 @@ def test_package_returns_files() -> None:
     assert "Creative Commons" in files["LICENSE.txt"]
 
 
+def test_enrich_suggests_istat_join() -> None:
+    r = run_quality_skill({"azione": "enrich", "content": _CSV})
+    assert r["ok"] is True and r["azione"] == "enrich"
+    codici = {a["codice"] for a in r["result"]["arricchimenti"]}
+    assert "join_istat" in codici
+
+
+def test_enrich_rejects_geojson() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    r = run_quality_skill({"azione": "enrich", "content": gj, "format": "geojson"})
+    assert r["ok"] is False and "CSV" in r["error"]
+
+
 def test_fix_rejects_geojson() -> None:
     gj = '{"type":"FeatureCollection","features":[]}'
     r = run_quality_skill({"azione": "fix", "content": gj, "format": "geojson"})
@@ -62,4 +75,4 @@ def test_agent_card_publishes_quality_skill() -> None:
     card = build_agent_card("http://localhost:8000")
     ids = {s.id for s in card.skills}
     assert SKILL_QUALITY in ids
-    assert set(AZIONI) >= {"profile", "fix", "schema", "summary", "scale", "to-geojson", "validate"}
+    assert set(AZIONI) >= {"profile", "fix", "schema", "summary", "scale", "enrich", "to-geojson", "validate"}

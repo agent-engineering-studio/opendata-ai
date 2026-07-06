@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from opendata_core.quality import (
+    advise_enrichment,
     advise_scale,
     build_publish_package,
     csv_to_geojson,
@@ -25,7 +26,7 @@ from opendata_core.quality import (
 )
 
 # Azioni esposte (mirror della superficie REST /quality/*).
-AZIONI = ("profile", "fix", "schema", "summary", "scale", "to-geojson", "validate", "package")
+AZIONI = ("profile", "fix", "schema", "summary", "scale", "enrich", "to-geojson", "validate", "package")
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -77,6 +78,10 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
         if geo:
             return _err("'scale' supporta solo i CSV.")
         return ok(advise_scale(profile_csv(text), size_bytes=len(text.encode("utf-8"))))
+    if azione == "enrich":
+        if geo:
+            return _err("'enrich' supporta solo i CSV.")
+        return ok(advise_enrichment(profile_csv(text)))
     if azione == "to-geojson":
         is_json = text.lstrip()[:1] in ("[", "{") or fmt in ("json", "geojson")
         fn = json_to_geojson if is_json else csv_to_geojson

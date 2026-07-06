@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from opendata_core.quality import (
+    advise_enrichment,
     advise_scale,
     build_publish_package,
     csv_to_geojson,
@@ -211,6 +212,29 @@ async def quality_fix(
         user.subject, "url" if body.url else "content", len(text),
     )
     return fix_csv(text)
+
+
+@router.post("/quality/enrich")
+async def quality_enrich(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Suggerimenti di arricchimento: join codici ISTAT, geocoding indirizzi,
+    vocabolari controllati. Solo CSV (deducono dalle colonne tabellari); per i
+    GeoJSON le geometrie sono già geo-riferite → 415. Nessuna chiamata di rete:
+    euristiche deterministiche sui nomi/tipi delle colonne.
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="I suggerimenti di arricchimento valgono per i CSV tabellari; i GeoJSON sono già geo-riferiti.",
+        )
+    log.info(
+        "/quality/enrich subject=%s source=%s chars=%d",
+        user.subject, "url" if body.url else "content", len(text),
+    )
+    return advise_enrichment(profile_csv(text))
 
 
 @router.post("/quality/schema")

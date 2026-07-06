@@ -69,6 +69,9 @@ type ScaleResult = {
   dimensione: { bytes: number; leggibile: string; stimata: boolean; classe: "piccolo" | "medio" | "grande" };
   consigli: { codice: string; titolo: string; dettaglio: string; priorita: "alta" | "media" | "bassa" }[];
 };
+type EnrichResult = {
+  arricchimenti: { codice: string; titolo: string; dettaglio: string; colonne: string[] }[];
+};
 const PRIORITA_BADGE: Record<"alta" | "media" | "bassa", string> = {
   alta: "bg-danger",
   media: "bg-warning text-dark",
@@ -128,6 +131,8 @@ function QualitaInner() {
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [scale, setScale] = useState<ScaleResult | null>(null);
   const [scaleBusy, setScaleBusy] = useState(false);
+  const [enrich, setEnrich] = useState<EnrichResult | null>(null);
+  const [enrichBusy, setEnrichBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -396,6 +401,29 @@ function QualitaInner() {
     }
   }
 
+  // Suggerimenti di arricchimento: join ISTAT, geocoding, vocabolari (POST /quality/enrich).
+  async function generaEnrich() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setEnrichBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/enrich", { method: "POST", token, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setEnrich((await res.json()) as EnrichResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setEnrichBusy(false);
+    }
+  }
+
   async function analizza() {
     setLoading(true);
     setError(null);
@@ -407,6 +435,7 @@ function QualitaInner() {
     setConvert(null);
     setSummary(null);
     setScale(null);
+    setEnrich(null);
     try {
       const body = _body();
       if (!body) {
@@ -488,7 +517,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); }}
               >
                 Pulisci
               </button>
@@ -918,6 +947,41 @@ function QualitaInner() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* SUGGERIMENTI DI ARRICCHIMENTO (solo CSV) */}
+          {csv && (
+            <div className="card shadow-sm mt-4">
+              <div className="card-body">
+                <h2 className="h5 mb-1">Suggerimenti di arricchimento</h2>
+                <p className="text-muted small">
+                  In base alle colonne rilevate, suggerisce come arricchire il dato: join con i
+                  <strong> codici ISTAT</strong> dei comuni, <strong>geocoding</strong> degli indirizzi
+                  in coordinate mappabili, <strong>vocabolari controllati</strong> per le colonne
+                  categoriali a testo libero. Solo euristiche sul file, nessuna chiamata di rete.
+                </p>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaEnrich} disabled={enrichBusy}>
+                  {enrichBusy ? "Analizzo…" : "Suggerisci arricchimenti"}
+                </button>
+
+                {enrich && (
+                  <div className="mt-3">
+                    {enrich.arricchimenti.length === 0 ? (
+                      <span className="text-success small">Nessun arricchimento evidente: le colonne non richiamano luoghi, indirizzi o categorie a testo libero.</span>
+                    ) : (
+                      <ul className="list-group list-group-flush">
+                        {enrich.arricchimenti.map((a) => (
+                          <li key={a.codice} className="list-group-item px-0">
+                            <div className="fw-semibold">{a.titolo}</div>
+                            <div className="small text-muted">{a.dettaglio}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>
