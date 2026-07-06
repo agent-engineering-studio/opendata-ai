@@ -57,6 +57,7 @@ _LENS_GENERATORE: dict[str, str] = {
     "welfare": "welfare",
     "istruzione": "istruzione",
     "casa": "casa",
+    "reddito": "reddito",
     "ambiente": "ambiente",
     "sanita": "sanita",
 }
@@ -202,7 +203,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-07-06-lente-casa"
+PROMPT_VERSION = "2026-07-06-lente-reddito"
 
 
 class QualitaControllo(BaseModel):
@@ -334,6 +335,7 @@ def build_programma_task(
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
     casa_info: dict[str, Any] | None = None,
+    reddito_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
     aree_info: dict[str, Any] | None = None,
@@ -604,6 +606,19 @@ def build_programma_task(
                 "ETICHETTA SEMPRE il dato come 'Censimento 2011' (fotografia strutturale, "
                 "non congiunturale). Un'idea 'casa' deve ancorarsi a questi numeri (specie "
                 "abitazioni non occupate, affollamento, età del patrimonio) e citare questa fonte."
+            )
+        if reddito_info:
+            parts.append(
+                "LENTE REDDITO — DATI MEF DIPARTIMENTO DELLE FINANZE (dichiarazioni IRPEF, "
+                f"ANNUALE, anno d'imposta {reddito_info.get('anno')}): numero contribuenti="
+                f"{reddito_info.get('numero_contribuenti')}, reddito imponibile medio="
+                f"{reddito_info.get('reddito_medio_imponibile')} €, quota contribuenti in fascia "
+                f"bassa (<=15.000€)={reddito_info.get('quota_fascia_bassa_pct')}%, quota in fascia "
+                f"alta (>75.000€)={reddito_info.get('quota_fascia_alta_pct')}%. "
+                f"FONTE DA CITARE VERBATIM: {reddito_info.get('source_url')} . "
+                "ETICHETTA l'anno d'imposta esatto (dato ANNUALE, non strutturale come i "
+                "censimenti 8milaCensus). Un'idea 'reddito' deve ancorarsi a questi numeri "
+                "(specie quota fascia bassa alta o reddito medio basso) e citare questa fonte."
             )
         if ambiente_info:
             parts.append(
@@ -1120,6 +1135,7 @@ def build_programma_aggregator(
     welfare_info: dict[str, Any] | None = None,
     istruzione_info: dict[str, Any] | None = None,
     casa_info: dict[str, Any] | None = None,
+    reddito_info: dict[str, Any] | None = None,
     ambiente_info: dict[str, Any] | None = None,
     sanita_info: dict[str, Any] | None = None,
     comparabili_info: dict[str, Any] | None = None,
@@ -1461,6 +1477,31 @@ def build_programma_aggregator(
                 "fonte; etichetta 'Censimento 2011'."
             )
             _add_anchor("casa", narrative, [casa_res])
+
+        # Ancora REDDITO deterministica (MEF Dipartimento delle Finanze, dichiarazioni
+        # IRPEF): Resource citabile (host finanze.gov.it → _REDDITO_HOSTS) + sezione
+        # evidenza, come casa/lavoro. Dato ANNUALE (non strutturale): anno etichettato.
+        if reddito_info and reddito_info.get("source_url"):
+            src = reddito_info["source_url"].strip()
+            reddito_res = Resource(
+                name=f"MEF Dipartimento delle Finanze — Dichiarazioni IRPEF del comune (anno {reddito_info.get('anno')})",
+                url=src,
+                format="CSV",
+                source="mef",
+            )
+            if src not in {r.url.strip() for r in all_resources}:
+                all_resources.append(reddito_res)
+            narrative = (
+                f"Reddito dichiarato dai contribuenti del comune (MEF, anno d'imposta "
+                f"{reddito_info.get('anno')} — dato annuale). Numero contribuenti: "
+                f"{reddito_info.get('numero_contribuenti')}, reddito imponibile medio: "
+                f"{reddito_info.get('reddito_medio_imponibile')} €, quota in fascia bassa "
+                f"(<=15.000€): {reddito_info.get('quota_fascia_bassa_pct')}%, quota in fascia "
+                f"alta (>75.000€): {reddito_info.get('quota_fascia_alta_pct')}%. Un'idea "
+                "'reddito' ancori su questi numeri (specie fascia bassa/alta o reddito medio "
+                "basso) e citi questa fonte; etichetta l'anno d'imposta esatto."
+            )
+            _add_anchor("reddito", narrative, [reddito_res])
 
         # Ancora AMBIENTE/RISCHIO IDROGEOLOGICO deterministica (ISPRA IdroGEO):
         # pericolosità frane (P3+P4) e idraulica (alluvioni P3/P2) come Resource

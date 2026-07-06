@@ -5,6 +5,7 @@ export type ResourceSource =
   | "oecd"
   | "opencoesione"
   | "osm"
+  | "mef"
   | "kg"
   | "web";
 

@@ -101,12 +101,13 @@ di dati.
 
 **Cosa produce.** Un report strutturato e azionabile: **quadro di sintesi**,
 analisi **SWOT**, **proposte concrete**, e **idee nuove** ricavate dal
-**confronto con territori simili**. L'analisi tematica passa per **nove lenti**
+**confronto con territori simili**. L'analisi tematica passa per **dieci lenti**
 dedicate — *Commercio, Turismo, Lavoro, Trasporti, Welfare, Istruzione, Casa/
-Abitazioni, Ambiente, Sanità* — ciascuna ancorata a fonti specifiche (es. ISTAT
-ASIA per il commercio, indicatori di inclusione e **investimenti OpenCoesione**
-per il welfare, condizioni abitative ISTAT 8milaCensus per la casa). Le zone
-interne sono individuate via tag OpenStreetMap.
+Abitazioni, Reddito, Ambiente, Sanità* — ciascuna ancorata a fonti specifiche
+(es. ISTAT ASIA per il commercio, indicatori di inclusione e **investimenti
+OpenCoesione** per il welfare, condizioni abitative ISTAT 8milaCensus per la
+casa, dichiarazioni IRPEF del MEF per il reddito). Le zone interne sono
+individuate via tag OpenStreetMap.
 
 **Affidabilità e accountability.** Ogni affermazione è **evidence-based**,
 ancorata a fonti pubbliche verificabili — *non è materiale elettorale*. Sotto la
