@@ -2,7 +2,7 @@
 
 > Un solo server MCP, qualsiasi catalogo open data del mondo basato su CKAN.
 
-`ckan-mcp-server` è un wrapper [FastMCP](https://github.com/modelcontextprotocol/python-sdk) che espone i tool dell'[Action API di CKAN](https://docs.ckan.org/en/latest/api/index.html) a qualunque client MCP (Claude Desktop, Cursor, VS Code, agenti). La parte interessante: **ogni tool accetta un argomento `base_url` per-chiamata**, quindi una sola immagine Docker interroga `dati.gov.it`, `data.gov.uk`, `data.gov`, `open.canada.ca` o qualsiasi altro portale CKAN — senza redeploy. Quando `base_url` è omesso, il server usa il default `https://www.dati.gov.it/opendata`. È uno dei componenti dell'orchestratore **opendata-ai** per open data civici italiani ed europei.
+`ckan-mcp-server` è un wrapper [FastMCP](https://github.com/modelcontextprotocol/python-sdk) che espone i tool dell'[Action API di CKAN](https://docs.ckan.org/en/latest/api/index.html) a qualunque client MCP (Claude Desktop, Cursor, VS Code, agenti). La parte interessante: **ogni tool accetta un argomento `base_url` per-chiamata**, quindi una sola immagine Docker interroga `dati.gov.it`, `data.gov.uk`, `data.gov`, `open.canada.ca`, `dati.anticorruzione.it/opendata` (ANAC — dataset su appalti/contratti pubblici) o qualsiasi altro portale CKAN — senza redeploy. Quando `base_url` è omesso, il server usa il default `https://www.dati.gov.it/opendata`. È uno dei componenti dell'orchestratore **opendata-ai** per open data civici italiani ed europei.
 
 ## Cosa fa
 
@@ -26,6 +26,8 @@ CKAN è il software dietro la maggior parte dei portali open data pubblici. Ques
 | `ckan_resource_download` | Scarica il contenuto di una risorsa e lo restituisce come testo. Solo formati CSV, JSON, GeoJSON, TXT; per gli altri (PDF, XLSX, SHP…) restituisce solo l'URL. | `resource_url`, `format` |
 
 Ogni tool accetta l'argomento opzionale `base_url` (URL radice del portale, es. `https://data.gov.uk`): è questo che rende una sola istanza utilizzabile contro qualsiasi catalogo CKAN.
+
+**Nota su ANAC** (`base_url=https://dati.anticorruzione.it/opendata`, #99): il portale è CKAN autentico — `ckan_package_search`/`ckan_package_show` funzionano subito, nessun connettore dedicato serve. Ma tutte le risorse hanno `datastore_active: false`: sono dump bulk mensili/annuali (CSV/JSON/TTL da poche decine di MB a oltre 1GB), non righe interrogabili via `ckan_datastore_search`/`_sql`. La ricerca puntuale per CIG/ente in tempo reale esiste solo sulla Piattaforma dei Contratti Pubblici e richiede accreditamento PDND (istituzionale, non pubblico).
 
 ## Avvio rapido
 
