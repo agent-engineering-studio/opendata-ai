@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [ opendata_core, ckan-mcp-server, istat-mcp-server, opencoesione-mcp-server, ispra-mcp-server, ods-mcp-server, socrata-mcp-server, osm-mcp, maturity-mcp-server, opendata-backend ]
+        package: [ opendata_core, ckan-mcp-server, istat-mcp-server, opencoesione-mcp-server, ispra-mcp-server, ods-mcp-server, socrata-mcp-server, bdap-mcp-server, osm-mcp, maturity-mcp-server, opendata-backend ]
     steps:
       - uses: actions/checkout@v5
 
@@ -55,6 +55,7 @@ jobs:
           - { name: ispra-mcp-server, dockerfile: ispra-mcp-server/Dockerfile }
           - { name: ods-mcp-server,   dockerfile: ods-mcp-server/Dockerfile   }
           - { name: socrata-mcp-server, dockerfile: socrata-mcp-server/Dockerfile }
+          - { name: bdap-mcp-server, dockerfile: bdap-mcp-server/Dockerfile }
           - { name: osm-mcp,          dockerfile: osm-mcp/Dockerfile          }
           - { name: maturity-mcp-server, dockerfile: maturity-mcp-server/Dockerfile }
           - { name: opendata-backend, dockerfile: opendata-backend/Dockerfile }

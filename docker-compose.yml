@@ -210,6 +210,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── BDAP MCP server (Streamable HTTP) ─────
+  bdap-mcp:
+    build:
+      context: .
+      dockerfile: bdap-mcp-server/Dockerfile
+    image: bdap-mcp-server:local
+    container_name: bdap-mcp
+    ports:
+      - "${BDAP_MCP_PORT:-18090}:8080"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8080"
+      MCP_PATH: /mcp
+      BDAP_BASE_URL: ${BDAP_BASE_URL:-https://bdap-opendata.rgs.mef.gov.it}
+      BDAP_HTTP_TIMEOUT: "30"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── OSM MCP server — renders Leaflet+OSM HTML maps for GeoJSON ─────
   osm-mcp:
     build:
