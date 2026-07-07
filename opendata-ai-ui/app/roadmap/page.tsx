@@ -68,9 +68,9 @@ const ROADMAP: Punto[] = [
     titolo: "Più fonti collegate e un accesso unico per gli assistenti",
     perche:
       "I connettori OpenDataSoft e Socrata, le funzioni richiamabili da altri programmi via API e il monitoraggio automatico (aggiornamento, qualità, link) sono già attivi. Restano da collegare altre banche dati pubbliche e un punto d'accesso unico per gli assistenti esterni.",
-    issue: 99,
+    issue: 100,
     voci: [
-      { titolo: "Nuovi connettori", stato: "explore", testo: "Il connettore Socrata (portali open data USA/EU su piattaforma Socrata) è attivo come server MCP standalone — #98. Restano: appalti ANAC #99, bilanci degli enti BDAP #100, e — da definire — il catasto #147 (per ora senza una fonte open data generalista ovvia)." },
+      { titolo: "Nuovi connettori", stato: "explore", testo: "Il connettore Socrata (portali open data USA/EU su piattaforma Socrata) è attivo come server MCP standalone — #98. Gli appalti ANAC sono già accessibili come portale CKAN (dataset e metadati) senza connettore dedicato — #99; la ricerca puntuale per CIG/ente non è costruibile, richiede accreditamento istituzionale PDND. Restano: bilanci degli enti BDAP #100, e — da definire — il catasto #147 (per ora senza una fonte open data generalista ovvia)." },
       { titolo: "Tutte le funzioni come strumenti per altri assistenti (MCP)", stato: "near", testo: "Un connettore unico che mette le quattro modalità — Esplora, Territorio, Maturità e Qualità — a disposizione di assistenti e agenti esterni (es. OpenClaw, Claude Desktop) come strumenti pronti all'uso, riusando l'orchestrazione e l'accesso già esistenti. Issue #131." },
     ],
   },

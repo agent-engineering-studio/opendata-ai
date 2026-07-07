@@ -297,6 +297,10 @@ un formato che si è rotto.
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
 call via `base_url` in the chat payload or via `CKAN_DEFAULT_BASE_URL` env.
+Any CKAN portal works this way, including `dati.anticorruzione.it/opendata`
+(ANAC public-procurement catalog, #99) — dataset discovery only: its resources
+are bulk monthly/annual dumps (no CKAN DataStore), so per-CIG/per-authority
+row lookups aren't possible without PDND-gated institutional access.
 
 ## MCP servers
 
