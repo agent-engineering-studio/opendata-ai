@@ -10,6 +10,7 @@ on:
       - 'istat-mcp-server/**'
       - 'ods-mcp-server/**'
       - 'socrata-mcp-server/**'
+      - 'bdap-mcp-server/**'
       - 'osm-mcp/**'
       - 'web-mcp/**'
       - 'opendata-backend/**'
@@ -66,6 +67,9 @@ jobs:
           - name: socrata-mcp-server
             context: .
             dockerfile: socrata-mcp-server/Dockerfile
+          - name: bdap-mcp-server
+            context: .
+            dockerfile: bdap-mcp-server/Dockerfile
           - name: osm-mcp
             context: .
             dockerfile: osm-mcp/Dockerfile

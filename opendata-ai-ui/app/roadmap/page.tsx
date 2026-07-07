@@ -68,9 +68,9 @@ const ROADMAP: Punto[] = [
     titolo: "Più fonti collegate e un accesso unico per gli assistenti",
     perche:
       "I connettori OpenDataSoft e Socrata, le funzioni richiamabili da altri programmi via API e il monitoraggio automatico (aggiornamento, qualità, link) sono già attivi. Restano da collegare altre banche dati pubbliche e un punto d'accesso unico per gli assistenti esterni.",
-    issue: 100,
+    issue: 147,
     voci: [
-      { titolo: "Nuovi connettori", stato: "explore", testo: "Il connettore Socrata (portali open data USA/EU su piattaforma Socrata) è attivo come server MCP standalone — #98. Gli appalti ANAC sono già accessibili come portale CKAN (dataset e metadati) senza connettore dedicato — #99; la ricerca puntuale per CIG/ente non è costruibile, richiede accreditamento istituzionale PDND. Restano: bilanci degli enti BDAP #100, e — da definire — il catasto #147 (per ora senza una fonte open data generalista ovvia)." },
+      { titolo: "Nuovi connettori", stato: "explore", testo: "Il connettore Socrata (portali open data USA/EU su piattaforma Socrata) è attivo come server MCP standalone — #98. Gli appalti ANAC sono già accessibili come portale CKAN (dataset e metadati) senza connettore dedicato — #99; la ricerca puntuale per CIG/ente non è costruibile, richiede accreditamento istituzionale PDND. I bilanci comunali BDAP/SIOPE (entrate/spese per titolo, dato corrente) sono anch'essi attivi come server MCP standalone — #100. Resta da definire il catasto #147 (per ora senza una fonte open data generalista ovvia)." },
       { titolo: "Tutte le funzioni come strumenti per altri assistenti (MCP)", stato: "near", testo: "Un connettore unico che mette le quattro modalità — Esplora, Territorio, Maturità e Qualità — a disposizione di assistenti e agenti esterni (es. OpenClaw, Claude Desktop) come strumenti pronti all'uso, riusando l'orchestrazione e l'accesso già esistenti. Issue #131." },
     ],
   },
@@ -83,7 +83,7 @@ const ROADMAP: Punto[] = [
     issue: 94,
     voci: [
       { titolo: "Le 10 lenti di oggi", stato: "now", testo: "Commercio, Turismo & cultura, Lavoro, Trasporti & mobilità, Welfare, Istruzione, Casa & abitazioni, Reddito, Ambiente e Sanità: tutte a livello di comune, con le fonti sempre indicate." },
-      { titolo: "Finanza del comune", stato: "explore", testo: "I conti del comune restano il gap più evidente: il codice ente si ricava (registro BDAP), ma i dati veri (entrate/spese) sono dietro un form SIOPE senza API aperta — servirebbe una verifica manuale con un browser prima di costruire. Issue #92." },
+      { titolo: "Finanza del comune", stato: "explore", testo: "Il blocco sui dati veri (entrate/spese) è superato: BDAP espone i movimenti SIOPE cumulati per titolo di bilancio, interrogabili per comune senza download bulk — attivo come server MCP standalone (#100). Resta da costruire la lente vera e propria in /programma (connettore già pronto, manca l'iniezione nell'aggregatore). Issue #92." },
       { titolo: "Connettività digitale", stato: "explore", testo: "Verificato: né Infratel né AGCOM pubblicano la copertura fibra/FWA per comune come dataset aperto — solo mappe interattive senza esportazione, o un endpoint non ufficiale che copre solo lo stato dei cantieri, non le percentuali di copertura. Issue #93." },
     ],
   },

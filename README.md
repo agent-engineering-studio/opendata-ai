@@ -317,6 +317,7 @@ dedicato per ciascuno:
 | **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
 | **ods-mcp-server** | OpenDataSoft Explore API v2.1, `base_url` per-portale | [`ods-mcp-server/README.md`](ods-mcp-server/README.md) |
 | **socrata-mcp-server** | Socrata Discovery/Views/SODA API, `base_url` per-portale (standalone, non ancora nel fan-out) | [`socrata-mcp-server/README.md`](socrata-mcp-server/README.md) |
+| **bdap-mcp-server** | Bilanci comunali SIOPE (entrate/spese per titolo) via BDAP, query OData mirata (standalone, non ancora nel fan-out) | [`bdap-mcp-server/README.md`](bdap-mcp-server/README.md) |
 | **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
 | **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
 
@@ -346,6 +347,7 @@ dedicato per ciascuno:
 | `istat-mcp-server/` | FastMCP wrapper for SDMX 2.1 — works for ISTAT/Eurostat/OECD via the `agency` arg |
 | `ods-mcp-server/` | FastMCP wrapper for the OpenDataSoft Explore API v2.1 (`base_url` per-portal) |
 | `socrata-mcp-server/` | FastMCP wrapper for Socrata's Discovery/Views/SODA APIs (`base_url` per-portal, standalone) |
+| `bdap-mcp-server/` | FastMCP wrapper for BDAP/SIOPE municipal budgets (revenue/expense per titolo, OData-queried, standalone) |
 | `osm-mcp/` | FastMCP wrapper that renders GeoJSON into self-contained Leaflet+OSM HTML |
 | `opendata-backend/` | FastAPI app — routers (`datasets/me/api_keys/webhooks`), Clerk auth, Postgres ORM, Redis cache + rate limit, Claude classify |
 | `opendata-ai-ui/` | Next.js 15 static-export frontend (Clerk + Leaflet) |
