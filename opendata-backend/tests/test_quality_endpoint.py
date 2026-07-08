@@ -235,6 +235,45 @@ def test_package_requires_input() -> None:
     assert _client().post("/quality/package", json={}).status_code == 400
 
 
+def test_to_parquet_binary_ok() -> None:
+    import io
+
+    import pytest
+
+    pytest.importorskip("pyarrow")
+    import pyarrow.parquet as pq
+
+    res = _client().post("/quality/to-parquet", json={
+        "content": "comune;abitanti\nBari;320000\nMonopoli;49000\n",
+    })
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/vnd.apache.parquet"
+    assert 'filename="dati.parquet"' in res.headers["content-disposition"]
+    table = pq.read_table(io.BytesIO(res.content))
+    assert table.column_names == ["comune", "abitanti"]
+    assert table.column("abitanti").to_pylist() == [320000, 49000]
+
+
+def test_to_parquet_geojson_rejected() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    res = _client().post("/quality/to-parquet", json={"content": gj, "format": "geojson"})
+    assert res.status_code == 415
+
+
+def test_to_parquet_requires_input() -> None:
+    assert _client().post("/quality/to-parquet", json={}).status_code == 400
+
+
+def test_to_parquet_501_senza_pyarrow(monkeypatch) -> None:
+    import sys
+
+    # l'import lazy nel motore fallisce se sys.modules["pyarrow"] è None
+    monkeypatch.setitem(sys.modules, "pyarrow", None)
+    res = _client().post("/quality/to-parquet", json={"content": "a\n1\n"})
+    assert res.status_code == 501
+    assert "pyarrow" in res.json()["detail"]
+
+
 def test_enrich_suggests_istat_join() -> None:
     res = _client().post(
         "/quality/enrich",

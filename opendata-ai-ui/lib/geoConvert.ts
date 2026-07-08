@@ -358,7 +358,7 @@ function _isJunk(name: string): boolean {
  *  Returns null when the zip carries no map-renderable layer; ZipPreview will
  *  handle the per-entry case for non-geo archives.
  */
-async function unzipForGeo(buf: ArrayBuffer): Promise<GeoConvert> {
+export async function unzipForGeo(buf: ArrayBuffer): Promise<GeoConvert> {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(buf);
   const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir && !_isJunk(n));

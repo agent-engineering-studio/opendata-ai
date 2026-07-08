@@ -15,11 +15,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Convertitori avanzati del Quality Lab (#101): dipendenze pesanti tenute fuori
+# dal core puro — senza questo extra `csv_to_parquet` degrada con ok=False.
+converters = [
+    "pyarrow>=16.0",
+]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
     "pytest-httpx>=0.30.0",
     "ruff>=0.6.0",
+    "pyarrow>=16.0",
 ]
 
 [build-system]

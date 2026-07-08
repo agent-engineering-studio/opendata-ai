@@ -8,6 +8,7 @@ fail-safe (nessun DB / LLM / sessione richiesti).
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from opendata_core.quality import (
@@ -16,6 +17,7 @@ from opendata_core.quality import (
     build_normalization,
     build_publish_package,
     csv_to_geojson,
+    csv_to_parquet,
     fix_csv,
     generate_dcat,
     generate_schema_org,
@@ -32,7 +34,7 @@ from opendata_core.quality import (
 # Azioni esposte (mirror della superficie REST /quality/*).
 AZIONI = (
     "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
-    "geo-schema", "to-geojson", "validate", "metadata-schema-org", "package",
+    "geo-schema", "to-geojson", "to-parquet", "validate", "metadata-schema-org", "package",
 )
 
 
@@ -101,6 +103,15 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
         is_json = text.lstrip()[:1] in ("[", "{") or fmt in ("json", "geojson")
         fn = json_to_geojson if is_json else csv_to_geojson
         return ok(fn(text, lat_field=payload.get("lat_field"), lon_field=payload.get("lon_field")))
+    if azione == "to-parquet":
+        if geo:
+            return _err("'to-parquet' supporta solo i CSV.")
+        result = csv_to_parquet(text)
+        if result.get("content") is not None:
+            # bytes → base64 per restare JSON-serializzabili nell'artifact A2A
+            result = {**result, "content": base64.b64encode(result["content"]).decode("ascii"),
+                      "content_encoding": "base64"}
+        return ok(result)
     if azione == "metadata-schema-org":
         profile = profile_geojson(text) if geo else profile_csv(text)
         return ok(generate_schema_org(

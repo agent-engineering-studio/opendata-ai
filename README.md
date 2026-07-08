@@ -182,10 +182,10 @@ esperto di database:
 
 ```mermaid
 flowchart LR
-  A["📄 Carica un file<br/>CSV o GeoJSON"] --> B["🔍 Diagnosi<br/>errori + punteggio"]
+  A["📄 Carica un file<br/>CSV · GeoJSON<br/>Excel · Shapefile (zip)"] --> B["🔍 Diagnosi<br/>errori + punteggio"]
   B --> C["🩹 Correggi<br/>con un clic"]
   C --> D["✨ Arricchisci<br/>codici ISTAT · indirizzi · vocabolari"]
-  D --> E["🗂️ Organizza<br/>schema SQL/PostGIS · tabelle · viste"]
+  D --> E["🗂️ Organizza<br/>schema SQL/PostGIS · tabelle · viste · Parquet"]
   E --> F["🏷️ Descrivi<br/>scheda DCAT-AP_IT"]
   F --> G["📦 Pubblica<br/>pacchetto pronto (.zip)"]
 ```
@@ -218,6 +218,13 @@ suggerisce come renderlo più utile:
 - **Schede standard** — genera la scheda descrittiva in due vocabolari: **DCAT-AP_IT**
   (il catalogo nazionale) e **schema.org/Dataset** (quello letto da *Google
   Dataset Search*), entrambe validabili con lo stesso controllo FAIR + licenza.
+- **Convertitori avanzati** — non serve partire da un CSV: un file **Excel
+  (XLSX/XLS)** viene convertito in CSV direttamente nel browser (con scelta del
+  foglio), e uno **Shapefile zippato** diventa un GeoJSON già riproiettato in
+  WGS84, pronto per la mappa. In uscita, oltre al CSV corretto, si può scaricare
+  la versione **Parquet** (colonnare e compressa, con i tipi inferiti dal
+  contenuto): il consiglio "usa un formato colonnare" della sezione scala,
+  applicato con un clic.
 
 **A cosa serve / per chi.** È lo strumento di chi *pubblica* — uffici dati,
 RTD, open data manager — per alzare la qualità prima della pubblicazione e
@@ -372,8 +379,8 @@ discovery (`/.well-known/agent-card.json`) is public. Six skills are published
 (selected via `message.metadata.skill`): `search_open_data`, `find_geo_resources`,
 `classify_dataset`, `assess_maturity`, `analyze_territory` and `data_quality`
 (the Data Quality Lab — diagnosi, fix, arricchimento, schema, normalizzazione,
-schema geografico, riepiloghi, scala, conversione GeoJSON, validazione
-DCAT-AP_IT/schema.org + FAIR e pacchetto di pubblicazione).
+schema geografico, riepiloghi, scala, conversione GeoJSON, export Parquet,
+validazione DCAT-AP_IT/schema.org + FAIR e pacchetto di pubblicazione).
 
 | Method | Path | Description |
 |---|---|---|

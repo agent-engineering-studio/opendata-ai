@@ -52,6 +52,12 @@ azure = [
 claude = [
     "agent-framework-anthropic>=1.0.0b1",
 ]
+# Export Parquet del Quality Lab (#101): senza questo extra /quality/to-parquet
+# risponde 501 (il motore degrada, non solleva). In Docker arriva via
+# opendata-core[converters] nel builder.
+converters = [
+    "pyarrow>=16.0",
+]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
@@ -59,6 +65,7 @@ dev = [
     "ruff>=0.6.0",
     "fakeredis>=2.23.0",
     "aiosqlite>=0.20.0",
+    "pyarrow>=16.0",
 ]
 
 [project.scripts]

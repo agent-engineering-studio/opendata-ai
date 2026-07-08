@@ -107,6 +107,23 @@ const META_FIELDS: { k: keyof MetaForm; label: string; ph: string }[] = [
   { k: "frequenza", label: "Frequenza aggiornamento", ph: "Es. ANNUAL, MONTHLY" },
 ];
 type MetaForm = { titolo: string; descrizione: string; licenza: string; ente: string; tema: string; frequenza: string };
+// Conversione client-side del file caricato: XLSX→CSV o Shapefile.zip→GeoJSON (#101).
+type FileConv = {
+  origine: string;
+  tipo: "xlsx" | "shapefile";
+  messaggio: string;
+  fogli?: string[];
+  foglio?: string;
+};
+// I binari (XLSX/zip) sono convertiti in memoria nel browser: cap prudente.
+const MAX_FILE_BYTES = 30 * 1024 * 1024;
+const FILE_TROPPO_GRANDE = "File troppo grande (max 30 MB): riducilo o esporta una parte.";
+
+function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} kB`;
+  return `${n} B`;
+}
 
 const LIVELLO: Record<Finding["livello"], { label: string; badge: string; ord: number }> = {
   alto: { label: "Critico", badge: "bg-danger", ord: 0 },
@@ -238,14 +255,90 @@ function QualitaInner() {
   const [normalizeBusy, setNormalizeBusy] = useState(false);
   const [geoSchema, setGeoSchema] = useState<GeoSchemaResult | null>(null);
   const [geoSchemaBusy, setGeoSchemaBusy] = useState(false);
+  const [parquetBusy, setParquetBusy] = useState(false);
+  const [parquetInfo, setParquetInfo] = useState<string | null>(null);
+  // Esito della conversione client-side del file caricato (XLSX/Shapefile → testo).
+  const [fileConv, setFileConv] = useState<FileConv | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const xlsxBufRef = useRef<ArrayBuffer | null>(null);
 
-  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
+    setError(null);
+    setFileConv(null);
+    xlsxBufRef.current = null;
+
+    // XLSX/XLS → CSV nel browser (SheetJS): il CSV entra nel percorso normale.
+    if (/\.(xlsx|xls)$/i.test(f.name)) {
+      if (f.size > MAX_FILE_BYTES) { setError(FILE_TROPPO_GRANDE); return; }
+      try {
+        const buf = await f.arrayBuffer();
+        const { xlsxToCsv } = await import("@/lib/xlsxConvert");
+        const r = await xlsxToCsv(buf);
+        xlsxBufRef.current = buf;
+        setText(r.csv);
+        setUrl("");
+        setFileConv({
+          origine: f.name, tipo: "xlsx", fogli: r.fogli, foglio: r.foglio,
+          messaggio: r.fogli.length > 1
+            ? `Foglio di calcolo convertito in CSV (foglio "${r.foglio}" di ${r.fogli.length}).`
+            : "Foglio di calcolo convertito in CSV.",
+        });
+      } catch (err) {
+        setError(`Conversione non riuscita: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // Shapefile (.zip, anche KMZ/GeoJSON zippato) → GeoJSON WGS84 nel browser.
+    if (/\.(zip|kmz)$/i.test(f.name)) {
+      if (f.size > MAX_FILE_BYTES) { setError(FILE_TROPPO_GRANDE); return; }
+      try {
+        const buf = await f.arrayBuffer();
+        const { unzipForGeo } = await import("@/lib/geoConvert");
+        const r = await unzipForGeo(buf);
+        if (r.status !== "ok") {
+          setError(
+            "reason" in r
+              ? `Archivio non convertibile: ${r.reason}`
+              : "L'archivio non contiene uno shapefile o un layer geografico riconoscibile.",
+          );
+          return;
+        }
+        setText(JSON.stringify(r.geojson));
+        setUrl("");
+        setFileConv({
+          origine: f.name, tipo: "shapefile",
+          messaggio: "Archivio convertito in GeoJSON e riproiettato in WGS84 (EPSG:4326).",
+        });
+      } catch (err) {
+        setError(`Conversione non riuscita: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => { setText(String(reader.result ?? "")); setUrl(""); };
     reader.readAsText(f);
+  }
+
+  // Cambia foglio di un XLSX già caricato: riconverte dallo stesso buffer.
+  async function cambiaFoglio(foglio: string) {
+    const buf = xlsxBufRef.current;
+    if (!buf || !fileConv || fileConv.tipo !== "xlsx") return;
+    try {
+      const { xlsxToCsv } = await import("@/lib/xlsxConvert");
+      const r = await xlsxToCsv(buf, foglio);
+      setText(r.csv);
+      setFileConv({
+        ...fileConv, foglio: r.foglio,
+        messaggio: `Foglio di calcolo convertito in CSV (foglio "${r.foglio}" di ${r.fogli.length}).`,
+      });
+      setReport(null);
+    } catch (err) {
+      setError(`Conversione non riuscita: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   function _body(): { content: string } | { url: string } | null {
@@ -621,6 +714,37 @@ function QualitaInner() {
     }
   }
 
+  // Export Parquet (POST /quality/to-parquet): concretizza il consiglio "formato colonnare".
+  async function esportaParquet() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un CSV (incollalo o indica un URL)."); return; }
+    setParquetBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await apiFetch("/quality/to-parquet", { method: "POST", token, body: JSON.stringify(body) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      const blob = await res.blob();
+      _downloadBlob(blob, "dati.parquet");
+      // la riduzione si calcola qui: dimensione del CSV in input vs blob scaricato
+      const inBytes = text.trim() ? new Blob([text]).size : null;
+      setParquetInfo(
+        inBytes && inBytes > blob.size
+          ? `Parquet scaricato: ${fmtBytes(blob.size)} — il ${Math.round(100 * (1 - blob.size / inBytes))}% più leggero del CSV (${fmtBytes(inBytes)}).`
+          : `Parquet scaricato: ${fmtBytes(blob.size)}.`,
+      );
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setParquetBusy(false);
+    }
+  }
+
   // Suggerimenti di arricchimento: join ISTAT, geocoding, vocabolari (POST /quality/enrich).
   async function generaEnrich() {
     const body = _body();
@@ -660,6 +784,7 @@ function QualitaInner() {
     setGeoSchema(null);
     setSchemaOrg(null);
     setSchemaOrgValidation(null);
+    setParquetInfo(null);
     try {
       const body = _body();
       if (!body) {
@@ -692,10 +817,12 @@ function QualitaInner() {
     <div className="container py-4" style={{ maxWidth: 980 }}>
       <h1 className="h3 mb-1">Qualità dei dati</h1>
       <p className="text-muted">
-        Incolla un <strong>CSV</strong> o un <strong>GeoJSON</strong> (o caricane il file, o indica
-        un URL pubblico): il Data Quality Lab lo esamina e ti accompagna passo per passo, dalla
-        diagnosi alla pubblicazione — senza bisogno di essere un esperto di database. Tutto
-        deterministico: nessun dato inventato, solo ciò che si misura sul file.
+        Incolla un <strong>CSV</strong> o un <strong>GeoJSON</strong> — o carica direttamente un
+        file, anche <strong>Excel (XLSX/XLS)</strong> o uno <strong>Shapefile zippato</strong>,
+        convertiti al volo nel browser — oppure indica un URL pubblico: il Data Quality Lab lo
+        esamina e ti accompagna passo per passo, dalla diagnosi alla pubblicazione (con export
+        anche in <strong>Parquet</strong>) — senza bisogno di essere un esperto di database.
+        Tutto deterministico: nessun dato inventato, solo ciò che si misura sul file.
       </p>
       <PercorsoQualita />
 
@@ -718,7 +845,7 @@ function QualitaInner() {
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,.tsv,.txt,.geojson,.json,text/csv,application/geo+json,application/json"
+              accept=".csv,.tsv,.txt,.geojson,.json,.xlsx,.xls,.zip,.kmz,text/csv,application/geo+json,application/json"
               className="d-none"
               onChange={onFile}
             />
@@ -742,12 +869,41 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); setSchemaOrg(null); setSchemaOrgValidation(null); }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); setSchemaOrg(null); setSchemaOrgValidation(null); setParquetInfo(null); setFileConv(null); xlsxBufRef.current = null; }}
               >
                 Pulisci
               </button>
             )}
           </div>
+          {fileConv && (
+            <div className="alert alert-info mt-3 mb-0 py-2 small d-flex flex-wrap align-items-center gap-2">
+              <span>
+                <strong>{fileConv.origine}</strong> — {fileConv.messaggio}
+              </span>
+              {fileConv.tipo === "xlsx" && fileConv.fogli && fileConv.fogli.length > 1 && (
+                <span className="d-flex align-items-center gap-1 ms-auto">
+                  <label className="mb-0" htmlFor="foglio-xlsx">Foglio:</label>
+                  <select
+                    id="foglio-xlsx"
+                    className="form-select form-select-sm w-auto"
+                    value={fileConv.foglio}
+                    onChange={(e) => cambiaFoglio(e.target.value)}
+                  >
+                    {fileConv.fogli.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                </span>
+              )}
+              {fileConv.tipo === "shapefile" && (
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm ms-auto"
+                  onClick={() => _download(text, "dati-wgs84.geojson", "application/geo+json;charset=utf-8")}
+                >
+                  ⬇ Scarica GeoJSON
+                </button>
+              )}
+            </div>
+          )}
           {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
         </div>
       </div>
@@ -1247,11 +1403,19 @@ function QualitaInner() {
                 <p className="text-muted small">
                   In base alla dimensione e al contenuto del file, suggerisce come tenerlo veloce
                   da consultare anche con molti dati: formato compresso, indici, suddivisione e
-                  modalità di pubblicazione.
+                  modalità di pubblicazione. E il formato colonnare non è solo un consiglio: puoi
+                  scaricare subito la versione <strong>Parquet</strong> (compressa, tipi inferiti
+                  dal contenuto).
                 </p>
-                <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaScale} disabled={scaleBusy}>
-                  {scaleBusy ? "Valuto…" : "Valuta scala e performance"}
-                </button>
+                <div className="d-flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaScale} disabled={scaleBusy}>
+                    {scaleBusy ? "Valuto…" : "Valuta scala e performance"}
+                  </button>
+                  <button type="button" className="btn btn-success btn-sm" onClick={esportaParquet} disabled={parquetBusy}>
+                    {parquetBusy ? "Converto…" : "⬇ Esporta in Parquet"}
+                  </button>
+                </div>
+                {parquetInfo && <div className="alert alert-success py-2 small mt-2 mb-0">{parquetInfo}</div>}
 
                 {scale && (
                   <div className="mt-3">

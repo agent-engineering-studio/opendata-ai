@@ -37,6 +37,28 @@ def test_to_geojson() -> None:
     assert r["result"]["n_features"] == 1
 
 
+def test_to_parquet_base64() -> None:
+    import base64
+    import io
+
+    import pytest
+
+    pytest.importorskip("pyarrow")
+    import pyarrow.parquet as pq
+
+    r = run_quality_skill({"azione": "to-parquet", "content": _CSV})
+    assert r["ok"] is True and r["result"]["ok"] is True
+    assert r["result"]["content_encoding"] == "base64"
+    table = pq.read_table(io.BytesIO(base64.b64decode(r["result"]["content"])))
+    assert table.column("popolazione").to_pylist() == [320475, 95000]
+
+
+def test_to_parquet_rejects_geojson() -> None:
+    gj = '{"type":"FeatureCollection","features":[]}'
+    r = run_quality_skill({"azione": "to-parquet", "content": gj, "format": "geojson"})
+    assert r["ok"] is False and "CSV" in r["error"]
+
+
 def test_package_returns_files() -> None:
     r = run_quality_skill({"azione": "package", "content": _CSV, "licenza": "CC-BY-4.0",
                            "titolo": "Pop", "ente": "Regione Puglia"})
@@ -121,5 +143,5 @@ def test_agent_card_publishes_quality_skill() -> None:
     assert SKILL_QUALITY in ids
     assert set(AZIONI) >= {
         "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
-        "geo-schema", "to-geojson", "validate", "metadata-schema-org",
+        "geo-schema", "to-geojson", "to-parquet", "validate", "metadata-schema-org",
     }

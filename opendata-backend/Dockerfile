@@ -24,7 +24,8 @@ WORKDIR /app
 # Build context is the repo root.
 COPY opendata_core/pyproject.toml opendata_core/README.md /opendata_core/
 COPY opendata_core/src /opendata_core/src
-RUN pip install --upgrade pip && pip install /opendata_core
+# [converters] = pyarrow per l'export Parquet del Quality Lab (#101).
+RUN pip install --upgrade pip && pip install "/opendata_core[converters]"
 
 COPY opendata-backend/pyproject.toml opendata-backend/README.md opendata-backend/alembic.ini ./
 COPY opendata-backend/src ./src

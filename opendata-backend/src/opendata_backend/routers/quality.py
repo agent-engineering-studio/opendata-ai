@@ -22,6 +22,7 @@ from opendata_core.quality import (
     build_normalization,
     build_publish_package,
     csv_to_geojson,
+    csv_to_parquet,
     fix_csv,
     generate_dcat,
     generate_schema_org,
@@ -340,6 +341,41 @@ async def quality_to_geojson(
     )
     fn = json_to_geojson if is_json else csv_to_geojson
     return fn(text, lat_field=body.lat_field, lon_field=body.lon_field)
+
+
+@router.post("/quality/to-parquet")
+async def quality_to_parquet(
+    body: ProfileIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> Response:
+    """Convertitore avanzato (#101): CSV → Parquet colonnare e compresso.
+
+    Concretizza il consiglio "formato colonnare" di /quality/scale: tipi inferiti
+    con le regole del profilo (una colonna è tipizzata solo se tutti i valori
+    aderiscono, altrimenti resta testo — nessuna perdita). Risposta binaria come
+    /quality/package. Richiede l'extra `converters` (pyarrow): se assente → 501.
+    """
+    text = await _resolve_input(body)
+    if _is_geojson(text, (body.format or "").lower()):
+        raise HTTPException(
+            status_code=415,
+            detail="L'export Parquet vale per i CSV tabellari; per i GeoJSON usa GeoPackage (/quality/geo-schema).",
+        )
+    result = csv_to_parquet(text)
+    if not result["ok"]:
+        # pyarrow non installato → 501 (capability assente), input illeggibile → 422
+        status = 501 if "pyarrow" in (result["error"] or "") else 422
+        raise HTTPException(status_code=status, detail=result["error"])
+    log.info(
+        "/quality/to-parquet subject=%s source=%s righe=%d bytes_in=%d bytes_out=%d",
+        user.subject, "url" if body.url else "content",
+        result["righe"], result["dimensione_csv"], result["dimensione_parquet"],
+    )
+    return Response(
+        content=result["content"],
+        media_type="application/vnd.apache.parquet",
+        headers={"Content-Disposition": 'attachment; filename="dati.parquet"'},
+    )
 
 
 @router.post("/quality/metadata")

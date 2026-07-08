@@ -14,6 +14,7 @@ from .geoconvert import csv_to_geojson, json_to_geojson
 from .geoschema import infer_geo_schema
 from .normalize import build_normalization
 from .package import build_publish_package
+from .parquet import csv_to_parquet
 from .profile import profile_csv
 from .scale import advise_scale
 from .schema import infer_schema
@@ -25,5 +26,5 @@ __all__ = [
     "profile_csv", "fix_csv", "profile_geojson", "generate_dcat", "validate_dcat",
     "infer_schema", "csv_to_geojson", "json_to_geojson", "summarize_csv", "advise_scale",
     "build_publish_package", "advise_enrichment", "build_normalization", "infer_geo_schema",
-    "generate_schema_org", "validate_schema_org",
+    "generate_schema_org", "validate_schema_org", "csv_to_parquet",
 ]
