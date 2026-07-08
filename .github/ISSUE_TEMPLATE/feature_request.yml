@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement, integration or data-source adapter
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What should become easier, safer or more useful?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Data source / connector
+        - MCP server
+        - Backend/API
+        - Frontend/UI
+        - Data quality
+        - Civic report
+        - Documentation
+        - Security
+        - Other
+  - type: textarea
+    id: sources
+    attributes:
+      label: Relevant public sources, standards or examples

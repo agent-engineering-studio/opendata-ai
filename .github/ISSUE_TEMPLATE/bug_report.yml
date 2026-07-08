@@ -1,0 +1,43 @@
+name: Bug report
+description: Report something that is broken or incorrect
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the issue clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Query/source used
+        2. Component affected
+        3. Error or incorrect result
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Component
+      placeholder: frontend, backend, ckan-mcp-server, istat-mcp-server, quality lab...
+  - type: textarea
+    id: source
+    attributes:
+      label: Public data source or URL
+      description: Add the public dataset/API/resource if relevant.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: shell
