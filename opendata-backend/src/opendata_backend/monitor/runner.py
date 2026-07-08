@@ -23,10 +23,11 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from opendata_core.monitor import diff_runs, run_checks
+from opendata_core.monitor import check_maturity_regression, diff_runs, run_checks
 from opendata_core.quality import profile_csv, profile_geojson
 
 from ..config import Settings
+from ..db.repositories import maturity as maturity_repo
 from ..db.repositories import monitor as repo
 from ..db.territory_models import MonitorTarget
 from ..routers.datasets import _validate_proxy_url
@@ -92,10 +93,83 @@ def _profile_score(testo: str | None) -> float | None:
     return float(profilo.get("punteggio")) if profilo.get("punteggio") is not None else None
 
 
+def _esito(findings: list[dict[str, Any]]) -> str:
+    """Stessa regola di `run_checks`: critico se un finding è "alto"."""
+    if any(f.get("livello") == "alto" for f in findings):
+        return "critico"
+    return "attenzione" if findings else "ok"
+
+
+async def _notify_and_save(
+    session: AsyncSession, target: MonitorTarget, *,
+    settings: Settings, findings: list[dict[str, Any]], diff: dict[str, Any],
+    quality_score: float | None,
+) -> dict[str, Any]:
+    """Coda comune dei check: notifica SOLO sui finding nuovi, poi persiste lo snapshot."""
+    esito_run = {"esito": _esito(findings), "findings": findings}
+    notificato = False
+    if diff["nuovi"]:
+        target_dict = {"id": target.id, "url": target.url, "entity_id": target.entity_id, "kind": target.kind}
+        payload = build_notification_payload(target_dict, esito_run, diff)
+        if target.webhook_url:
+            notificato = await send_webhook(target.webhook_url, payload) or notificato
+        if target.notify_email:
+            corpo = build_email_body(target_dict, esito_run, diff)
+            notificato = send_email(
+                target.notify_email, f"[OpenData AI] Monitoraggio — {esito_run['esito']}", corpo, settings,
+            ) or notificato
+
+    await repo.save_run(
+        session, target_id=target.id, esito=esito_run["esito"], findings=findings,
+        diff=diff, quality_score=quality_score, notified=notificato,
+    )
+    log.info(
+        "monitor target=%d kind=%s esito=%s nuovi=%d notificato=%s",
+        target.id, target.kind, esito_run["esito"], len(diff["nuovi"]), notificato,
+    )
+    return {"target_id": target.id, "esito": esito_run["esito"], "nuovi": len(diff["nuovi"]), "notificato": notificato}
+
+
+async def check_maturity_watch(
+    session: AsyncSession, target: MonitorTarget, *, settings: Settings,
+) -> dict[str, Any]:
+    """Watch della scorecard ODM (#103): confronta gli ultimi due assessment dell'ente.
+
+    Passivo e read-only: nessun fetch, scatta quando una nuova valutazione viene
+    persistita (POST /maturity/assess o batch). Fail-safe: con 0-1 assessment il
+    run è "ok" senza finding. Il no-renotify è lo stesso dei target dataset
+    (`diff_runs` per codice): un calo già segnalato non genera nuove notifiche
+    finché non rientra o non ne compare uno diverso.
+    """
+    assessments = await maturity_repo.last_two_assessments(session, target.entity_id)
+    findings: list[dict[str, Any]] = []
+    overall = None
+    if assessments:
+        att = assessments[0]
+        overall = float(att.score_overall) if att.score_overall is not None else None
+    if len(assessments) == 2:
+        att, prec = assessments
+        findings = check_maturity_regression(
+            overall_attuale=float(att.score_overall) if att.score_overall is not None else None,
+            overall_precedente=float(prec.score_overall) if prec.score_overall is not None else None,
+            livello_attuale=att.level,
+            livello_precedente=prec.level,
+        )
+
+    prec_run = await repo.latest_run(session, target.id)
+    diff = diff_runs(prec_run.findings_jsonb if prec_run else None, findings)
+    return await _notify_and_save(
+        session, target, settings=settings, findings=findings, diff=diff, quality_score=overall,
+    )
+
+
 async def check_target(
     session: AsyncSession, target: MonitorTarget, *, settings: Settings, ora: datetime,
 ) -> dict[str, Any]:
     """Esegue un controllo completo su un target e persiste lo snapshot. Fail-safe."""
+    if target.kind == "maturity":
+        return await check_maturity_watch(session, target, settings=settings)
+
     dati = await _fetch(target.url, settings.monitor_http_timeout_seconds)
     punteggio_attuale = _profile_score(dati["testo"])
 
@@ -112,28 +186,10 @@ async def check_target(
         link_risultati=[{"url": target.url, "status_code": dati["status_code"], "errore": dati["errore"]}],
     )
     diff = diff_runs(findings_precedenti, esito_run["findings"])
-
-    notificato = False
-    if diff["nuovi"]:
-        target_dict = {"id": target.id, "url": target.url, "entity_id": target.entity_id}
-        payload = build_notification_payload(target_dict, esito_run, diff)
-        if target.webhook_url:
-            notificato = await send_webhook(target.webhook_url, payload) or notificato
-        if target.notify_email:
-            corpo = build_email_body(target_dict, esito_run, diff)
-            notificato = send_email(
-                target.notify_email, f"[OpenData AI] Monitoraggio — {esito_run['esito']}", corpo, settings,
-            ) or notificato
-
-    await repo.save_run(
-        session, target_id=target.id, esito=esito_run["esito"], findings=esito_run["findings"],
-        diff=diff, quality_score=punteggio_attuale, notified=notificato,
+    return await _notify_and_save(
+        session, target, settings=settings, findings=esito_run["findings"], diff=diff,
+        quality_score=punteggio_attuale,
     )
-    log.info(
-        "monitor target=%d esito=%s nuovi=%d notificato=%s",
-        target.id, esito_run["esito"], len(diff["nuovi"]), notificato,
-    )
-    return {"target_id": target.id, "esito": esito_run["esito"], "nuovi": len(diff["nuovi"]), "notificato": notificato}
 
 
 async def run_monitor(session: AsyncSession, *, settings: Settings) -> dict[str, Any]:
@@ -158,6 +214,14 @@ def main() -> None:
         description="Controlla freshness/qualità/link dei target monitorati e notifica i cambiamenti.",
     )
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
+    # Watch di maturità (#103): crea il target e esce, senza eseguire i controlli.
+    # Le notifiche esterne restano dietro config esplicita (webhook/email qui sotto).
+    parser.add_argument(
+        "--add-maturity-watch", type=int, metavar="ENTITY_ID", default=None,
+        help="crea un watch sulla scorecard di maturità dell'ente indicato ed esce",
+    )
+    parser.add_argument("--webhook-url", default=None, help="webhook da notificare (solo con --add-maturity-watch)")
+    parser.add_argument("--notify-email", default=None, help="email da notificare (solo con --add-maturity-watch)")
     args = parser.parse_args()
     if not args.database_url:
         parser.error("serve --database-url o la variabile DATABASE_URL")
@@ -174,6 +238,14 @@ def main() -> None:
         db = create_database(args.database_url)
         try:
             async with db.sessionmaker() as session:
+                if args.add_maturity_watch is not None:
+                    row = await repo.create_target(
+                        session, kind="maturity", entity_id=args.add_maturity_watch,
+                        webhook_url=args.webhook_url, notify_email=args.notify_email,
+                    )
+                    await session.commit()
+                    print(f"OK: watch maturità id={row.id} per entity_id={args.add_maturity_watch}")
+                    return
                 summary = await run_monitor(session, settings=get_settings())
             print(f"OK: monitor su {summary['n_target']} target")
         finally:

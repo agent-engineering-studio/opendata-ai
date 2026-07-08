@@ -14,8 +14,10 @@ from __future__ import annotations
 from .engine import diff_runs, run_checks
 from .freshness import check_freshness
 from .links import check_links
+from .maturity_regression import check_maturity_regression
 from .quality_regression import check_quality_regression
 
 __all__ = [
     "run_checks", "diff_runs", "check_freshness", "check_quality_regression", "check_links",
+    "check_maturity_regression",
 ]

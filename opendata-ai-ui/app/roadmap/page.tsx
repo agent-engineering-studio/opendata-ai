@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Roadmap — OpenData AI",
   description:
-    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma da qui. Il Data Quality Lab (con convertitori Excel/Shapefile/Parquet e stima High-Value Dataset), la maturità open data e il monitoraggio automatico sono già attivi; restano aperti gli avvisi di maturità nel tempo, nuove fonti collegate, nuove lenti per il territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
+    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma da qui. Il Data Quality Lab (con convertitori Excel/Shapefile/Parquet e stima High-Value Dataset), la maturità open data e il monitoraggio automatico (con avvisi sulle regressioni di maturità) sono già attivi; restano aperte nuove fonti collegate, nuove lenti per il territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
 };
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
@@ -31,17 +31,6 @@ type Punto = {
 const ROADMAP: Punto[] = [
   {
     n: "01",
-    icon: "📊",
-    titolo: "Avvisi di maturità nel tempo",
-    perche:
-      "La pagella in quattro aree, il piano su misura per salire di livello e il confronto con enti simili sono già attivi. Resta l'ultimo passo: avvisare in automatico quando la maturità di un ente peggiora, non solo mostrarne l'andamento.",
-    issue: 103,
-    voci: [
-      { titolo: "Regressioni di maturità", stato: "explore", testo: "Confronta la pagella tra una valutazione e la successiva e segnala i cali di punteggio o di livello, appena succedono — si appoggia all'agente di monitoraggio automatico già attivo (freshness/qualità/link). Issue #103." },
-    ],
-  },
-  {
-    n: "02",
     icon: "🤖",
     titolo: "Più fonti collegate e un accesso unico per gli assistenti",
     perche:
@@ -53,7 +42,7 @@ const ROADMAP: Punto[] = [
     ],
   },
   {
-    n: "03",
+    n: "02",
     icon: "🗺️",
     titolo: "Leggere un comune da più punti di vista",
     perche:
@@ -66,7 +55,7 @@ const ROADMAP: Punto[] = [
     ],
   },
   {
-    n: "04",
+    n: "03",
     icon: "🏗️",
     titolo: "Dal dato alla realtà: cosa c'è davvero su quel terreno",
     perche:

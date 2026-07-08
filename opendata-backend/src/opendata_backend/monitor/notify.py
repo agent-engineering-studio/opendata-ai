@@ -80,7 +80,10 @@ def build_notification_payload(
 ) -> dict[str, Any]:
     """Corpo condiviso webhook/email: target, esito, finding, cosa è cambiato."""
     return {
-        "target": {"id": target.get("id"), "url": target.get("url"), "entity_id": target.get("entity_id")},
+        "target": {
+            "id": target.get("id"), "url": target.get("url"),
+            "entity_id": target.get("entity_id"), "kind": target.get("kind", "dataset"),
+        },
         "esito": run_result["esito"],
         "findings": run_result["findings"],
         "diff": diff,
@@ -88,9 +91,10 @@ def build_notification_payload(
 
 
 def build_email_body(target: dict[str, Any], run_result: dict[str, Any], diff: dict[str, Any]) -> str:
+    risorsa = target.get("url") or f"scorecard di maturità (ente {target.get('entity_id')})"
     righe = [
         f"Monitoraggio OpenData AI — esito: {run_result['esito'].upper()}",
-        f"Risorsa: {target.get('url')}",
+        f"Risorsa: {risorsa}",
         "",
     ]
     if diff.get("nuovi"):

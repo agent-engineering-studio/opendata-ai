@@ -279,6 +279,15 @@ di qualità è **peggiorato** rispetto all'ultima volta? Quando succede qualcosa
 di nuovo — non ogni volta, solo quando cambia — **notifica** su un webhook o
 via email (entrambi opzionali, configurati per singola risorsa).
 
+**Avvisi di maturità nel tempo.** Oltre alle singole risorse, l'agente può
+osservare l'intera **scorecard di maturità** di un ente: quando una nuova
+valutazione risulta peggiore della precedente — calo del punteggio, retrocessione
+di livello (es. da Fast-tracker a Follower), o un ente che scivola in "dato
+insufficiente" — parte lo stesso avviso, una sola volta per regressione. Si
+attiva con `opendata-monitor --add-maturity-watch <entity_id>` (più webhook/email
+opzionali); l'esito compare anche nella sezione "Monitoraggio automatico" della
+pagina Maturità, accanto all'andamento nel tempo.
+
 **Come si usa.** Console-script `opendata-monitor` (stesso schema di
 `opendata-batch`): lanciato da cron, legge le risorse da controllare dalla
 tabella `opendata.monitor_targets`, salva ogni controllo come snapshot in
@@ -289,7 +298,7 @@ via `GET /monitor/{entity_id}`.
 **A cosa serve / per chi.** È il "non devo controllare io ogni giorno" per
 chi pubblica: un ente collega le proprie risorse una volta e riceve un avviso
 solo quando serve davvero — un link rotto, un dataset che non si aggiorna più,
-un formato che si è rotto.
+un formato che si è rotto, una pagella di maturità in calo.
 
 ## Supported open data sources
 

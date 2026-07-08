@@ -328,9 +328,12 @@ class MonitorTarget(Base):
     entity_id: Mapped[int | None] = mapped_column(
         ForeignKey("opendata.entities.id", ondelete="SET NULL"), nullable=True
     )
+    # "dataset" = risorsa con URL (freshness/qualità/link); "maturity" = watch
+    # della scorecard ODM dell'ente (#103): niente URL, confronta gli assessment.
+    kind: Mapped[str] = mapped_column(Text, nullable=False, default="dataset")
     source: Mapped[str | None] = mapped_column(Text, nullable=True)  # es. "ckan"
     dataset_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    url: Mapped[str] = mapped_column(Text, nullable=False)  # risorsa da controllare
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)  # risorsa (solo kind=dataset)
     accrual_periodicity: Mapped[str | None] = mapped_column(Text, nullable=True)  # DCAT-AP_IT
     webhook_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     notify_email: Mapped[str | None] = mapped_column(Text, nullable=True)
