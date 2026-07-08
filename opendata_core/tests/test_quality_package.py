@@ -49,3 +49,14 @@ def test_readme_elenca_cose_da_sistemare() -> None:
     readme = pkg["files"]["README.txt"]
     assert "DA SISTEMARE PRIMA DI PUBBLICARE" in readme
     assert "COME PUBBLICARE" in readme
+
+
+def test_readme_sezione_hvd_stimata() -> None:
+    csv = "fermate,orari\nPiazza Moro,07:30\n"
+    pkg = build_publish_package(
+        profile_csv(csv), data_filename="dati.csv", data_content=csv,
+        titolo="Fermate TPL", licenza="CC-BY-4.0",
+    )
+    readme = pkg["files"]["README.txt"]
+    assert "CATEGORIA HVD (STIMATA)" in readme
+    assert "Mobilità" in readme and "2023/138" in readme

@@ -68,3 +68,24 @@ def test_accetta_anche_il_dataset_diretto() -> None:
                          url="https://x.it/d.csv")
     v = validate_dcat(meta["dataset"])
     assert v["licenza"]["aperta"] is True
+
+
+def test_hvd_stimata_finding_informativo_non_blocca() -> None:
+    meta = generate_dcat(
+        profile_csv("fermate,orari\nPiazza Moro,07:30\n"),
+        titolo="Fermate TPL", descrizione="Y", licenza="CC-BY-4.0",
+        ente="Z", tema="TRAN", frequenza="ANNUAL", url="https://x.it/d.csv",
+    )
+    v = validate_dcat(meta)
+    f = next(f for f in v["findings"] if f["codice"] == "hvd_stimata")
+    assert f["livello"] == "basso"
+    assert "Mobilità" in f["messaggio"] and "TRAN" in f["messaggio"]
+    assert v["valido"] is True  # informativo: non tocca la conformità
+
+
+def test_hvd_bassa_confidenza_non_genera_finding() -> None:
+    # _CSV ha solo "popolazione" (1 indizio → bassa): niente rumore in validazione
+    meta = generate_dcat(profile_csv(_CSV), titolo="X", descrizione="Y",
+                         licenza="CC-BY-4.0", ente="Z", tema="SOCI",
+                         frequenza="ANNUAL", url="https://x.it/d.csv")
+    assert not any(f["codice"] == "hvd_stimata" for f in validate_dcat(meta)["findings"])

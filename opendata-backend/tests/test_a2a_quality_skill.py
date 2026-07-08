@@ -37,6 +37,14 @@ def test_to_geojson() -> None:
     assert r["result"]["n_features"] == 1
 
 
+def test_hvd_stima_con_confidenza() -> None:
+    r = run_quality_skill({"azione": "hvd", "content": "fermate,orari\nPiazza Moro,07:30\n"})
+    assert r["ok"] is True
+    top = r["result"]["categorie"][0]
+    assert top["codice"] == "mobility" and top["confidenza"] == "media"
+    assert "nota" in r["result"]
+
+
 def test_to_parquet_base64() -> None:
     import base64
     import io
@@ -142,6 +150,6 @@ def test_agent_card_publishes_quality_skill() -> None:
     ids = {s.id for s in card.skills}
     assert SKILL_QUALITY in ids
     assert set(AZIONI) >= {
-        "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
+        "profile", "fix", "schema", "normalize", "summary", "scale", "enrich", "hvd",
         "geo-schema", "to-geojson", "to-parquet", "validate", "metadata-schema-org",
     }

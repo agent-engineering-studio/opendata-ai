@@ -74,6 +74,20 @@ type ScaleResult = {
 type EnrichResult = {
   arricchimenti: { codice: string; titolo: string; dettaglio: string; colonne: string[] }[];
 };
+// Stima High-Value Dataset (#102): categorie UE con confidenza esplicita, mai un verdetto.
+type HvdResult = {
+  categorie: {
+    codice: string; etichetta: string;
+    confidenza: "alta" | "media" | "bassa";
+    indizi: string[]; tema_eu: string;
+  }[];
+  nota: string;
+};
+const CONFIDENZA_BADGE: Record<"alta" | "media" | "bassa", string> = {
+  alta: "bg-success",
+  media: "bg-warning text-dark",
+  bassa: "bg-secondary",
+};
 type NormalizeResult = {
   tabelle_lookup: {
     colonna_originale: string; tabella: string; colonna_fk_suggerita: string;
@@ -251,6 +265,8 @@ function QualitaInner() {
   const [scaleBusy, setScaleBusy] = useState(false);
   const [enrich, setEnrich] = useState<EnrichResult | null>(null);
   const [enrichBusy, setEnrichBusy] = useState(false);
+  const [hvd, setHvd] = useState<HvdResult | null>(null);
+  const [hvdBusy, setHvdBusy] = useState(false);
   const [normalize, setNormalize] = useState<NormalizeResult | null>(null);
   const [normalizeBusy, setNormalizeBusy] = useState(false);
   const [geoSchema, setGeoSchema] = useState<GeoSchemaResult | null>(null);
@@ -714,6 +730,30 @@ function QualitaInner() {
     }
   }
 
+  // Stima High-Value Dataset (POST /quality/hvd): categoria UE + confidenza + indizi.
+  async function generaHvd() {
+    const body = _body();
+    if (!body) { setError("Analizza prima un file (incolla CSV/GeoJSON o un URL)."); return; }
+    setHvdBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const extra = meta.titolo.trim() ? { titolo: meta.titolo.trim() } : {};
+      const res = await apiFetch("/quality/hvd", { method: "POST", token, body: JSON.stringify({ ...body, ...extra }) });
+      if (!res.ok) {
+        let msg = `Errore ${res.status}`;
+        try { const j = await res.json(); if (j?.detail) msg = typeof j.detail === "string" ? j.detail : msg; } catch { /* */ }
+        setError(msg);
+        return;
+      }
+      setHvd((await res.json()) as HvdResult);
+    } catch (e) {
+      setError(`Errore di rete: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setHvdBusy(false);
+    }
+  }
+
   // Export Parquet (POST /quality/to-parquet): concretizza il consiglio "formato colonnare".
   async function esportaParquet() {
     const body = _body();
@@ -785,6 +825,7 @@ function QualitaInner() {
     setSchemaOrg(null);
     setSchemaOrgValidation(null);
     setParquetInfo(null);
+    setHvd(null);
     try {
       const body = _body();
       if (!body) {
@@ -869,7 +910,7 @@ function QualitaInner() {
               <button
                 type="button"
                 className="btn btn-link text-muted p-0"
-                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); setSchemaOrg(null); setSchemaOrgValidation(null); setParquetInfo(null); setFileConv(null); xlsxBufRef.current = null; }}
+                onClick={() => { setText(""); setUrl(""); setReport(null); setError(null); setFixChanges(null); setDcat(null); setValidation(null); setSchema(null); setConvert(null); setSummary(null); setScale(null); setEnrich(null); setNormalize(null); setGeoSchema(null); setSchemaOrg(null); setSchemaOrgValidation(null); setParquetInfo(null); setHvd(null); setFileConv(null); xlsxBufRef.current = null; }}
               >
                 Pulisci
               </button>
@@ -1483,6 +1524,50 @@ function QualitaInner() {
               </div>
             </div>
           )}
+
+          {/* I DATI CHE CONTANO DI PIÙ — stima HVD (CSV e GeoJSON) */}
+          <div className="card shadow-sm mt-4">
+            <div className="card-body">
+              <h2 className="h5 mb-1">I dati che contano di più (HVD)</h2>
+              <p className="text-muted small">
+                Stima se il file rientra in una delle 6 categorie di <strong>High-Value
+                Dataset</strong> della normativa UE (Reg. 2023/138) — geospaziale, ambiente,
+                meteo, statistici, imprese, mobilità. Per gli HVD valgono obblighi specifici:
+                licenza aperta, formato machine-readable e disponibilità via API. È
+                un&apos;euristica sui nomi di colonna, sul titolo e sul nome del file: ogni stima
+                mostra la sua <strong>confidenza</strong> e gli indizi — mai un verdetto secco.
+              </p>
+              <button type="button" className="btn btn-outline-primary btn-sm" onClick={generaHvd} disabled={hvdBusy}>
+                {hvdBusy ? "Stimo…" : "Stima categoria HVD"}
+              </button>
+
+              {hvd && (
+                <div className="mt-3">
+                  {hvd.categorie.length === 0 ? (
+                    <span className="text-muted small">{hvd.nota}</span>
+                  ) : (
+                    <>
+                      <ul className="list-group list-group-flush">
+                        {hvd.categorie.map((c) => (
+                          <li key={c.codice} className="list-group-item px-0 d-flex gap-2 align-items-start">
+                            <span className={`badge ${CONFIDENZA_BADGE[c.confidenza]} flex-shrink-0`} style={{ minWidth: 96 }}>
+                              confidenza {c.confidenza}
+                            </span>
+                            <span>
+                              <span className="fw-semibold">{c.etichetta}</span>
+                              <span className="text-muted small"> · tema EU coerente: <code>{c.tema_eu}</code></span>
+                              <div className="small text-muted">Indizi: {c.indizi.join("; ")}</div>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="text-muted small mt-2">{hvd.nota}</div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* SCHEDA DCAT-AP_IT */}
           <div className="card shadow-sm mt-4">

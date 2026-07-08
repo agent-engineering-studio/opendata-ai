@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Roadmap — OpenData AI",
   description:
-    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma da qui. Il Data Quality Lab, la maturità open data e il monitoraggio automatico sono già attivi; restano aperti gli avvisi di maturità nel tempo, i dataset ad alto valore, nuove fonti collegate, nuove lenti per il territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
+    "La roadmap di sviluppo di OpenData AI: dove cresce la piattaforma da qui. Il Data Quality Lab (con convertitori Excel/Shapefile/Parquet e stima High-Value Dataset), la maturità open data e il monitoraggio automatico sono già attivi; restano aperti gli avvisi di maturità nel tempo, nuove fonti collegate, nuove lenti per il territorio e la riconciliazione tra mappa e stato reale del suolo. Niente scadenze, solo direzioni utili.",
 };
 
 const ISSUES_BASE = "https://github.com/agent-engineering-studio/opendata-ai/issues";
@@ -42,28 +42,6 @@ const ROADMAP: Punto[] = [
   },
   {
     n: "02",
-    icon: "⚙️",
-    titolo: "Convertitori avanzati per i formati più diffusi",
-    perche:
-      "Mettere ordine in una tabella, i riepiloghi pronti, i consigli per i file grandi e la conversione in mappa (GeoJSON) sono già attivi nella pagina Qualità. Resta da leggere i formati più \"pesanti\": fogli Excel e mappe Shapefile.",
-    issue: 101,
-    voci: [
-      { titolo: "Excel e Shapefile", stato: "explore", testo: "Convertitori dedicati per i formati più diffusi negli enti ma non ancora supportati: fogli Excel (XLSX→CSV), mappe Shapefile (→GeoJSON) ed esportazione in formato compresso (Parquet). Issue #101." },
-    ],
-  },
-  {
-    n: "03",
-    icon: "🔗",
-    titolo: "I dati che contano di più, dataset per dataset",
-    perche:
-      "Il controllo della scheda descrittiva (in due standard: DCAT-AP_IT e schema.org), il pacchetto pronto da pubblicare e il controllo della licenza sono già attivi nella pagina Qualità. Resta da capire, file per file, quali dataset rientrano tra quelli ad alto valore per l'Europa.",
-    issue: 102,
-    voci: [
-      { titolo: "High-Value Dataset per singolo file", stato: "explore", testo: "Oggi la copertura degli High-Value Dataset UE si vede a livello di ente, nella pagina Maturità. Resta da stimarla anche per il singolo file caricato in Qualità, con priorità di pubblicazione. Issue #102." },
-    ],
-  },
-  {
-    n: "04",
     icon: "🤖",
     titolo: "Più fonti collegate e un accesso unico per gli assistenti",
     perche:
@@ -75,7 +53,7 @@ const ROADMAP: Punto[] = [
     ],
   },
   {
-    n: "05",
+    n: "03",
     icon: "🗺️",
     titolo: "Leggere un comune da più punti di vista",
     perche:
@@ -88,7 +66,7 @@ const ROADMAP: Punto[] = [
     ],
   },
   {
-    n: "06",
+    n: "04",
     icon: "🏗️",
     titolo: "Dal dato alla realtà: cosa c'è davvero su quel terreno",
     perche:

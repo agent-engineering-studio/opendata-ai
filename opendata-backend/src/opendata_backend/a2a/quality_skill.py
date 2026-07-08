@@ -13,6 +13,7 @@ from typing import Any
 
 from opendata_core.quality import (
     advise_enrichment,
+    advise_hvd,
     advise_scale,
     build_normalization,
     build_publish_package,
@@ -33,7 +34,7 @@ from opendata_core.quality import (
 
 # Azioni esposte (mirror della superficie REST /quality/*).
 AZIONI = (
-    "profile", "fix", "schema", "normalize", "summary", "scale", "enrich",
+    "profile", "fix", "schema", "normalize", "summary", "scale", "enrich", "hvd",
     "geo-schema", "to-geojson", "to-parquet", "validate", "metadata-schema-org", "package",
 )
 
@@ -95,6 +96,9 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
         if geo:
             return _err("'normalize' supporta solo i CSV.")
         return ok(build_normalization(text, table_name=payload.get("table_name") or "dataset"))
+    if azione == "hvd":
+        profile = profile_geojson(text) if geo else profile_csv(text)
+        return ok(advise_hvd(profile, titolo=payload.get("titolo"), url=payload.get("url")))
     if azione == "geo-schema":
         if not geo:
             return _err("'geo-schema' supporta solo i GeoJSON.")

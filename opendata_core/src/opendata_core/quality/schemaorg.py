@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from .dcat import _FORMAT_MEDIA, _XSD, _keywords_from_headers
+from .hvd import advise_hvd
 
 _PLACEHOLDER = "<da compilare>"
 
@@ -81,9 +82,13 @@ def generate_schema_org(
     if not frequenza:
         campi_mancanti.append("copertura temporale/frequenza (temporalCoverage)")
 
+    # stima HVD (#102): informativa, con confidenza — mai compilata in `about`
+    hvd = advise_hvd(profile, titolo=titolo, url=url)
+
     return {
         "profilo": "schema.org/Dataset",
         "dataset": dataset,
         "schema_campi": schema_campi,
         "campi_mancanti": campi_mancanti,
+        "hvd_stimata": hvd["categorie"][0] if hvd["categorie"] else None,
     }

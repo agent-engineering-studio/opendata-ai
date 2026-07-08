@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .hvd import advise_hvd
+
 _PLACEHOLDER = "<da compilare>"
 
 # Profilo OpenData AI (tipo colonna) → tipo XSD per lo schema dei campi.
@@ -118,6 +120,9 @@ def generate_dcat(
     if not frequenza:
         campi_mancanti.append("frequenza di aggiornamento (dct:accrualPeriodicity)")
 
+    # stima HVD (#102): informativa, con confidenza — mai compilata in dcat:theme
+    hvd = advise_hvd(profile, titolo=titolo, url=url)
+
     return {
         "profilo": "DCAT-AP_IT",
         "@context": {
@@ -129,4 +134,5 @@ def generate_dcat(
         "dataset": dataset,
         "schema_campi": schema_campi,
         "campi_mancanti": campi_mancanti,
+        "hvd_stimata": hvd["categorie"][0] if hvd["categorie"] else None,
     }

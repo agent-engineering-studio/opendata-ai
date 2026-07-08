@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from opendata_core.quality import (
     advise_enrichment,
+    advise_hvd,
     advise_scale,
     build_normalization,
     build_publish_package,
@@ -64,6 +65,11 @@ class ConvertIn(ProfileIn):
     # Override colonne coordinate (se l'auto-rilevamento non le trova).
     lat_field: str | None = None
     lon_field: str | None = None
+
+
+class HvdIn(ProfileIn):
+    # Titolo editoriale del dataset: opzionale, migliora la stima HVD.
+    titolo: str | None = None
 
 
 class MetadataIn(ProfileIn):
@@ -341,6 +347,29 @@ async def quality_to_geojson(
     )
     fn = json_to_geojson if is_json else csv_to_geojson
     return fn(text, lat_field=body.lat_field, lon_field=body.lon_field)
+
+
+@router.post("/quality/hvd")
+async def quality_hvd(
+    body: HvdIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Stima High-Value Dataset (#102): il file rientra in una delle 6 categorie UE?
+
+    Euristica deterministica su nomi colonna/titolo/nome file (Reg. 2023/138):
+    ogni categoria stimata porta confidenza esplicita e indizi — mai un verdetto
+    secco. CSV e GeoJSON (un GeoJSON è geospaziale per natura).
+    """
+    text = await _resolve_input(body)
+    geo = _is_geojson(text, (body.format or "").lower())
+    profile = profile_geojson(text) if geo else profile_csv(text)
+    result = advise_hvd(profile, titolo=body.titolo, url=body.url)
+    log.info(
+        "/quality/hvd subject=%s tipo=%s source=%s categorie=%d",
+        user.subject, "geojson" if geo else "csv",
+        "url" if body.url else "content", len(result["categorie"]),
+    )
+    return result
 
 
 @router.post("/quality/to-parquet")

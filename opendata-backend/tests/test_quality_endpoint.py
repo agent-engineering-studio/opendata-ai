@@ -235,6 +235,32 @@ def test_package_requires_input() -> None:
     assert _client().post("/quality/package", json={}).status_code == 400
 
 
+def test_hvd_csv_con_titolo() -> None:
+    res = _client().post("/quality/hvd", json={
+        "content": "fermate,orari\nPiazza Moro,07:30\n", "titolo": "Orari TPL",
+    })
+    assert res.status_code == 200
+    r = res.json()
+    top = r["categorie"][0]
+    assert top["codice"] == "mobility"
+    assert top["confidenza"] in ("media", "alta")
+    assert top["etichetta"] == "Mobilità"
+
+
+def test_hvd_geojson_geospaziale() -> None:
+    gj = (
+        '{"type":"FeatureCollection","features":'
+        '[{"type":"Feature","geometry":{"type":"Point","coordinates":[16.87,41.12]},"properties":{}}]}'
+    )
+    r = _client().post("/quality/hvd", json={"content": gj}).json()
+    assert r["categorie"][0]["codice"] == "geospatial"
+    assert r["categorie"][0]["confidenza"] == "alta"
+
+
+def test_hvd_requires_input() -> None:
+    assert _client().post("/quality/hvd", json={}).status_code == 400
+
+
 def test_to_parquet_binary_ok() -> None:
     import io
 

@@ -75,6 +75,15 @@ def _readme(dcat: dict[str, Any], validation: dict[str, Any], data_filename: str
         f"(Trovabile {fair.get('findable', 0)}, Accessibile {fair.get('accessible', 0)}, "
         f"Interoperabile {fair.get('interoperable', 0)}, Riutilizzabile {fair.get('reusable', 0)})",
     ]
+    hvd = dcat.get("hvd_stimata")
+    if hvd:
+        righe += [
+            "",
+            "CATEGORIA HVD (STIMATA)",
+            f"  {hvd['etichetta']} — confidenza {hvd['confidenza']} (stima euristica, da verificare)",
+            "  Gli High-Value Dataset (Reg. UE 2023/138) richiedono licenza aperta,",
+            "  formato machine-readable e disponibilità via API.",
+        ]
     findings = validation.get("findings", [])
     if findings:
         righe.append("")

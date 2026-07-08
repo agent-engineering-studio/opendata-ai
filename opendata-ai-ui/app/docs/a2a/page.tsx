@@ -191,13 +191,16 @@ export default function Page() {
                 </td>
                 <td>
                   Data Quality Lab su un file inline (CSV/GeoJSON): diagnosi,
-                  auto-fix, schema SQL, riepiloghi, consigli di scala, conversione
-                  in GeoJSON, validazione DCAT-AP_IT + FAIR e pacchetto pronto da
-                  pubblicare. Deterministico, nessun LLM.
+                  auto-fix, arricchimento, stima High-Value Dataset, schema SQL,
+                  riepiloghi, consigli di scala, conversione in GeoJSON, export
+                  Parquet, validazione DCAT-AP_IT/schema.org + FAIR e pacchetto
+                  pronto da pubblicare. Deterministico, nessun LLM.
                 </td>
                 <td>
                   <code>{`{"azione":…,"content":…}`}</code> (profile · fix ·
-                  schema · summary · scale · to-geojson · validate · package).
+                  enrich · hvd · schema · normalize · summary · scale ·
+                  geo-schema · to-geojson · to-parquet · validate ·
+                  metadata-schema-org · package).
                 </td>
               </tr>
             </tbody>

@@ -218,6 +218,14 @@ suggerisce come renderlo più utile:
 - **Schede standard** — genera la scheda descrittiva in due vocabolari: **DCAT-AP_IT**
   (il catalogo nazionale) e **schema.org/Dataset** (quello letto da *Google
   Dataset Search*), entrambe validabili con lo stesso controllo FAIR + licenza.
+- **I dati che contano di più (HVD)** — stima se il file rientra in una delle 6
+  categorie di **High-Value Dataset** della normativa UE (Reg. 2023/138):
+  geospaziale, ambiente, meteo, statistici, imprese, mobilità. È un'euristica sui
+  nomi di colonna, sul titolo e sul nome del file: ogni stima dichiara la propria
+  **confidenza** (alta/media/bassa) e gli indizi che l'hanno prodotta — mai un
+  verdetto secco. La stima compare anche nella scheda DCAT/schema.org, nella
+  validazione e nel README del pacchetto di pubblicazione, perché per gli HVD
+  valgono obblighi specifici (licenza aperta, formato machine-readable, API).
 - **Convertitori avanzati** — non serve partire da un CSV: un file **Excel
   (XLSX/XLS)** viene convertito in CSV direttamente nel browser (con scelta del
   foglio), e uno **Shapefile zippato** diventa un GeoJSON già riproiettato in
@@ -378,9 +386,10 @@ The same rule guards the A2A JSON-RPC endpoint (`/a2a/`); only the AgentCard
 discovery (`/.well-known/agent-card.json`) is public. Six skills are published
 (selected via `message.metadata.skill`): `search_open_data`, `find_geo_resources`,
 `classify_dataset`, `assess_maturity`, `analyze_territory` and `data_quality`
-(the Data Quality Lab — diagnosi, fix, arricchimento, schema, normalizzazione,
-schema geografico, riepiloghi, scala, conversione GeoJSON, export Parquet,
-validazione DCAT-AP_IT/schema.org + FAIR e pacchetto di pubblicazione).
+(the Data Quality Lab — diagnosi, fix, arricchimento, stima HVD, schema,
+normalizzazione, schema geografico, riepiloghi, scala, conversione GeoJSON,
+export Parquet, validazione DCAT-AP_IT/schema.org + FAIR e pacchetto di
+pubblicazione).
 
 | Method | Path | Description |
 |---|---|---|

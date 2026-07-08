@@ -17,6 +17,7 @@ from .dcat_validate import (
     _OPEN_FORMATS,
     _SUGGESTED_LICENSE,
     _finding,
+    _hvd_finding,
     _is_open_license,
     _present,
 )
@@ -74,6 +75,11 @@ def validate_schema_org(meta: dict[str, Any]) -> dict[str, Any]:
         findings.append(_finding("medio", "format_closed",
                                  f"Formato non aperto ({fmt}): pubblica anche una versione CSV/JSON machine-readable.",
                                  "encodingFormat"))
+
+    # ── stima HVD (#102, informativa) ──
+    hvd_f = _hvd_finding(meta, "about")
+    if hvd_f:
+        findings.append(hvd_f)
 
     findable = 20 * sum([_present(name), _present(desc), _present(keywords), _present(about), _present(identifier)])
     accessible = (50 if _present(dl_url) else 0) + (25 if fmt else 0) + (25 if _present(dist.get("encodingFormat")) else 0)

@@ -58,3 +58,14 @@ def test_dcat_da_geojson() -> None:
     assert dist["dct:format"] == "GEOJSON"
     assert dist["dcat:mediaType"] == "application/geo+json"
     assert d["schema_campi"] == []  # i geo non hanno profilo colonne tabellare
+
+
+def test_dcat_hvd_stimata_da_colonne() -> None:
+    d = generate_dcat(profile_csv("fermate,orari,linea\nPiazza Moro,07:30,1\n"))
+    assert d["hvd_stimata"]["codice"] == "mobility"
+    assert d["hvd_stimata"]["confidenza"] == "media"
+    assert d["hvd_stimata"]["tema_eu"] == "TRAN"
+
+
+def test_dcat_hvd_none_quando_non_evidente() -> None:
+    assert generate_dcat(profile_csv("a,b\n1,2\n"))["hvd_stimata"] is None

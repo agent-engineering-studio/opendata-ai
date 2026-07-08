@@ -62,6 +62,25 @@ def _finding(livello: str, codice: str, messaggio: str, campo: str) -> dict[str,
     return {"livello": livello, "codice": codice, "messaggio": messaggio, "campo": campo}
 
 
+def _hvd_finding(meta: Any, campo: str) -> dict[str, str] | None:
+    """Finding informativo se la scheda porta una stima HVD confidente (#102).
+
+    Solo confidenza media/alta (una stima debole in validazione sarebbe rumore);
+    livello `basso`, quindi non tocca mai `valido` né il punteggio FAIR.
+    """
+    hvd = meta.get("hvd_stimata") if isinstance(meta, dict) else None
+    if not hvd or hvd.get("confidenza") not in ("media", "alta"):
+        return None
+    return _finding(
+        "basso", "hvd_stimata",
+        f"Il contenuto sembra un High-Value Dataset «{hvd['etichetta']}» "
+        f"(confidenza {hvd['confidenza']}, stima euristica da verificare): il Reg. UE "
+        f"2023/138 richiede per gli HVD licenza aperta, formato machine-readable e "
+        f"disponibilità via API. Tema EU coerente: {hvd['tema_eu']}.",
+        campo,
+    )
+
+
 def validate_dcat(meta: dict[str, Any]) -> dict[str, Any]:
     """Valida una scheda DCAT-AP_IT e calcola il punteggio FAIR."""
     dataset = meta.get("dataset", meta) if isinstance(meta, dict) else {}
@@ -115,6 +134,11 @@ def validate_dcat(meta: dict[str, Any]) -> dict[str, Any]:
         findings.append(_finding("medio", "format_closed",
                                  f"Formato non aperto ({fmt}): pubblica anche una versione CSV/JSON machine-readable.",
                                  "dct:format"))
+
+    # ── stima HVD (#102, informativa) ──
+    hvd_f = _hvd_finding(meta, "dcat:theme")
+    if hvd_f:
+        findings.append(hvd_f)
 
     # ── FAIR (0-100 per dimensione) ──
     findable = 20 * sum([_present(title), _present(desc), _present(keyword), _present(theme), _present(identifier)])
