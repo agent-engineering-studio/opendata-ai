@@ -277,6 +277,38 @@ def gate_vincoli(testi: list[str], *, vincolo_comunale_disponibile: bool) -> Fin
                    "esito vincoli riportato o non applicabile.")
 
 
+# ── Gate Parte V — Riconciliazione suolo (WARN, mai FAIL) ────────────
+
+# `tipo="alta"` (non "critica") → un WARN non azzera mai `pubblicabile`
+# (vedi QualitaReport.esito): coerente col principio #127 "degrada la confidenza,
+# non blocca il report".
+
+
+def gate_riconciliazione_suolo(soil_records: list[dict] | None) -> Finding:
+    """Segnala quando lo stato del suolo dei poligoni chiave non è verificabile
+    con le fonti correnti (confidenza bassa o classificazione da verificare).
+
+    Riceve i `SoilRecord` (già serializzati) prodotti dal motore
+    `opendata_core.landuse.reconcile`; puro e comune-agnostico come gli altri gate."""
+    recs = soil_records or []
+    if not recs:
+        return Finding("riconciliazione_suolo", "Riconciliazione suolo", "alta", "PASS",
+                       "nessun poligono di suolo da riconciliare in questo report.")
+    non_verificabili = [
+        r for r in recs
+        if r.get("confidenza") == "Bassa" or r.get("classificazione") == "DA_VERIFICARE"
+    ]
+    if non_verificabili:
+        return Finding(
+            "riconciliazione_suolo", "Riconciliazione suolo", "alta", "WARN",
+            f"stato del suolo non verificabile con le fonti correnti per "
+            f"{len(non_verificabili)}/{len(recs)} poligoni (confidenza bassa o "
+            "classificazione 'da verificare'): integrare catasto/PUG/Copernicus (Fasi 2-3).",
+        )
+    return Finding("riconciliazione_suolo", "Riconciliazione suolo", "alta", "PASS",
+                   f"{len(recs)} poligoni riconciliati con confidenza media/alta.")
+
+
 # ── Aggregatore ─────────────────────────────────────────────────────
 
 
@@ -288,16 +320,20 @@ def valuta_report(
     anno_corrente: int,
     evidenze_testo: str = "",
     vincolo_comunale_disponibile: bool = False,
+    soil_records: list[dict] | None = None,
 ) -> QualitaReport:
-    """Esegue i 5 gate auto-valutabili (Fase 1) e restituisce la scorecard.
+    """Esegue i gate auto-valutabili e restituisce la scorecard.
 
-    Tutti gli input sono primitivi iniettati dal chiamante → comune-agnostico e
-    puro. Il chiamante (backend) estrae `testi`/`titoli`/`evidenze_testo` dalla
-    `ProgrammaResponse` strutturata e passa popolazione/anno del comune."""
+    5 gate della rubric Parte IV + il gate Parte V "Riconciliazione suolo" (#127),
+    quest'ultimo WARN e mai bloccante. Tutti gli input sono primitivi iniettati dal
+    chiamante → comune-agnostico e puro. Il chiamante (backend) estrae
+    `testi`/`titoli`/`evidenze_testo` dalla `ProgrammaResponse` strutturata, passa
+    popolazione/anno del comune e i `soil_records` prodotti dalla lente suolo."""
     return QualitaReport(findings=[
         gate_freshness(testi, anno_corrente=anno_corrente),
         gate_denominatore(testi, pop_rif=pop_rif),
         gate_certificazioni(testi, evidenze_testo=evidenze_testo),
         gate_dedup(titoli_proposte),
         gate_vincoli(testi, vincolo_comunale_disponibile=vincolo_comunale_disponibile),
+        gate_riconciliazione_suolo(soil_records),
     ])

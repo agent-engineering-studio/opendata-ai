@@ -20,6 +20,7 @@ _LENSES = (
     "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti", "_resolve_welfare",
     "_resolve_istruzione", "_resolve_casa", "_resolve_reddito", "_resolve_ambiente",
     "_resolve_sanita", "_resolve_comparabili", "_resolve_aree_candidate",
+    "_resolve_riconciliazione_suolo",
 )
 
 
@@ -46,6 +47,7 @@ async def test_resolve_all_lenses_runs_in_parallel() -> None:
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
         "welfare", "istruzione", "casa", "reddito", "ambiente", "sanita", "comparabili", "aree",
+        "suolo",
     }
     assert out["commercio"] == {"tag": "_resolve_commercio"}
 
@@ -200,3 +202,98 @@ async def test_lens_cached_force_falls_back_to_stale_on_failure(monkeypatch) -> 
 
     # force=True ma producer fallisce → usa la cache stantia (non None)
     assert await fac._lens_cached(("x", "1"), _failing, force=True) == "STALE"
+
+
+# ── Riconciliazione suolo (#127, Parte V Fase 1) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_riconciliazione_suolo_failsafe(monkeypatch) -> None:
+    """Fail-safe #127: aree candidate presenti ma IdroGEO e OpenCoesione entrambi
+    down → la lente NON salta, produce un SoilRecord a confidenza DEGRADATA (Bassa)
+    e il report sopravvive. Ogni fonte mancante degrada, non blocca."""
+    import opendata_core.ispra as ispramod
+    import opendata_core.opencoesione as ocmod
+
+    async def _fake_aree(req):  # noqa: ANN001, ANN202
+        return {"candidati": [
+            {"osm_type": "way", "osm_id": 1, "name": "Ex scalo", "kind": "brownfield",
+             "area_mq": 5000, "url": "https://osm.org/way/1"},
+        ]}
+
+    class _Down:
+        async def __aenter__(self):  # noqa: ANN204
+            raise RuntimeError("connector down")
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
+    monkeypatch.setattr(ispramod, "IspraClient", _Down)
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
+
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+
+    assert out is not None
+    rec = out["records"][0]
+    assert rec["confidenza"] == "Bassa"          # nessuna fonte ground-truth → degradata, non blocco
+    assert rec["classificazione"] == "DISMESSO"
+    assert rec["id_geometria"] == "way/1"
+
+
+@pytest.mark.asyncio
+async def test_riconciliazione_suolo_skipped_without_areas(monkeypatch) -> None:
+    """Senza aree candidate (Overpass down o comune senza vuoti) la lente si salta."""
+    async def _no_aree(req):  # noqa: ANN001, ANN202
+        return None
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_no_aree))
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
+    """IdroGEO fornisce un vincolo → 2 fonti concordi (tag dismesso + vincolo) →
+    confidenza Alta, classificazione VINCOLATO."""
+    import opendata_core.ispra as ispramod
+    import opendata_core.opencoesione as ocmod
+    from opendata_core.ispra.models import HazardSlice, RiskIndicators
+
+    async def _fake_aree(req):  # noqa: ANN001, ANN202
+        return {"candidati": [
+            {"osm_type": "way", "osm_id": 2, "kind": "brownfield", "area_mq": 8000},
+        ]}
+
+    class _Ispra:
+        async def __aenter__(self):  # noqa: ANN204
+            return self
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+        async def risk_indicators(self, cod_comune):  # noqa: ANN001, ANN201
+            return RiskIndicators(
+                cod_comune=str(cod_comune), nome="Test",
+                frane_p3p4=HazardSlice(classe="p3p4", area_pct=12.0),
+                source_url="u", licenza="l",
+            )
+
+    class _OCDown:
+        async def __aenter__(self):  # noqa: ANN204
+            raise RuntimeError("down")
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
+    monkeypatch.setattr(ispramod, "IspraClient", _Ispra)
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _OCDown)
+
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+    rec = out["records"][0]
+    assert rec["confidenza"] == "Alta"
+    assert rec["classificazione"] == "VINCOLATO"
