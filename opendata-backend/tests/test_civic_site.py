@@ -22,6 +22,15 @@ _SNAPSHOT = {
         "projects": [{"titolo": "Scuola", "tema": "Istruzione", "stato": "concluso"}],
         "report": {"sezioni": {"idee_sviluppo": [{"category": "Bar", "score": 88.8, "rationale": "ok"}],
                                "gap_dato": ["Dati occupazione non integrati."]}},
+        "stato_suolo": [{
+            "id_geometria": "way/1", "nome": "Ex fornace", "tag_osm": "brownfield",
+            "uso_reale": "Superfici artificiali (CLC 111)", "destinazione_pug": "D",
+            "catasto": "da verificare", "proprieta": "da verificare",
+            "stato_attivita": "inattivo/dismesso", "vincoli": "da verificare",
+            "classificazione": "BROWNFIELD", "discrepanza_osm": "n/d",
+            "causa_abbandono": "contaminazione accertata", "azione_consigliata": "bonifica necessaria",
+            "confidenza": "Alta", "caveat": [], "url": "https://osm.org/way/1", "area_mq": 5000,
+        }],
     },
     "kpi": {"accessibilita_servizi": {"label": "Accessibilità", "value": 50.0, "unit": "/100",
                                       "direction": "up", "source": "feature_store", "definition": "..."}},
@@ -38,7 +47,7 @@ _MATURITY = {"level": "Fast-tracker", "overall": 67.0,
 
 def test_generate_site_pages() -> None:
     files = generate_site(_SNAPSHOT, diff=_DIFF, maturity=_MATURITY)
-    for page in ("index.html", "investimenti.html", "opportunita.html", "rischi.html",
+    for page in ("index.html", "investimenti.html", "opportunita.html", "suolo.html", "rischi.html",
                  "avanzamento.html", "community.html", "scorecard.html", "mappa.html", "style.css"):
         assert page in files
     idx = files["index.html"]
@@ -66,3 +75,22 @@ def test_bundle_zip() -> None:
         names = set(zf.namelist())
         assert "index.html" in names and "style.css" in names
         assert zf.read("index.html").decode("utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_suolo_page_content() -> None:
+    """#130 4c: la pagina 'Stato del suolo' mostra il record §4.5 con classificazione,
+    badge di confidenza, disclaimer-modello e proprietà mai presunta pubblica."""
+    files = generate_site(_SNAPSHOT, diff=_DIFF, maturity=_MATURITY)
+    html = files["suolo.html"]
+    assert "Stato reale del suolo" in html
+    assert "Ex fornace" in html and "Brownfield" in html
+    assert "Confidenza alta" in html
+    assert "mai presunta pubblica" in html
+    # nav include la pagina
+    assert 'href="suolo.html"' in files["index.html"]
+
+
+def test_suolo_page_vuota_senza_record() -> None:
+    snap = {**_SNAPSHOT, "payload": {**_SNAPSHOT["payload"], "stato_suolo": []}}
+    files = generate_site(snap)
+    assert "Nessuna area candidata riconciliata" in files["suolo.html"]

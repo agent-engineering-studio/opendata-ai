@@ -147,7 +147,7 @@ coerente col principio: ogni fonte mancante **degrada la confidenza, non blocca*
 Nel report la sezione **"Stato reale del suolo"** mostra ogni area con un **badge di
 confidenza** (Alta/Media/Bassa) e i campi *"da verificare"* resi espliciti; la
 **proprietà** non è mai presentata come pubblica per default. La sezione è inclusa
-anche nell'**export PDF**.
+anche nell'**export PDF** e nel **sito civico** (pagina "Stato del suolo").
 
 **Export.** Ogni analisi generata può essere esportata in tre formati: **PDF**
 (documento da condividere o stampare), **Markdown** (testo riusabile in altri

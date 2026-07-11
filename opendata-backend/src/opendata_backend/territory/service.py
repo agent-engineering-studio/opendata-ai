@@ -48,6 +48,24 @@ def _gap_analysis(
     return gaps
 
 
+async def _resolve_stato_suolo(istat_code: str, comune_nome: str | None) -> list[dict]:
+    """Record di riconciliazione del suolo (§4.5) per il comune, riusando la lente
+    dell'orchestratore (cache-aware). Fail-safe: [] su errore/assenza — il sito civico
+    semplicemente non mostra la sezione. Import locale per evitare cicli a load-time."""
+    if not comune_nome:
+        return []
+    try:
+        from ..factory import OrchestratorSession
+        from ..orchestrator.programma import ProgrammaRequest
+
+        req = ProgrammaRequest(cod_comune=istat_code, comune_nome=comune_nome, modalita="completa")
+        res = await OrchestratorSession._resolve_riconciliazione_suolo(req)
+        return (res or {}).get("records") or []
+    except Exception:  # noqa: BLE001 — best-effort: lo stato del suolo non blocca il report
+        log.warning("stato del suolo non risolto per %s", istat_code, exc_info=True)
+        return []
+
+
 async def _pug_published(istat_code: str, comune_nome: str | None) -> bool | None:
     """Il PUG del comune è pubblicato come open data interrogabile?
 
@@ -100,6 +118,11 @@ async def build_report(
     await repo.save_signals(session, place_id=place.id, signals=signals, observed_at=now)
     await persist_investments(session, place_id=place.id, projects=inv["projects"], observed_at=now)
 
+    # Stato reale del suolo (Parte V, #130): riusa la lente dell'orchestratore
+    # (cache-aware, fail-safe) così il record §4.5 arriva anche al sito civico via
+    # feature_store → snapshot → generate_site.
+    stato_suolo = await _resolve_stato_suolo(istat_code, name)
+
     # Feature store (Layer 3) + idee di sviluppo dall'output ApriQui (Fase 3).
     feat = compute_features(
         business=signals.get("business"), tourism=signals.get("tourism"),
@@ -108,6 +131,7 @@ async def build_report(
     features = {
         "profile": signals, "investments": inv_summary,
         "features": feat["features"], "feature_gaps": feat["gaps"],
+        "stato_suolo": stato_suolo,
     }
     await repo.upsert_feature_store(session, place_id=place.id, features=features, computed_at=now)
 
@@ -132,6 +156,7 @@ async def build_report(
         },
         "segnali": signals,
         "idee_sviluppo": idee_sviluppo,  # da ApriQui (Fase 3)
+        "stato_suolo": stato_suolo,  # record §4.5 (Parte V, #130)
         "gap_dato": _gap_analysis(signals, inv_summary, pug_published=await _pug_published(istat_code, name)),
     }
     context = {

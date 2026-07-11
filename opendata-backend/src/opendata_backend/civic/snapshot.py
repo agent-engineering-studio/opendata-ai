@@ -40,6 +40,7 @@ async def build_state(session: AsyncSession, istat_code: str) -> dict[str, Any] 
         "investimenti": fjson.get("investments", {}),
         "projects": projects,
         "population": anag.popolazione if anag else None,
+        "stato_suolo": fjson.get("stato_suolo", []),  # record §4.5 (Parte V, #130)
     }
 
 
