@@ -16,6 +16,12 @@ Tipi di formula supportati (`formula.tipo`):
   - `classi`     : coeff variabile per classe dimensionale (+ assetto, soglia,
                    derivati come i posteggi = target × fattore)
   - `soglia`     : booleano pop ≥ soglia_ab → valore `se_sopra`/`se_sotto`
+  - `percentuale`: quota MINIMA su una base non-pro-capite (es. dotazione verde
+                   ≥ coeff% della zona produttiva D) → target = coeff, unita "%".
+                   Non dipende dalla popolazione: è un principio normativo (§2).
+
+Metadati aggiuntivi passati al chiamante quando presenti: `principio` (es. "riuso
+prima di espansione") e `prossimita_m` (raggio di accessibilità in metri, es. 300).
 """
 
 from __future__ import annotations
@@ -52,6 +58,11 @@ def _valuta_uno(pop: int, pattern: dict[str, Any]) -> dict[str, Any] | None:
         "criteri_pesi": pattern.get("criteri_pesi") or {},
         "strumenti": pattern.get("strumenti") or [],
     }
+    # Metadati opzionali (§2/§3): inclusi solo se dichiarati dal pattern.
+    if pattern.get("principio"):
+        res["principio"] = pattern["principio"]
+    if pattern.get("prossimita_m") is not None:
+        res["prossimita_m"] = pattern["prossimita_m"]
     if tipo == "lineare":
         res["target"] = _round100(pop * float(f["coeff"]))
     elif tipo == "per_mille":
@@ -73,6 +84,10 @@ def _valuta_uno(pop: int, pattern: dict[str, Any]) -> dict[str, Any] | None:
         attiva = pop >= int(f["soglia_ab"])
         res["soglia_superata"] = attiva
         res["target"] = f.get("se_sopra") if attiva else f.get("se_sotto")
+    elif tipo == "percentuale":
+        # Quota minima su base non-pro-capite (es. verde ≥10% della zona D): il
+        # target è la percentuale stessa, indipendente dalla popolazione.
+        res["target"] = float(f["coeff"])
     else:
         return None  # tipo sconosciuto → salta (robusto verso cataloghi futuri)
     return res
