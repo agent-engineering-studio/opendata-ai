@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from opendata_core.ispra.models import HazardSlice, LandCoverInfo, RiskIndicators
+from opendata_core.landscape.models import LandscapeConstraint
 from opendata_core.landuse import SoilRecord, reconcile_polygon
+
+
+def _paes(*, vincolato: bool, tutele: tuple[str, ...] = ()) -> LandscapeConstraint:
+    return LandscapeConstraint(
+        vincolato=vincolato, tutele=list(tutele), regione="Puglia",
+        source_url="u", licenza="PPTR",
+    )
 
 
 def _lc(*, macro: int) -> LandCoverInfo:
@@ -111,6 +119,34 @@ def test_dismesso_ma_copertura_non_artificiale_media() -> None:
     r = reconcile_polygon(osm_feature=_OSM_DISMESSO, land_cover=_lc(macro=3))
     assert r.confidenza == "Media"
     assert "rinaturalizzazione" in r.discrepanza_osm
+
+
+def test_vincolo_paesaggistico_classifica_vincolato_e_alza_confidenza() -> None:
+    # tag dismesso + tutela paesaggistica puntuale → 2 fonti → VINCOLATO, Alta
+    r = reconcile_polygon(
+        osm_feature=_OSM_DISMESSO,
+        vincolo_paesaggistico=_paes(vincolato=True, tutele=("Territori costieri",)),
+    )
+    assert r.classificazione == "VINCOLATO"
+    assert r.confidenza == "Alta"
+    assert "paesaggistico" in r.vincoli and "Territori costieri" in r.vincoli
+
+
+def test_vincolo_paesaggistico_interrogato_ma_assente_non_vincola() -> None:
+    # PPTR interrogato ma nessuna tutela nel punto → non VINCOLATO, non conta come fonte
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO, vincolo_paesaggistico=_paes(vincolato=False))
+    assert r.classificazione == "DISMESSO"
+    assert r.confidenza == "Bassa"
+
+
+def test_vincoli_idrogeo_e_paesaggistico_combinati() -> None:
+    r = reconcile_polygon(
+        osm_feature=_OSM_DISMESSO,
+        idrogeo=_idrogeo(frane_p3p4_pct=10.0),
+        vincolo_paesaggistico=_paes(vincolato=True, tutele=("Boschi",)),
+    )
+    assert r.classificazione == "VINCOLATO"
+    assert "idrogeologico" in r.vincoli and "paesaggistico" in r.vincoli
 
 
 def test_id_geometria_e_passthrough() -> None:

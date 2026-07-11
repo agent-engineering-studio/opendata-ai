@@ -1500,12 +1500,37 @@ class OrchestratorSession:
             _log_lens_skip("riconciliazione suolo: copertura del suolo ISPRA non disponibile per %s "
                            "(confidenza ridotta)", req.cod_comune, exc=exc)
 
+        # Vincoli paesaggistici puntuali (piano REGIONALE, #128 Fase 2b): oggi coperta
+        # la Puglia (SIT Puglia). Per le regioni senza adattatore `landscape_adapter`
+        # ritorna None → nessuna connessione, nodo "vincolo paesaggistico" degradato.
+        vincoli_paes: dict[str, Any] = {}
+        try:
+            from opendata_core.landscape import landscape_adapter
+
+            adapter_cls = landscape_adapter(req.cod_comune)
+            if adapter_cls is not None:
+                async def _paesaggio(cls: Any) -> dict[str, Any]:
+                    out: dict[str, Any] = {}
+                    async with cls() as pc:
+                        for cand in candidati:
+                            lat, lon = cand.get("lat"), cand.get("lon")
+                            if lat is None or lon is None:
+                                continue
+                            out[f"{cand.get('osm_type')}/{cand.get('osm_id')}"] = await pc.constraint_at(lat, lon)
+                    return out
+
+                vincoli_paes = await asyncio.wait_for(_paesaggio(adapter_cls), timeout=40.0)
+        except Exception as exc:  # noqa: BLE001 — vincolo paesaggistico assente ⇒ confidenza ridotta
+            _log_lens_skip("riconciliazione suolo: vincoli paesaggistici non disponibili per %s "
+                           "(confidenza ridotta)", req.cod_comune, exc=exc)
+
         from opendata_core.landuse import reconcile_polygon
 
         records = [
             reconcile_polygon(
                 osm_feature=cand, idrogeo=idrogeo, investimenti=investimenti,
                 land_cover=coperture.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
+                vincolo_paesaggistico=vincoli_paes.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
             ).model_dump()
             for cand in candidati
         ]

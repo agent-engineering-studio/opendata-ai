@@ -22,6 +22,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from ..ispra.models import LandCoverInfo, RiskIndicators
+from ..landscape.models import LandscapeConstraint
 
 Confidenza = Literal["Alta", "Media", "Bassa"]
 Classificazione = Literal["VINCOLATO", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE"]
@@ -38,6 +39,14 @@ _CAVEAT_IDROGEO_COMUNALE = (
     "geometrica del singolo poligono — da verificare puntualmente"
 )
 _CAVEAT_NO_IDROGEO = "vincolo idrogeologico non valutato: indicatori IdroGEO PAI non disponibili"
+_CAVEAT_PPTR_REGIONALE = (
+    "vincolo paesaggistico dal piano REGIONALE (copertura solo per le regioni con "
+    "adattatore): esito puntuale, da verificare sul piano vigente"
+)
+_CAVEAT_NO_PPTR = (
+    "vincolo paesaggistico non valutato: piano paesaggistico regionale non "
+    "interrogabile per questo comune"
+)
 _CAVEAT_CLC_SCALA = (
     "copertura del suolo da Corine Land Cover (scala nazionale, unità minima ~25 ha): "
     "indicativa per micro-poligoni"
@@ -118,6 +127,7 @@ def reconcile_polygon(
     idrogeo: RiskIndicators | None = None,
     investimenti: list[dict[str, Any]] | None = None,
     land_cover: LandCoverInfo | None = None,
+    vincolo_paesaggistico: LandscapeConstraint | None = None,
 ) -> SoilRecord:
     """Costruisce il `SoilRecord` §4.5 per un poligono candidato.
 
@@ -129,6 +139,8 @@ def reconcile_polygon(
             o None/vuoto.
         land_cover: copertura del suolo puntuale (Corine Land Cover ISPRA, #128
             Fase 2c), o None. Risolve il nodo "edificato/impermeabilizzato" §4.3.
+        vincolo_paesaggistico: tutele del piano paesaggistico regionale nel punto
+            (#128 Fase 2b), o None. Risolve il nodo "vincolo paesaggistico" §4.3.
 
     Regola di confidenza (§4.5): **Alta** solo se ≥2 fonti concordano; **Bassa** se
     la sola evidenza è il tag OSM; **Media** se 2 fonti ma con un segnale a scala
@@ -154,15 +166,25 @@ def reconcile_polygon(
         caveat.append(_CAVEAT_CLC_SCALA)
         fonti += 1
 
-    # ── vincolo idrogeologico (IdroGEO PAI, comune-level) ──
-    vincolo = _vincolo_da_idrogeo(idrogeo)
-    if vincolo is not None:
-        vincoli = f"VINCOLATO — {vincolo}"
+    # ── vincoli: idrogeologico (IdroGEO, comune-level) + paesaggistico (PPTR, puntuale) ──
+    vincoli_parti: list[str] = []
+    vincolo_idro = _vincolo_da_idrogeo(idrogeo)
+    if vincolo_idro is not None:
+        vincoli_parti.append(f"idrogeologico: {vincolo_idro}")
         caveat.append(_CAVEAT_IDROGEO_COMUNALE)
         fonti += 1
     else:
-        vincoli = DA_VERIFICARE
         caveat.append(_CAVEAT_NO_IDROGEO)
+
+    if vincolo_paesaggistico is not None:
+        caveat.append(_CAVEAT_PPTR_REGIONALE)
+        if vincolo_paesaggistico.vincolato:
+            vincoli_parti.append("paesaggistico: " + ", ".join(vincolo_paesaggistico.tutele))
+            fonti += 1  # tutela paesaggistica puntuale = segnale positivo poligono-preciso
+    else:
+        caveat.append(_CAVEAT_NO_PPTR)
+
+    vincoli = "VINCOLATO — " + "; ".join(vincoli_parti) if vincoli_parti else DA_VERIFICARE
 
     # ── attività / riuso in corso (progetti OpenCoesione nel comune) ──
     n_progetti = len(investimenti or [])
@@ -176,7 +198,7 @@ def reconcile_polygon(
         stato_attivita = DA_VERIFICARE
 
     # ── classificazione (albero §4.3, nodi attivabili) ──
-    if vincolo is not None:
+    if vincoli_parti:
         classificazione: Classificazione = "VINCOLATO"
     elif dismesso:
         classificazione = "DISMESSO"
