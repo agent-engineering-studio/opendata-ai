@@ -28,6 +28,7 @@ import httpx
 if TYPE_CHECKING:
     from .byok import BYOKCreds
 from agent_framework import Agent, MCPStreamableHTTPTool
+from opendata_core.landuse import SoilRecord
 from opendata_core.osm.client import OverpassError
 from opendata_core.sdmx.client import SdmxError
 
@@ -1889,11 +1890,13 @@ class OrchestratorSession:
                     )
                 if resolve_report_depth(self._settings) == "concise":
                     resp.disclaimer = (resp.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+                _soil = (lenses.get("suolo") or {}).get("records")
                 applica_qualita(
                     resp, req,
                     vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
-                    soil_records=(lenses.get("suolo") or {}).get("records"),
+                    soil_records=_soil,
                 )
+                resp.stato_suolo = [SoilRecord.model_validate(r) for r in (_soil or [])]
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
                 fw_logger.removeHandler(handler)
@@ -1965,11 +1968,13 @@ class OrchestratorSession:
             response = ProgrammaResponse.model_validate_json(text)
         if resolve_report_depth(self._settings) == "concise":
             response.disclaimer = (response.disclaimer or "").rstrip() + REPORT_DEPTH_CONCISE_NOTE
+        _soil = (lenses.get("suolo") or {}).get("records")
         applica_qualita(
             response, req,
             vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
-            soil_records=(lenses.get("suolo") or {}).get("records"),
+            soil_records=_soil,
         )
+        response.stato_suolo = [SoilRecord.model_validate(r) for r in (_soil or [])]
         return response
 
     async def run(self, query: str) -> str:

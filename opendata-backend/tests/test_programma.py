@@ -2000,3 +2000,30 @@ def test_applica_qualita_segnala_difetti_senza_bloccare() -> None:
     assert esiti["dedup"] == "WARN"            # due ciclabili simili
     # non bloccante: la risposta resta integra
     assert resp.proposte and resp.sintesi
+
+
+def test_stato_suolo_round_trips_in_response() -> None:
+    """#130: `stato_suolo` sopravvive alla serializzazione JSON (canale stream/cache).
+    Se questo si rompe, le schede tornerebbero senza lo stato del suolo."""
+    from datetime import datetime, timezone
+
+    from opendata_core.landuse import reconcile_polygon
+
+    rec = reconcile_polygon(
+        osm_feature={"osm_type": "way", "osm_id": 1, "kind": "brownfield", "area_mq": 5000},
+        destinazione_pug="D",
+    )
+    resp = ProgrammaResponse(
+        comune="072021",
+        swot={k: [] for k in ("forze", "debolezze", "opportunita", "minacce")},
+        proposte=[], citazioni=[], disclaimer="ok",
+        generato_il=datetime.now(timezone.utc),
+        stato_suolo=[rec],
+    )
+    dumped = resp.model_dump(mode="json")
+    assert dumped["stato_suolo"][0]["classificazione"] == "DISMESSO"
+    assert dumped["stato_suolo"][0]["destinazione_pug"] == "D"
+    # round-trip come nel path cache (model_validate_json)
+    back = ProgrammaResponse.model_validate_json(resp.model_dump_json())
+    assert back.stato_suolo[0].confidenza in {"Alta", "Media", "Bassa"}
+    assert back.stato_suolo[0].tag_osm == "brownfield"

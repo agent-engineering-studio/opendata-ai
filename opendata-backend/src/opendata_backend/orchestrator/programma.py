@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
 
 from agent_framework import Agent
+from opendata_core.landuse import SoilRecord
 from opendata_core.report_quality import valuta_report as _valuta_qualita
 from opendata_core.rigenerazione import valuta_aree, valuta_pattern
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -203,7 +204,7 @@ MACRO_POPULATION = 150_000
 # Versione dei prompt/contratto: entra nella chiave della cache analisi (F1).
 # Bumpare quando un cambio ai prompt o allo schema rende stantie le schede in
 # cache, così vengono rigenerate invece di servire output vecchio.
-PROMPT_VERSION = "2026-07-06-lente-reddito"
+PROMPT_VERSION = "2026-07-11-stato-suolo"
 
 
 class QualitaControllo(BaseModel):
@@ -252,6 +253,10 @@ class ProgrammaResponse(BaseModel):
     # la generazione. Annotativa, non bloccante (design fail-safe). None finché
     # non calcolata (es. cache di versioni precedenti).
     qualita: QualitaReport | None = None
+    # Stato reale del suolo (Parte V, #130): per ogni area candidata il record
+    # riconciliato §4.5 (tag OSM → uso reale/vincoli/classificazione + confidenza
+    # graduata e caveat). Vuoto se non applicabile o non calcolato.
+    stato_suolo: list[SoilRecord] = Field(default_factory=list)
 
 
 class _LlmProgramma(BaseModel):

@@ -17,6 +17,7 @@ import type {
   LivelloFattibilita,
   ProgrammaResponse,
   Proposta,
+  SoilRecord,
 } from "@/lib/types";
 
 const BRAND = {
@@ -171,6 +172,47 @@ function sectionTitle(text: string): Content {
   };
 }
 
+const CLS_LABEL: Record<string, string> = {
+  BROWNFIELD: "Brownfield (contaminato)",
+  VINCOLATO: "Vincolato",
+  FRANGIA: "Frangia urbana",
+  DISMESSO: "Dismesso",
+  LIBERO: "Libero",
+  SPAZIO_PUBBLICO: "Spazio pubblico",
+  DA_VERIFICARE: "Da verificare",
+};
+
+/** Card compatta di un record di riconciliazione del suolo (§4.5) nel PDF. */
+function soilCard(r: SoilRecord): Content {
+  const titolo = r.nome || r.id_geometria;
+  const righe = [
+    `Tag OSM: ${r.tag_osm}`,
+    `Uso reale: ${r.uso_reale}`,
+    `Destinazione (PUG/PRG): ${r.destinazione_pug}`,
+    `Vincoli: ${r.vincoli}`,
+    `Proprietà: ${r.proprieta}`,
+    `Causa di abbandono: ${r.causa_abbandono}`,
+  ];
+  return {
+    table: {
+      widths: ["*"],
+      body: [[{
+        stack: [
+          {
+            text: `${titolo} — ${CLS_LABEL[r.classificazione] ?? r.classificazione} · confidenza ${r.confidenza}`,
+            bold: true, fontSize: 10, color: BRAND.primary900,
+          },
+          ...righe.map((t) => ({ text: t, fontSize: 9, margin: [0, 1, 0, 0] as [number, number, number, number] })),
+          { text: `Azione consigliata: ${r.azione_consigliata}`, fontSize: 9, italics: true, margin: [0, 2, 0, 0] },
+        ],
+        margin: [8, 6, 8, 6],
+      }]],
+    },
+    layout: { hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => BRAND.bgMuted },
+    margin: [0, 0, 0, 4],
+  };
+}
+
 /** Costruisce la definizione documento pdfmake dalla scheda. */
 function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
   const marketing = s.proposte.filter(isMarketing);
@@ -219,6 +261,16 @@ function buildDocDefinition(s: ProgrammaResponse): TDocumentDefinitions {
         content.push(...voce.evidenze.map(evidenzaInline));
       }
     }
+  }
+
+  if (s.stato_suolo?.length) {
+    content.push(sectionTitle("Stato reale del suolo"));
+    content.push({
+      text: "OSM descrive ciò che è mappato, non lo stato giuridico/reale del suolo. La "
+        + "proprietà è dichiarata accertata o da verificare, mai presunta pubblica.",
+      fontSize: 8.5, italics: true, color: BRAND.muted, margin: [0, 0, 0, 4],
+    });
+    content.push(...s.stato_suolo.map(soilCard));
   }
 
   // Analisi UNICA: Proposte, Idee e Marketing sono SEZIONI dello stesso report
