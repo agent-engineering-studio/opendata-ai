@@ -100,9 +100,12 @@ def build_email_body(target: dict[str, Any], run_result: dict[str, Any], diff: d
     if diff.get("nuovi"):
         righe.append("Nuove segnalazioni:")
         righe += [f"  - [{f['livello']}] {f['messaggio']}" for f in diff["nuovi"]]
+    if diff.get("aggravati"):
+        righe.append("Segnalazioni aggravate:")
+        righe += [f"  - [{f['livello']}] {f['messaggio']}" for f in diff["aggravati"]]
     if diff.get("risolti"):
         righe.append("Risolte rispetto all'ultimo controllo:")
         righe += [f"  - {codice}" for codice in diff["risolti"]]
-    if not diff.get("nuovi") and not diff.get("risolti"):
+    if not diff.get("nuovi") and not diff.get("aggravati") and not diff.get("risolti"):
         righe.append("Nessun cambiamento rispetto all'ultimo controllo.")
     return "\n".join(righe)

@@ -53,6 +53,29 @@ async def get_target(session: AsyncSession, target_id: int) -> MonitorTarget | N
     return await session.get(MonitorTarget, target_id)
 
 
+async def ensure_maturity_watch(
+    session: AsyncSession,
+    *,
+    entity_id: int,
+    webhook_url: str | None = None,
+    notify_email: str | None = None,
+) -> tuple[MonitorTarget, bool]:
+    """Get-or-create idempotente di un watch di maturità per un ente.
+
+    Ritorna `(target, creato)`. Un solo watch `kind='maturity'` per ente, così
+    ripetere `--add-maturity-watch` (o rilanciarlo da un cron/provisioning) non
+    crea duplicati che notificherebbero lo stesso calo più volte.
+    """
+    esistenti = [t for t in await list_targets_by_entity(session, entity_id) if t.kind == "maturity"]
+    if esistenti:
+        return esistenti[0], False
+    row = await create_target(
+        session, kind="maturity", entity_id=entity_id,
+        webhook_url=webhook_url, notify_email=notify_email,
+    )
+    return row, True
+
+
 async def latest_run(session: AsyncSession, target_id: int) -> MonitorRun | None:
     res = await session.execute(
         select(MonitorRun)

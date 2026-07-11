@@ -64,6 +64,17 @@ def test_transizione_a_dato_insufficiente() -> None:
     assert "Fast-tracker" in r[0]["messaggio"]
 
 
+def test_transizione_a_insufficiente_senza_livello_precedente() -> None:
+    # livello precedente None ma con punteggio: niente «None» nel messaggio all'utente
+    r = check_maturity_regression(
+        overall_attuale=None, overall_precedente=62.0,
+        livello_attuale="Dato insufficiente", livello_precedente=None,
+    )
+    assert _codes(r) == {"maturita_non_valutabile"}
+    assert "None" not in r[0]["messaggio"]
+    assert "aveva una valutazione" in r[0]["messaggio"]
+
+
 def test_entrambi_insufficienti_non_giudicabile() -> None:
     r = check_maturity_regression(
         overall_attuale=None, overall_precedente=None,

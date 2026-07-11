@@ -108,7 +108,7 @@ async def _notify_and_save(
     """Coda comune dei check: notifica SOLO sui finding nuovi, poi persiste lo snapshot."""
     esito_run = {"esito": _esito(findings), "findings": findings}
     notificato = False
-    if diff["nuovi"]:
+    if diff["nuovi"] or diff.get("aggravati"):
         target_dict = {"id": target.id, "url": target.url, "entity_id": target.entity_id, "kind": target.kind}
         payload = build_notification_payload(target_dict, esito_run, diff)
         if target.webhook_url:
@@ -124,10 +124,14 @@ async def _notify_and_save(
         diff=diff, quality_score=quality_score, notified=notificato,
     )
     log.info(
-        "monitor target=%d kind=%s esito=%s nuovi=%d notificato=%s",
-        target.id, target.kind, esito_run["esito"], len(diff["nuovi"]), notificato,
+        "monitor target=%d kind=%s esito=%s nuovi=%d aggravati=%d notificato=%s",
+        target.id, target.kind, esito_run["esito"], len(diff["nuovi"]),
+        len(diff.get("aggravati", [])), notificato,
     )
-    return {"target_id": target.id, "esito": esito_run["esito"], "nuovi": len(diff["nuovi"]), "notificato": notificato}
+    return {
+        "target_id": target.id, "esito": esito_run["esito"], "nuovi": len(diff["nuovi"]),
+        "aggravati": len(diff.get("aggravati", [])), "notificato": notificato,
+    }
 
 
 async def check_maturity_watch(
@@ -139,7 +143,8 @@ async def check_maturity_watch(
     persistita (POST /maturity/assess o batch). Fail-safe: con 0-1 assessment il
     run è "ok" senza finding. Il no-renotify è lo stesso dei target dataset
     (`diff_runs` per codice): un calo già segnalato non genera nuove notifiche
-    finché non rientra o non ne compare uno diverso.
+    finché non rientra, non ne compare uno diverso o non si aggrava (es. una
+    regressione da "medio" ad "alto" ri-notifica).
     """
     assessments = await maturity_repo.last_two_assessments(session, target.entity_id)
     findings: list[dict[str, Any]] = []
@@ -239,12 +244,18 @@ def main() -> None:
         try:
             async with db.sessionmaker() as session:
                 if args.add_maturity_watch is not None:
-                    row = await repo.create_target(
-                        session, kind="maturity", entity_id=args.add_maturity_watch,
+                    row, creato = await repo.ensure_maturity_watch(
+                        session, entity_id=args.add_maturity_watch,
                         webhook_url=args.webhook_url, notify_email=args.notify_email,
                     )
                     await session.commit()
-                    print(f"OK: watch maturità id={row.id} per entity_id={args.add_maturity_watch}")
+                    if creato:
+                        print(f"OK: watch maturità id={row.id} per entity_id={args.add_maturity_watch}")
+                    else:
+                        print(
+                            f"OK: watch maturità già presente id={row.id} "
+                            f"per entity_id={args.add_maturity_watch} (nessun duplicato creato)"
+                        )
                     return
                 summary = await run_monitor(session, settings=get_settings())
             print(f"OK: monitor su {summary['n_target']} target")

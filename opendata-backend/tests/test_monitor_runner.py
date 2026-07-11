@@ -192,6 +192,58 @@ async def test_maturity_watch_failsafe_without_assessments(session: AsyncSession
     assert run is not None and run.findings_jsonb == []
 
 
+async def test_maturity_watch_renotifies_on_escalation(session: AsyncSession, monkeypatch) -> None:
+    from datetime import timedelta
+
+    from opendata_backend.db.territory_models import MaturityAssessment
+
+    # calo iniziale contenuto (medio) → poi si approfondisce (alto): deve ri-notificare
+    ente = await _entity_with_assessments(session, [(70.0, "Fast-tracker"), (64.0, "Fast-tracker")])
+    sent: list[dict] = []
+
+    async def _fake_webhook(url: str, payload: dict) -> bool:
+        sent.append(payload)
+        return True
+
+    monkeypatch.setattr(runner, "send_webhook", _fake_webhook)
+    t = await repo.create_target(
+        session, kind="maturity", entity_id=ente.id, webhook_url="https://hooks.example.com/x",
+    )
+    await session.commit()
+
+    r1 = await runner.check_target(session, t, settings=_settings(), ora=datetime.now(timezone.utc))
+    await session.commit()
+
+    session.add(MaturityAssessment(
+        entity_id=ente.id, assessed_at=datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=30),
+        score_overall=48.0, level="Fast-tracker",
+    ))
+    await session.flush()
+    r2 = await runner.check_target(session, t, settings=_settings(), ora=datetime.now(timezone.utc))
+
+    assert r1["notificato"] is True   # -6 punti → regressione_maturita "medio" (nuovo)
+    assert r2["notificato"] is True   # -16 punti → stessa codice "alto" (aggravato)
+    assert r2["aggravati"] == 1
+    assert r2["esito"] == "critico"
+    assert len(sent) == 2
+
+
+async def test_ensure_maturity_watch_is_idempotent(session: AsyncSession) -> None:
+    from opendata_backend.db.territory_models import Entity
+
+    ente = Entity(name="Ente idempotente")
+    session.add(ente)
+    await session.flush()
+
+    row1, creato1 = await repo.ensure_maturity_watch(session, entity_id=ente.id)
+    row2, creato2 = await repo.ensure_maturity_watch(session, entity_id=ente.id)
+
+    assert creato1 is True and creato2 is False
+    assert row1.id == row2.id
+    tutti = [t for t in await repo.list_targets_by_entity(session, ente.id) if t.kind == "maturity"]
+    assert len(tutti) == 1
+
+
 async def test_maturity_watch_improvement_is_ok(session: AsyncSession) -> None:
     ente = await _entity_with_assessments(session, [(45.0, "Follower"), (70.0, "Fast-tracker")])
     t = await repo.create_target(session, kind="maturity", entity_id=ente.id)

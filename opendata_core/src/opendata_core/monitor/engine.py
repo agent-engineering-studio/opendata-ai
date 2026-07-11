@@ -48,19 +48,39 @@ def run_checks(
     return {"findings": findings, "esito": esito}
 
 
+_RANK_LIVELLO = {"basso": 1, "medio": 2, "alto": 3}
+
+
+def _rank(livello: Any) -> int:
+    return _RANK_LIVELLO.get(livello, 0)
+
+
 def diff_runs(
     findings_precedenti: list[dict[str, Any]] | None,
     findings_attuali: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Confronta due liste di finding (per `codice`): nuovi, risolti, invariati.
+    """Confronta due liste di finding (per `codice`): nuovi, aggravati, risolti, invariati.
 
     `None` per `findings_precedenti` significa "nessun run precedente": tutto
     ciò che emerge ora è "nuovo", niente è "risolto".
+
+    `aggravati` sono i finding il cui `codice` c'era già ma la cui severità è
+    salita (es. `medio`→`alto`): un problema noto che è peggiorato vale una nuova
+    notifica, altrimenti un calo di maturità che si approfondisce resterebbe muto
+    finché non cambia codice. È un sottoinsieme di `invariati`.
     """
-    prec_codici = {f["codice"] for f in (findings_precedenti or [])}
+    prec_rank: dict[str, int] = {}
+    for f in findings_precedenti or []:
+        codice = f["codice"]
+        prec_rank[codice] = max(prec_rank.get(codice, 0), _rank(f.get("livello")))
+    prec_codici = set(prec_rank)
     att_codici = {f["codice"] for f in findings_attuali}
     return {
         "nuovi": [f for f in findings_attuali if f["codice"] not in prec_codici],
+        "aggravati": [
+            f for f in findings_attuali
+            if f["codice"] in prec_rank and _rank(f.get("livello")) > prec_rank[f["codice"]]
+        ],
         "risolti": sorted(prec_codici - att_codici),
         "invariati": sorted(prec_codici & att_codici),
     }

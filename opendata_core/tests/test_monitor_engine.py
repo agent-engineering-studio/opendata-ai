@@ -106,3 +106,20 @@ def test_diff_runs_tutto_risolto() -> None:
     d = diff_runs(precedenti, [])
     assert d["risolti"] == ["link_rotto"]
     assert d["nuovi"] == []
+
+
+def test_diff_runs_segnala_escalation_severita() -> None:
+    # stesso codice, severità salita medio→alto → è "aggravato", non "invariato muto"
+    precedenti = [{"livello": "medio", "codice": "regressione_maturita", "messaggio": "x"}]
+    attuali = [{"livello": "alto", "codice": "regressione_maturita", "messaggio": "y"}]
+    d = diff_runs(precedenti, attuali)
+    assert d["nuovi"] == []
+    assert [f["codice"] for f in d["aggravati"]] == ["regressione_maturita"]
+    assert d["invariati"] == ["regressione_maturita"]
+
+
+def test_diff_runs_severita_stabile_non_aggravata() -> None:
+    precedenti = [{"livello": "medio", "codice": "regressione_maturita", "messaggio": "x"}]
+    attuali = [{"livello": "medio", "codice": "regressione_maturita", "messaggio": "x"}]
+    d = diff_runs(precedenti, attuali)
+    assert d["aggravati"] == [] and d["nuovi"] == []

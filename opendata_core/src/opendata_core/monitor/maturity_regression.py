@@ -61,9 +61,12 @@ def check_maturity_regression(
     if attuale_insuff and precedente_insuff:
         return []  # non giudicabile su entrambi i lati
     if attuale_insuff:
+        # `livello_precedente` può essere None se l'assessment precedente aveva solo
+        # un punteggio ma nessun livello: evita di stampare «None» all'utente.
+        riferimento = f"era valutato «{livello_precedente}»" if livello_precedente else "aveva una valutazione"
         findings.append(_finding(
             "medio", "maturita_non_valutabile",
-            f"L'ente era valutato «{livello_precedente}» ma l'ultima valutazione non ha "
+            f"L'ente {riferimento} ma l'ultima valutazione non ha "
             "dati sufficienti per un giudizio: verifica che il portale e i dataset siano "
             "ancora raggiungibili.",
         ))
