@@ -111,6 +111,19 @@ async def latest_assessment(session: AsyncSession, entity_id: int) -> MaturityAs
     return res.scalar_one_or_none()
 
 
+async def last_two_assessments(
+    session: AsyncSession, entity_id: int
+) -> list[MaturityAssessment]:
+    """Gli ultimi due assessment (dal più recente): base del confronto di #103."""
+    res = await session.execute(
+        select(MaturityAssessment)
+        .where(MaturityAssessment.entity_id == entity_id)
+        .order_by(MaturityAssessment.assessed_at.desc(), MaturityAssessment.id.desc())
+        .limit(2)
+    )
+    return list(res.scalars().all())
+
+
 async def assessment_trend(session: AsyncSession, entity_id: int) -> list[MaturityAssessment]:
     res = await session.execute(
         select(MaturityAssessment)

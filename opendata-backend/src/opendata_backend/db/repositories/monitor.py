@@ -27,7 +27,8 @@ async def list_targets_by_entity(session: AsyncSession, entity_id: int) -> list[
 async def create_target(
     session: AsyncSession,
     *,
-    url: str,
+    url: str | None = None,
+    kind: str = "dataset",
     entity_id: int | None = None,
     source: str | None = None,
     dataset_id: str | None = None,
@@ -35,8 +36,12 @@ async def create_target(
     webhook_url: str | None = None,
     notify_email: str | None = None,
 ) -> MonitorTarget:
+    if kind == "dataset" and not url:
+        raise ValueError("un target 'dataset' richiede un url")
+    if kind == "maturity" and entity_id is None:
+        raise ValueError("un watch 'maturity' richiede entity_id")
     row = MonitorTarget(
-        url=url, entity_id=entity_id, source=source, dataset_id=dataset_id,
+        url=url, kind=kind, entity_id=entity_id, source=source, dataset_id=dataset_id,
         accrual_periodicity=accrual_periodicity, webhook_url=webhook_url, notify_email=notify_email,
     )
     session.add(row)
@@ -46,6 +51,29 @@ async def create_target(
 
 async def get_target(session: AsyncSession, target_id: int) -> MonitorTarget | None:
     return await session.get(MonitorTarget, target_id)
+
+
+async def ensure_maturity_watch(
+    session: AsyncSession,
+    *,
+    entity_id: int,
+    webhook_url: str | None = None,
+    notify_email: str | None = None,
+) -> tuple[MonitorTarget, bool]:
+    """Get-or-create idempotente di un watch di maturità per un ente.
+
+    Ritorna `(target, creato)`. Un solo watch `kind='maturity'` per ente, così
+    ripetere `--add-maturity-watch` (o rilanciarlo da un cron/provisioning) non
+    crea duplicati che notificherebbero lo stesso calo più volte.
+    """
+    esistenti = [t for t in await list_targets_by_entity(session, entity_id) if t.kind == "maturity"]
+    if esistenti:
+        return esistenti[0], False
+    row = await create_target(
+        session, kind="maturity", entity_id=entity_id,
+        webhook_url=webhook_url, notify_email=notify_email,
+    )
+    return row, True
 
 
 async def latest_run(session: AsyncSession, target_id: int) -> MonitorRun | None:

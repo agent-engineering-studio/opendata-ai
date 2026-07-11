@@ -102,7 +102,8 @@ type TrendPoint = { assessed_at: string; overall: number; level: string };
 type MonitorFinding = { livello: "alto" | "medio" | "basso"; codice: string; messaggio: string };
 type MonitorTargetStatus = {
   id: number;
-  url: string;
+  kind?: "dataset" | "maturity"; // "maturity" = watch delle regressioni di scorecard (#103)
+  url: string | null;
   accrual_periodicity: string | null;
   ultimo_run: {
     run_at: string;
@@ -954,7 +955,8 @@ function MonitorView({ entityId }: { entityId: number }) {
       {targets.length === 0 ? (
         <p className="text-slate-500 mb-0" style={{ fontSize: 13 }}>
           Nessuna risorsa di questo ente è sotto controllo automatico. L&apos;agente di
-          monitoraggio (freshness, qualità, link) si configura per singola risorsa lato backend.
+          monitoraggio (freshness, qualità, link, regressioni di maturità) si configura
+          lato backend — per singola risorsa o sull&apos;intera scorecard dell&apos;ente.
         </p>
       ) : (
         <ul className="list-unstyled d-flex flex-column gap-2 mb-0">
@@ -970,7 +972,9 @@ function MonitorView({ entityId }: { entityId: number }) {
                 </span>
               )}
               <div className="text-truncate">
-                <span className="text-slate-700">{t.url}</span>
+                <span className="text-slate-700">
+                  {t.kind === "maturity" ? "Scorecard ODM — avvisi sulle regressioni di maturità" : t.url}
+                </span>
                 {t.ultimo_run && t.ultimo_run.findings.length > 0 && (
                   <div className="text-slate-500" style={{ fontSize: 12 }}>
                     {t.ultimo_run.findings.map((f) => f.messaggio).join(" · ")}

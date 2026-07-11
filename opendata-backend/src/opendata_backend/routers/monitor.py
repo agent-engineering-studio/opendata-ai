@@ -37,6 +37,7 @@ async def get_entity_monitor_status(
         run = await repo.latest_run(session, t.id)
         out.append({
             "id": t.id,
+            "kind": t.kind,
             "url": t.url,
             "source": t.source,
             "dataset_id": t.dataset_id,

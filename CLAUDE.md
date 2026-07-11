@@ -49,7 +49,8 @@ Colle (ISTAT 072021).
   additivo in `/datasets/search`), `/territory/{istat}/report|profile|snapshot|site/*`,
   `/usecases/{apriqui,pugliatrip}`, `/showcases/*`, `/community/*`.
 - **Console-script**: `opendata-territorio-seed`, `opendata-batch` (cron, idempotente),
-  `opendata-monitor` (cron, agente di monitoraggio #88: freshness/qualità/link +
+  `opendata-monitor` (cron, agente di monitoraggio #88: freshness/qualità/link,
+  #103: watch regressioni di maturità via `--add-maturity-watch` +
   notifica webhook/email opt-in, motore puro in `opendata_core/monitor/`).
 - **Anello valore⇄maturità (Fase 5)**: i gap dei report Territorio penalizzano
   l'Impact dell'ente (`reuse_demand_penalty` iniettato) e compaiono come "domanda di
