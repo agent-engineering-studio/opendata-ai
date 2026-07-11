@@ -23,9 +23,12 @@ from pydantic import BaseModel
 
 from ..ispra.models import LandCoverInfo, RiskIndicators
 from ..landscape.models import LandscapeConstraint
+from ..sin_sir.models import ContaminationInfo
 
 Confidenza = Literal["Alta", "Media", "Bassa"]
-Classificazione = Literal["VINCOLATO", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE"]
+Classificazione = Literal[
+    "BROWNFIELD", "VINCOLATO", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE",
+]
 
 DA_VERIFICARE = "da verificare"
 
@@ -46,6 +49,10 @@ _CAVEAT_PPTR_REGIONALE = (
 _CAVEAT_NO_PPTR = (
     "vincolo paesaggistico non valutato: piano paesaggistico regionale non "
     "interrogabile per questo comune"
+)
+_CAVEAT_SIR_COMUNALE = (
+    "procedimenti di bonifica (SIR) a scala COMUNALE (MOSAICO): non è la verifica "
+    "sul singolo poligono — da riscontrare puntualmente"
 )
 _CAVEAT_CLC_SCALA = (
     "copertura del suolo da Corine Land Cover (scala nazionale, unità minima ~25 ha): "
@@ -128,6 +135,7 @@ def reconcile_polygon(
     investimenti: list[dict[str, Any]] | None = None,
     land_cover: LandCoverInfo | None = None,
     vincolo_paesaggistico: LandscapeConstraint | None = None,
+    contaminazione: ContaminationInfo | None = None,
 ) -> SoilRecord:
     """Costruisce il `SoilRecord` §4.5 per un poligono candidato.
 
@@ -141,6 +149,8 @@ def reconcile_polygon(
             Fase 2c), o None. Risolve il nodo "edificato/impermeabilizzato" §4.3.
         vincolo_paesaggistico: tutele del piano paesaggistico regionale nel punto
             (#128 Fase 2b), o None. Risolve il nodo "vincolo paesaggistico" §4.3.
+        contaminazione: siti contaminati SIN/SIR nel punto/comune (MOSAICO ISPRA,
+            #128 Fase 2a), o None. Attiva la classificazione BROWNFIELD (§4.4).
 
     Regola di confidenza (§4.5): **Alta** solo se ≥2 fonti concordano; **Bassa** se
     la sola evidenza è il tag OSM; **Media** se 2 fonti ma con un segnale a scala
@@ -197,9 +207,20 @@ def reconcile_polygon(
     else:
         stato_attivita = DA_VERIFICARE
 
-    # ── classificazione (albero §4.3, nodi attivabili) ──
-    if vincoli_parti:
-        classificazione: Classificazione = "VINCOLATO"
+    # ── contaminazione (SIN-SIR, MOSAICO ISPRA, #128 Fase 2a) ──
+    contaminato = bool(contaminazione and contaminazione.contaminato)
+    if contaminazione is not None:
+        # SIR (procedimenti) è comune-level; il SIN (poligono) è puntuale.
+        if contaminazione.sir_contaminati and not contaminazione.sin:
+            caveat.append(_CAVEAT_SIR_COMUNALE)
+        if contaminato:
+            fonti += 1
+
+    # ── classificazione (albero §4.3/§4.4, nodi attivabili) ──
+    if contaminato:
+        classificazione: Classificazione = "BROWNFIELD"  # contaminazione = causa di abbandono §4.4
+    elif vincoli_parti:
+        classificazione = "VINCOLATO"
     elif dismesso:
         classificazione = "DISMESSO"
     elif "greenfield" in kind.lower():
@@ -236,7 +257,8 @@ def reconcile_polygon(
 
     # ── azione consigliata ──
     azione = {
-        "VINCOLATO": "verificare puntualmente il vincolo PAI sul poligono prima di ogni ipotesi di riuso",
+        "BROWNFIELD": "sito contaminato (SIN/SIR): caratterizzazione e bonifica necessarie prima di ogni riuso",
+        "VINCOLATO": "verificare puntualmente il vincolo (PAI/paesaggistico) sul poligono prima di ogni ipotesi di riuso",
         "DISMESSO": "candidabile a rigenerazione/riuso: verificare proprietà, destinazione PUG e bonifica",
         "LIBERO": "verificare la destinazione urbanistica prima di considerarla edificabile",
         "SPAZIO_PUBBLICO": "valutare riqualificazione/uso polifunzionale dello spazio",
@@ -259,7 +281,10 @@ def reconcile_polygon(
         vincoli=vincoli,
         classificazione=classificazione,
         discrepanza_osm=discrepanza,
-        causa_abbandono=_causa_abbandono(kind) if dismesso else DA_VERIFICARE,
+        causa_abbandono=(
+            "contaminazione accertata (sito SIN/SIR — bonifica necessaria)" if contaminato
+            else _causa_abbandono(kind) if dismesso else DA_VERIFICARE
+        ),
         azione_consigliata=azione,
         confidenza=confidenza,
         caveat=caveat,

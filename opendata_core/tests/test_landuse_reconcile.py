@@ -5,6 +5,14 @@ from __future__ import annotations
 from opendata_core.ispra.models import HazardSlice, LandCoverInfo, RiskIndicators
 from opendata_core.landscape.models import LandscapeConstraint
 from opendata_core.landuse import SoilRecord, reconcile_polygon
+from opendata_core.sin_sir.models import ContaminationInfo
+
+
+def _cont(*, contaminato: bool, sin: bool, sir_cont: int = 0) -> ContaminationInfo:
+    return ContaminationInfo(
+        contaminato=contaminato, sin=sin, sir_procedimenti=sir_cont, sir_contaminati=sir_cont,
+        source_url="u", licenza="MOSAICO",
+    )
 
 
 def _paes(*, vincolato: bool, tutele: tuple[str, ...] = ()) -> LandscapeConstraint:
@@ -147,6 +155,46 @@ def test_vincoli_idrogeo_e_paesaggistico_combinati() -> None:
     )
     assert r.classificazione == "VINCOLATO"
     assert "idrogeologico" in r.vincoli and "paesaggistico" in r.vincoli
+
+
+def test_contaminazione_classifica_brownfield_e_alza_confidenza() -> None:
+    # SIN al punto + tag dismesso → BROWNFIELD, 2 fonti concordi → Alta
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO, contaminazione=_cont(contaminato=True, sin=True))
+    assert r.classificazione == "BROWNFIELD"
+    assert r.confidenza == "Alta"
+    assert "contaminazione" in r.causa_abbandono
+    assert "bonifica" in r.azione_consigliata
+
+
+def test_contaminazione_sir_comunale_aggiunge_caveat() -> None:
+    r = reconcile_polygon(
+        osm_feature=_OSM_DISMESSO,
+        contaminazione=_cont(contaminato=True, sin=False, sir_cont=5),
+    )
+    assert r.classificazione == "BROWNFIELD"
+    assert any("scala COMUNALE" in c for c in r.caveat)
+
+
+def test_contaminazione_assente_non_e_brownfield() -> None:
+    # procedimenti interrogati ma nessuna contaminazione → resta DISMESSO
+    r = reconcile_polygon(
+        osm_feature=_OSM_DISMESSO,
+        contaminazione=_cont(contaminato=False, sin=False, sir_cont=0),
+    )
+    assert r.classificazione == "DISMESSO"
+    assert r.confidenza == "Bassa"
+
+
+def test_brownfield_prevale_su_vincolato() -> None:
+    # contaminato + anche vincolo idrogeologico → BROWNFIELD (causa più critica),
+    # ma il vincolo resta registrato nel campo vincoli
+    r = reconcile_polygon(
+        osm_feature=_OSM_DISMESSO,
+        contaminazione=_cont(contaminato=True, sin=True),
+        idrogeo=_idrogeo(frane_p3p4_pct=20.0),
+    )
+    assert r.classificazione == "BROWNFIELD"
+    assert "VINCOLATO" in r.vincoli and "idrogeologico" in r.vincoli
 
 
 def test_id_geometria_e_passthrough() -> None:

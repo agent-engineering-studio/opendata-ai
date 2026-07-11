@@ -1524,6 +1524,30 @@ class OrchestratorSession:
             _log_lens_skip("riconciliazione suolo: vincoli paesaggistici non disponibili per %s "
                            "(confidenza ridotta)", req.cod_comune, exc=exc)
 
+        # Siti contaminati SIN-SIR (MOSAICO ISPRA, #128 Fase 2a): SIN puntuale +
+        # procedimenti di bonifica per comune → causa contaminazione → BROWNFIELD.
+        # Nazionale; fail-safe come le altre fonti (la cache SIR è per comune).
+        contaminazioni: dict[str, Any] = {}
+        try:
+            from opendata_core.sin_sir import SinSirClient
+
+            async def _contaminazioni() -> dict[str, Any]:
+                out: dict[str, Any] = {}
+                async with SinSirClient() as sc:
+                    for cand in candidati:
+                        lat, lon = cand.get("lat"), cand.get("lon")
+                        if lat is None or lon is None:
+                            continue
+                        out[f"{cand.get('osm_type')}/{cand.get('osm_id')}"] = await sc.contamination_at(
+                            lat, lon, req.cod_comune,
+                        )
+                return out
+
+            contaminazioni = await asyncio.wait_for(_contaminazioni(), timeout=40.0)
+        except Exception as exc:  # noqa: BLE001 — contaminazione assente ⇒ confidenza ridotta
+            _log_lens_skip("riconciliazione suolo: siti contaminati SIN-SIR non disponibili per %s "
+                           "(confidenza ridotta)", req.cod_comune, exc=exc)
+
         from opendata_core.landuse import reconcile_polygon
 
         records = [
@@ -1531,6 +1555,7 @@ class OrchestratorSession:
                 osm_feature=cand, idrogeo=idrogeo, investimenti=investimenti,
                 land_cover=coperture.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
                 vincolo_paesaggistico=vincoli_paes.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
+                contaminazione=contaminazioni.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
             ).model_dump()
             for cand in candidati
         ]
