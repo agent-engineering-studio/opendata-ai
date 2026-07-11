@@ -130,7 +130,10 @@ bonifiche** SIN-SIR dal catasto MOSAICO di ISPRA, **destinazione urbanistica** d
 zonizzazione PUG/PRG quando il comune la pubblica come open data, progetti
 OpenCoesione nel comune) e propone una **classificazione** (dismesso, **brownfield**
 se contaminato, vincolato, **frangia** urbana, libero…) con **causa di abbandono** e
-**azione consigliata**. Coerente col principio del progetto — *la fonte ufficiale è
+**azione consigliata**. Per le aree produttive e a verde il report applica i **pattern
+di rigenerazione**: *zone industriali* → «riuso prima di espansione» + dotazione verde
+≥10% in zona D (strumenti PIP/ASI/APEA); *parchi* → 9 mq/ab fruibili entro ~300 m.
+Coerente col principio del progetto — *la fonte ufficiale è
 il dato aperto, non un documento caricato* — quando un comune **non** pubblica il PUG
 come dato aperto l'analisi non lo inventa: lo segnala come **dato da aprire**
 (raccomandazione DCAT-AP_IT) e come domanda di riuso non soddisfatta nella maturità

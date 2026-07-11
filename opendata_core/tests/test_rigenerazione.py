@@ -70,6 +70,29 @@ def test_metadati_passati_attraverso() -> None:
     assert m["norma"] == "D.M. 1444/1968" and m["target"] == 7000  # classe 5-10k, k=1.0
 
 
+def test_formula_percentuale_indipendente_da_pop() -> None:
+    # §2 zone industriali: dotazione ≥ coeff% della zona D, non pro-capite
+    cat = [{"id": "zi", "tema": "Zone D", "norma": "n", "sdg": "SDG 9",
+            "principio": "riuso prima di espansione",
+            "formula": {"tipo": "percentuale", "unita": "%", "coeff": 10}}]
+    r = _by_id(valuta_pattern(500, cat), "zi")
+    assert r["target"] == 10.0 and r["unita"] == "%"
+    assert r["principio"] == "riuso prima di espansione"
+    # target identico a popolazione molto diversa (non dipende dalla pop)
+    assert _by_id(valuta_pattern(500000, cat), "zi")["target"] == 10.0
+
+
+def test_prossimita_metadato_passato_attraverso() -> None:
+    cat = [{"id": "v", "formula": {"tipo": "lineare", "unita": "mq", "coeff": 9}, "prossimita_m": 300}]
+    r = _by_id(valuta_pattern(1000, cat), "v")
+    assert r["prossimita_m"] == 300 and r["target"] == 9000
+
+
+def test_metadati_opzionali_assenti_non_compaiono() -> None:
+    r = _by_id(valuta_pattern(1000, [{"id": "x", "formula": {"tipo": "lineare", "coeff": 1}}]), "x")
+    assert "principio" not in r and "prossimita_m" not in r
+
+
 # ── Scoring multicriteria (Fase 2) ─────────────────────────────────────────
 from opendata_core.rigenerazione import score_candidato, valuta_aree  # noqa: E402
 

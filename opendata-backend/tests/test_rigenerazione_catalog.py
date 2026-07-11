@@ -40,3 +40,18 @@ def test_ogni_pattern_cita_norma_e_sdg() -> None:
     for r in valuta_pattern(10000, rigenerazione_patterns()):
         assert r.get("norma"), f"manca la norma per {r['id']}"
         assert r.get("sdg", "").startswith("SDG"), f"manca/SDG malformato per {r['id']}"
+
+
+
+def test_zone_industriali_e_prossimita_verde() -> None:
+    """#130 Fase 4b: pattern §2 zone industriali (verde ≥10%, PIP/ASI/APEA) e
+    prossimità 300 m del verde (§3) nel catalogo reale, senza duplicare i 9 mq/ab."""
+    res = valuta_pattern(27889, rigenerazione_patterns())
+    zi = _by_id(res, "zone_industriali")
+    assert zi is not None
+    assert zi["target"] == 10.0 and zi["unita"] == "%"
+    assert zi["principio"] == "riuso prima di espansione"
+    assert set(zi["strumenti"]) >= {"PIP", "ASI", "APEA"}
+    # §3: la prossimità è aggiunta al pattern esistente, la quota 9 mq/ab resta
+    vg = _by_id(res, "verde_gioco_sport")
+    assert vg["prossimita_m"] == 300 and vg["target"] == 251000

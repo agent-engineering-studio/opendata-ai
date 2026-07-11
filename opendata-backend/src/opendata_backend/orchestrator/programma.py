@@ -721,6 +721,10 @@ def build_programma_task(
                         pezzo += f", assetto «{r['assetto']}»"
                     if r.get("posteggi_indicativi") is not None:
                         pezzo += f" (~{r['posteggi_indicativi']} posteggi)"
+                if r.get("principio"):
+                    pezzo += f"; principio: {r['principio']}"
+                if r.get("prossimita_m") is not None:
+                    pezzo += f"; prossimità ~{r['prossimita_m']} m"
                 pezzo += f" [{r.get('norma')}" + (f"; {r['sdg']}" if r.get("sdg") else "") + "]"
                 voci.append(pezzo)
             if voci:

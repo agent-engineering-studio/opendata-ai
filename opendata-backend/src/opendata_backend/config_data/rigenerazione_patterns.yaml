@@ -8,7 +8,8 @@
 # rendicontazione e l'accesso ai finanziamenti.
 #
 # I valori calcolati sono OBIETTIVI di programmazione (Gap = target − dotazione
-# osservata), NON misure reali. `formula.tipo` ∈ {lineare, per_mille, classi, soglia}.
+# osservata), NON misure reali. `formula.tipo` ∈ {lineare, per_mille, classi, soglia,
+# percentuale}. Metadati opzionali: `principio` (§2), `prossimita_m` (§3).
 # `criteri_pesi`: matrice multicriteria 0–100 (soglia idoneità ≥60) per la Fase 2
 # (localizzazione su lotti/corridoi via OSM); qui guida solo l'accento del dominio.
 
@@ -45,6 +46,8 @@ patterns:
     fonti: [osm, copernicus]
     strumenti: [PUG, perequazione, PIRU]
     criteri_pesi: { centralita: 10, disponibilita_giuridica: 20, abbandono: 15, dimensione: 20, urbanistica: 10, accesso: 15, vincoli: 10 }
+    # prossimità di accessibilità (§3): un parco è "fruibile" entro ~300 m a piedi.
+    prossimita_m: 300
     formula: { tipo: lineare, unita: mq, coeff: 9 }
 
   - id: impianti_sportivi
@@ -95,3 +98,15 @@ patterns:
       soglia_ab: 100000
       se_sopra: "PUMS obbligatorio"
       se_sotto: "PUMS raccomandato (forma semplificata: Piano del traffico / Biciplan)"
+
+  - id: zone_industriali
+    tema: "Zone industriali e produttive"
+    sdg: "SDG 9, 11, 12"
+    indicatore: "dotazione di verde/servizi ≥10% nelle zone produttive (D) + riuso prima di espansione"
+    norma: "D.M. 1444/1968 (art. 5: ≥10% a spazi pubblici/verde nelle zone D) + APEA (D.Lgs. 112/1998)"
+    geometria: lotto
+    principio: "riuso prima di espansione"
+    fonti: [osm, ispra]
+    strumenti: [PIP, ASI, APEA]
+    criteri_pesi: { centralita: 10, disponibilita_giuridica: 20, abbandono: 25, dimensione: 15, urbanistica: 15, accesso: 5, vincoli: 10 }
+    formula: { tipo: percentuale, unita: "%", coeff: 10 }
