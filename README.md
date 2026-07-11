@@ -141,6 +141,10 @@ verificabili con le fonti correnti (catasto, destinazione PUG) restano *"da
 verificare"*. Un controllo di qualità **avvisa**
 (senza mai bloccare il report) quando lo stato del suolo non è verificabile —
 coerente col principio: ogni fonte mancante **degrada la confidenza, non blocca**.
+Nel report la sezione **"Stato reale del suolo"** mostra ogni area con un **badge di
+confidenza** (Alta/Media/Bassa) e i campi *"da verificare"* resi espliciti; la
+**proprietà** non è mai presentata come pubblica per default. La sezione è inclusa
+anche nell'**export PDF**.
 
 **Export.** Ogni analisi generata può essere esportata in tre formati: **PDF**
 (documento da condividere o stampare), **Markdown** (testo riusabile in altri

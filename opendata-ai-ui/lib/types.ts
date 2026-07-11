@@ -191,6 +191,30 @@ export type ZoneListResponse = {
   source_url?: string;
 };
 
+/** Livello di confidenza del record di riconciliazione del suolo (§4.5). */
+export type ConfidenzaSuolo = "Alta" | "Media" | "Bassa";
+
+/** Record riconciliato dello stato reale del suolo per un'area candidata (#130). */
+export type SoilRecord = {
+  id_geometria: string;
+  tag_osm: string;
+  uso_reale: string;
+  destinazione_pug: string;
+  catasto: string;
+  proprieta: string;
+  stato_attivita: string;
+  vincoli: string;
+  classificazione: string;
+  discrepanza_osm: string;
+  causa_abbandono: string;
+  azione_consigliata: string;
+  confidenza: ConfidenzaSuolo;
+  caveat: string[];
+  nome?: string | null;
+  url?: string | null;
+  area_mq?: number | null;
+};
+
 export type ProgrammaResponse = {
   comune: string;
   zona?: string | null;
@@ -206,4 +230,6 @@ export type ProgrammaResponse = {
   generato_il: string;
   /** True se la scheda arriva dalla cache (F1): la UI offre "Rigenera". */
   da_cache?: boolean;
+  /** Stato reale del suolo per le aree candidate (Parte V, #130). */
+  stato_suolo?: SoilRecord[];
 };

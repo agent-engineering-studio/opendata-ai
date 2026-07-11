@@ -10,6 +10,7 @@ import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
 import { LentiAnalitiche } from "@/components/territorio/LentiAnalitiche";
 import { ProposalCard } from "@/components/territorio/ProposalCard";
 import { SourcesList } from "@/components/territorio/SourcesList";
+import { StatoSuolo } from "@/components/territorio/StatoSuolo";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
 import { ZoneSelector, type ZoneSelection } from "@/components/territorio/ZoneSelector";
 import { downloadSchedaMarkdown } from "@/lib/programmaMarkdown";
@@ -508,6 +509,12 @@ function TerritorioInner() {
               <h2 className="h5 mb-3">Analisi SWOT</h2>
               <SwotGrid swot={scheda.swot} />
             </>
+          ) : null}
+
+          {scheda.stato_suolo && scheda.stato_suolo.length > 0 ? (
+            <div className="mt-4">
+              <StatoSuolo records={scheda.stato_suolo} />
+            </div>
           ) : null}
 
           <h2 className="h5 mt-4 mb-3">Proposte</h2>
