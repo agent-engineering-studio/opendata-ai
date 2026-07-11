@@ -14,6 +14,7 @@ from .gates import (
     gate_denominatore,
     gate_dedup,
     gate_freshness,
+    gate_riconciliazione_suolo,
     gate_vincoli,
     valuta_report,
 )
@@ -28,4 +29,5 @@ __all__ = [
     "gate_certificazioni",
     "gate_dedup",
     "gate_vincoli",
+    "gate_riconciliazione_suolo",
 ]

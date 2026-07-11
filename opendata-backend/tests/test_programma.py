@@ -803,6 +803,7 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
         "_resolve_turismo", "_resolve_lavoro", "_resolve_trasporti",
         "_resolve_welfare", "_resolve_istruzione", "_resolve_casa", "_resolve_reddito",
         "_resolve_ambiente", "_resolve_sanita", "_resolve_comparabili", "_resolve_aree_candidate",
+        "_resolve_riconciliazione_suolo",
     ):
         setattr(sess, name, _none)
 
@@ -810,14 +811,15 @@ async def test_resolve_all_lenses_emits_per_lens_events() -> None:
                            modalita="completa")
     out = await OrchestratorSession._resolve_all_lenses(sess, req, emit=events.append)
 
-    # ritorno invariato: le 14 chiavi presenti, tutte None
+    # ritorno invariato: le 15 chiavi presenti, tutte None
     assert set(out) == {
         "zona", "zone_comm", "commercio", "turismo", "lavoro", "trasporti",
         "welfare", "istruzione", "casa", "reddito", "ambiente", "sanita", "comparabili", "aree",
+        "suolo",
     }
     starts = [e for e in events if e["phase"] == "start"]
     ends = [e for e in events if e["phase"] == "end"]
-    assert len(starts) == 14 and len(ends) == 14
+    assert len(starts) == 15 and len(ends) == 15
     assert {e["source"] for e in starts} == set(_LENS_SOURCES.values())
     assert all("elapsed_ms" in e for e in ends)
     assert all(e.get("error") == "nessun dato" for e in ends)  # None ⇒ saltata

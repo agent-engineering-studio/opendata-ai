@@ -39,8 +39,10 @@ Colle (ISTAT 072021).
 - **Motori puri** in `opendata_core/` (no FastMCP/FastAPI/LLM — semantico Haiku e
   pesi/penalità sono **iniettati**): `maturity/` (5-star/FAIR/DCAT-AP_IT/ISO25012/
   HVD → 4 dimensioni ODM, `assess_entity`), `value/` (art.14 + combinabilità),
-  `territory/` (resolve + profilo), connettori `meteo`/`gtfs`/`wikidata`/`portals`,
-  `maturity/harvest.py` (CKAN), `opencoesione/` (client REST).
+  `territory/` (resolve + profilo), `landuse/` (riconciliazione OSM↔stato reale del
+  suolo, `reconcile_polygon`→`SoilRecord` con confidenza graduata, #127), connettori
+  `meteo`/`gtfs`/`wikidata`/`portals`, `maturity/harvest.py` (CKAN), `opencoesione/`
+  (client REST).
 - **Warehouse `opendata.*`** (migrazioni stub 0007–0009): `entities`,
   `dataset_quality`, `maturity_assessments`, `place`+signal+`investment`+
   `feature_store`+`territory_reports`, `raw_ingest`, `civic_snapshots`,

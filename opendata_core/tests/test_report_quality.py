@@ -11,6 +11,7 @@ from opendata_core.report_quality import (
     gate_denominatore,
     gate_dedup,
     gate_freshness,
+    gate_riconciliazione_suolo,
     gate_vincoli,
     valuta_report,
 )
@@ -147,8 +148,9 @@ def test_valuta_report_pulito_pubblicabile() -> None:
         vincolo_comunale_disponibile=True,
     )
     assert q.esito == "PASS" and q.pubblicabile
-    assert q.punteggio == q.massimo == 10
-    assert len(q.findings) == 5
+    # 5 gate Parte IV + gate suolo (PASS con soil_records assenti) = 6 dimensioni
+    assert q.punteggio == q.massimo == 12
+    assert len(q.findings) == 6
 
 
 def test_valuta_report_critica_blocca_pubblicazione() -> None:
@@ -162,4 +164,44 @@ def test_valuta_report_critica_blocca_pubblicazione() -> None:
     md = q.markdown()
     assert "Qualità del report" in md and "13 dimensioni" in md
     d = q.to_dict()
-    assert d["esito"] == "FAIL" and len(d["controlli"]) == 5
+    assert d["esito"] == "FAIL" and len(d["controlli"]) == 6
+
+
+# ── Gate Parte V — Riconciliazione suolo (WARN, mai FAIL) ────────────
+
+
+def test_gate_suolo_senza_record_pass() -> None:
+    f = gate_riconciliazione_suolo(None)
+    assert f.esito == "PASS" and f.tipo == "alta"
+
+
+def test_gate_suolo_confidenza_bassa_warn() -> None:
+    f = gate_riconciliazione_suolo([
+        {"confidenza": "Bassa", "classificazione": "DISMESSO"},
+        {"confidenza": "Alta", "classificazione": "VINCOLATO"},
+    ])
+    assert f.esito == "WARN" and f.tipo == "alta"
+    assert "1/2" in f.messaggio
+
+
+def test_gate_suolo_tutto_risolto_pass() -> None:
+    f = gate_riconciliazione_suolo([
+        {"confidenza": "Alta", "classificazione": "VINCOLATO"},
+        {"confidenza": "Media", "classificazione": "DISMESSO"},
+    ])
+    assert f.esito == "PASS"
+
+
+def test_gate_suolo_warn_non_blocca_pubblicazione() -> None:
+    # anche con suolo a confidenza bassa, un report altrimenti pulito resta pubblicabile
+    q = valuta_report(
+        testi=["La popolazione è di 26.731 abitanti; dati ISTAT 2024."],
+        titoli_proposte=["Rete ciclabile", "Sistema museale"],
+        pop_rif=26731,
+        anno_corrente=ANNO,
+        evidenze_testo="ISTAT 2024",
+        vincolo_comunale_disponibile=True,
+        soil_records=[{"confidenza": "Bassa", "classificazione": "DA_VERIFICARE"}],
+    )
+    assert q.esito == "WARN"        # c'è un WARN...
+    assert q.pubblicabile is True   # ...ma "alta" non è "critica" → non blocca

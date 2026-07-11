@@ -838,6 +838,7 @@ def applica_qualita(
     req: ProgrammaRequest,
     *,
     vincolo_disponibile: bool,
+    soil_records: list[dict] | None = None,
 ) -> None:
     """Esegue i gate di qualità (rubric Parte IV) sulla risposta strutturata e
     annota `resp` IN PLACE: popola `resp.qualita` (scorecard) e appende il footer
@@ -870,6 +871,7 @@ def applica_qualita(
             anno_corrente=(resp.generato_il or datetime.now(timezone.utc)).year,
             evidenze_testo=evidenze_testo,
             vincolo_comunale_disponibile=vincolo_disponibile,
+            soil_records=soil_records,
         )
         resp.qualita = QualitaReport.model_validate(q.to_dict())
         resp.disclaimer = (resp.disclaimer or "").rstrip() + "\n\n" + q.markdown()

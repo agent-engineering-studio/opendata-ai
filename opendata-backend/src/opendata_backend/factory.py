@@ -142,6 +142,7 @@ _LENS_SOURCES: dict[str, str] = {
     "sanita": "Sanità di prossimità",
     "comparabili": "Comparabili · progetti peer (OpenCoesione)",
     "aree": "Aree candidate · vuoti urbani (OSM)",
+    "suolo": "Suolo · riconciliazione OSM ↔ realtà",
 }
 
 # Comparabili (Fase B): selezione RILEVANTE dei progetti peer. Prima si prendeva il
@@ -1418,6 +1419,73 @@ class OrchestratorSession:
             _log_lens_skip("aree candidate OSM non risolte per %s", req.cod_comune, exc=exc)
             return None
 
+    @staticmethod
+    async def _resolve_riconciliazione_suolo(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Riconciliazione suolo (#127) con cache Redis 24h (vedi `_lens_cached`)."""
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        return await _lens_cached(
+            ("suolo", req.cod_comune),
+            lambda: OrchestratorSession._resolve_riconciliazione_suolo_uncached(req),
+            force=req.force_refresh,
+        )
+
+    @staticmethod
+    async def _resolve_riconciliazione_suolo_uncached(req: ProgrammaRequest) -> dict[str, Any] | None:
+        """Riconciliazione OSM ↔ stato reale del suolo (Parte V Fase 1, #127).
+
+        ARRICCHISCE le aree candidate esistenti (`_resolve_aree_candidate`, cache-hit
+        → nessuna query Overpass duplicata) con un `SoilRecord` §4.5 per poligono,
+        usando le sole fonti disponibili oggi: IdroGEO PAI (a scala comunale) come
+        vincolo e i progetti OpenCoesione nel comune come segnale di attività/riuso.
+        Best-effort e fail-safe in ogni strato: se mancano le aree la lente si salta;
+        ogni fonte ground-truth non raggiungibile DEGRADA la confidenza del record,
+        non blocca il report (principio #127). Solo idee/completa.
+        """
+        if req.modalita not in ("idee", "completa") or not req.comune_nome:
+            return None
+        try:
+            aree = await OrchestratorSession._resolve_aree_candidate(req)
+        except Exception as exc:  # noqa: BLE001 — fail-safe: senza aree, niente riconciliazione
+            _log_lens_skip("riconciliazione suolo: aree candidate non risolte per %s",
+                           req.cod_comune, exc=exc)
+            return None
+        candidati = (aree or {}).get("candidati") or []
+        if not candidati:
+            return None
+
+        # Fonti ground-truth OPZIONALI: ogni fallimento riduce la confidenza, non blocca.
+        idrogeo = None
+        try:
+            from opendata_core.ispra import IspraClient
+
+            async with IspraClient() as c:
+                idrogeo = await asyncio.wait_for(c.risk_indicators(req.cod_comune), timeout=30.0)
+        except Exception as exc:  # noqa: BLE001 — vincolo idrogeologico assente ⇒ confidenza ridotta
+            _log_lens_skip("riconciliazione suolo: IdroGEO non disponibile per %s (confidenza ridotta)",
+                           req.cod_comune, exc=exc)
+
+        investimenti: list[dict[str, Any]] = []
+        try:
+            from opendata_core.opencoesione import OpenCoesioneClient
+
+            async with OpenCoesioneClient() as c:
+                res = await asyncio.wait_for(
+                    c.search_projects(cod_comune=req.cod_comune, limit=50), timeout=30.0,
+                )
+            investimenti = res.get("results") or []
+        except Exception as exc:  # noqa: BLE001 — segnale attività assente ⇒ confidenza ridotta
+            _log_lens_skip("riconciliazione suolo: OpenCoesione non disponibile per %s "
+                           "(segnale attività assente)", req.cod_comune, exc=exc)
+
+        from opendata_core.landuse import reconcile_polygon
+
+        records = [
+            reconcile_polygon(osm_feature=cand, idrogeo=idrogeo, investimenti=investimenti).model_dump()
+            for cand in candidati
+        ]
+        return {"records": records} if records else None
+
     async def _resolve_all_lenses(
         self,
         req: ProgrammaRequest,
@@ -1453,6 +1521,7 @@ class OrchestratorSession:
             ("sanita", self._resolve_sanita(req)),
             ("comparabili", self._resolve_comparabili(req)),
             ("aree", self._resolve_aree_candidate(req)),
+            ("suolo", self._resolve_riconciliazione_suolo(req)),
         ]
         loop = asyncio.get_event_loop()
 
@@ -1721,6 +1790,7 @@ class OrchestratorSession:
                 applica_qualita(
                     resp, req,
                     vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+                    soil_records=(lenses.get("suolo") or {}).get("records"),
                 )
                 yield {"event": "result", "scheda": resp.model_dump(mode="json")}
             finally:
@@ -1796,6 +1866,7 @@ class OrchestratorSession:
         applica_qualita(
             response, req,
             vincolo_disponibile=_vincolo_pct_comunale(lenses["ambiente"]) is not None,
+            soil_records=(lenses.get("suolo") or {}).get("records"),
         )
         return response
 
