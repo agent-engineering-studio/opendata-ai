@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from ..ispra.models import RiskIndicators
+from ..ispra.models import LandCoverInfo, RiskIndicators
 
 Confidenza = Literal["Alta", "Media", "Bassa"]
 Classificazione = Literal["VINCOLATO", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE"]
@@ -38,6 +38,10 @@ _CAVEAT_IDROGEO_COMUNALE = (
     "geometrica del singolo poligono — da verificare puntualmente"
 )
 _CAVEAT_NO_IDROGEO = "vincolo idrogeologico non valutato: indicatori IdroGEO PAI non disponibili"
+_CAVEAT_CLC_SCALA = (
+    "copertura del suolo da Corine Land Cover (scala nazionale, unità minima ~25 ha): "
+    "indicativa per micro-poligoni"
+)
 
 # `kind` (derivato dai tag OSM in `overpass_candidate_areas`) → segnale di dismissione.
 _DISMESSO_HINT = ("brownfield", "disused", "abandoned", "ruins", "ex-militare", "ruderi")
@@ -113,6 +117,7 @@ def reconcile_polygon(
     osm_feature: dict[str, Any],
     idrogeo: RiskIndicators | None = None,
     investimenti: list[dict[str, Any]] | None = None,
+    land_cover: LandCoverInfo | None = None,
 ) -> SoilRecord:
     """Costruisce il `SoilRecord` §4.5 per un poligono candidato.
 
@@ -122,6 +127,8 @@ def reconcile_polygon(
         idrogeo: indicatori IdroGEO PAI del comune (scala comunale), o None.
         investimenti: progetti OpenCoesione nel comune (segnale di attività/riuso),
             o None/vuoto.
+        land_cover: copertura del suolo puntuale (Corine Land Cover ISPRA, #128
+            Fase 2c), o None. Risolve il nodo "edificato/impermeabilizzato" §4.3.
 
     Regola di confidenza (§4.5): **Alta** solo se ≥2 fonti concordano; **Bassa** se
     la sola evidenza è il tag OSM; **Media** se 2 fonti ma con un segnale a scala
@@ -136,6 +143,16 @@ def reconcile_polygon(
     caveat: list[str] = [_CAVEAT_USO_REALE, _CAVEAT_PUG, _CAVEAT_CATASTO]
     fonti = 1  # il tag OSM è sempre una fonte
     dismesso = any(h in kind.lower() for h in _DISMESSO_HINT)
+
+    # ── copertura del suolo puntuale (Corine Land Cover ISPRA, #128 Fase 2c) ──
+    uso_reale = DA_VERIFICARE
+    impermeabilizzato: bool | None = None
+    if land_cover is not None:
+        uso_reale = f"{land_cover.descrizione} (CLC {land_cover.clc_code})"
+        impermeabilizzato = land_cover.impermeabilizzato
+        caveat.remove(_CAVEAT_USO_REALE)  # nodo §4.3 risolto: non più "da verificare"
+        caveat.append(_CAVEAT_CLC_SCALA)
+        fonti += 1
 
     # ── vincolo idrogeologico (IdroGEO PAI, comune-level) ──
     vincolo = _vincolo_da_idrogeo(idrogeo)
@@ -170,16 +187,30 @@ def reconcile_polygon(
     else:
         classificazione = "DA_VERIFICARE"
 
-    # ── discrepanza OSM ↔ realtà ──
-    if dismesso and attivita_presente:
+    # ── discrepanza OSM ↔ realtà (usa la copertura del suolo quando disponibile) ──
+    contraddizione = False
+    if classificazione == "LIBERO" and impermeabilizzato:
+        discrepanza = (
+            "OSM segna l'area come libera/edificabile ma la copertura del suolo risulta "
+            "impermeabilizzata (Corine Land Cover, superfici artificiali)"
+        )
+        contraddizione = True
+    elif dismesso and attivita_presente:
         discrepanza = (
             "possibile disallineamento: OSM segna l'area come dismessa ma risultano "
             "progetti attivi nel comune — verificare se il riuso ha già interessato il poligono"
         )
         contraddizione = True
+    elif dismesso and impermeabilizzato is False:
+        discrepanza = (
+            "area dismessa ma copertura del suolo non artificiale: possibile "
+            "rinaturalizzazione (o unità CLC troppo grande), verificare sul campo"
+        )
+        contraddizione = True
+    elif land_cover is not None:
+        discrepanza = f"tag OSM coerente con la copertura del suolo rilevata ({land_cover.descrizione})"
     else:
         discrepanza = "non valutabile senza confronto ortofoto/Copernicus (Fase 2)"
-        contraddizione = False
 
     # ── azione consigliata ──
     azione = {
@@ -201,6 +232,7 @@ def reconcile_polygon(
     return SoilRecord(
         id_geometria=id_geometria,
         tag_osm=kind,
+        uso_reale=uso_reale,
         stato_attivita=stato_attivita,
         vincoli=vincoli,
         classificazione=classificazione,
