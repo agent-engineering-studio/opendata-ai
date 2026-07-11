@@ -54,9 +54,13 @@ def _mock_externals(monkeypatch) -> None:
             "aggregates": {}, "total": 2,
         }
 
+    async def fake_suolo(istat_code, comune_nome):  # noqa: ANN001, ANN202
+        return []  # evita la lente OSM/Overpass nei test di build_report
+
     monkeypatch.setattr(svc, "resolve_place", fake_resolve)
     monkeypatch.setattr(svc, "build_profile", fake_profile)
     monkeypatch.setattr(svc, "fetch_investments", fake_fetch)
+    monkeypatch.setattr(svc, "_resolve_stato_suolo", fake_suolo)
 
 
 @pytest.fixture
@@ -160,3 +164,29 @@ async def test_pug_published_states(monkeypatch) -> None:
 
     monkeypatch.setattr("opendata_core.pug.fetch_zoning", _boom)
     assert await svc._pug_published("072021", "Gioia del Colle") is None
+
+
+async def test_build_report_persiste_stato_suolo(session: AsyncSession, monkeypatch) -> None:
+    """#130 4c: i record §4.5 finiscono nel feature_store → li vede il sito civico
+    (build_state → snapshot → generate_site) oltre che nelle sezioni del report."""
+    from opendata_backend.civic.snapshot import build_state
+
+    rec = {
+        "id_geometria": "way/1", "tag_osm": "brownfield", "uso_reale": "da verificare",
+        "destinazione_pug": "D", "catasto": "da verificare", "proprieta": "da verificare",
+        "stato_attivita": "inattivo/dismesso", "vincoli": "da verificare",
+        "classificazione": "DISMESSO", "discrepanza_osm": "n/d", "causa_abbandono": "da verificare",
+        "azione_consigliata": "verifica", "confidenza": "Bassa", "caveat": [],
+    }
+
+    async def _one(istat_code, comune_nome):  # noqa: ANN001, ANN202
+        return [rec]
+
+    monkeypatch.setattr(svc, "_resolve_stato_suolo", _one)
+    report = await svc.build_report(
+        session, istat_code="072021", temi=None, anno_da=None, anno_a=None, settings=_settings(),
+    )
+    assert report["sezioni"]["stato_suolo"] == [rec]
+
+    state = await build_state(session, "072021")
+    assert state is not None and state["stato_suolo"] == [rec]

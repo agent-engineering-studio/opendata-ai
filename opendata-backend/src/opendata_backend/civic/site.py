@@ -36,10 +36,23 @@ _PAGES = [
     ("index.html", "Stato dell'arte"),
     ("investimenti.html", "Investimenti"),
     ("opportunita.html", "Opportunità"),
+    ("suolo.html", "Stato del suolo"),
     ("rischi.html", "Rischi"),
     ("avanzamento.html", "Avanzamento"),
     ("community.html", "Community"),
 ]
+
+# Classificazione §4.5 → classe badge del sito civico.
+_SUOLO_BADGE = {
+    "BROWNFIELD": ("Brownfield (contaminato)", "var(--bad)"),
+    "VINCOLATO": ("Vincolato", "var(--warn)"),
+    "FRANGIA": ("Frangia urbana", "var(--a)"),
+    "DISMESSO": ("Dismesso", "var(--mut)"),
+    "LIBERO": ("Libero", "var(--ok)"),
+    "SPAZIO_PUBBLICO": ("Spazio pubblico", "var(--a)"),
+    "DA_VERIFICARE": ("Da verificare", "var(--mut)"),
+}
+_CONFIDENZA_COLORE = {"Alta": "var(--ok)", "Media": "var(--warn)", "Bassa": "var(--bad)"}
 
 _BASE = _env.from_string("""<!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -105,6 +118,34 @@ def _render(page_file: str, page_title: str, body: str, ctx: dict[str, Any],
     )
 
 
+def _suolo_records_html(records: list[dict[str, Any]]) -> str:
+    """Blocchi HTML dei record §4.5 con badge classificazione + confidenza."""
+    if not records:
+        return "<p class='src'>Nessuna area candidata riconciliata.</p>"
+    blocks = []
+    for r in records:
+        cls_label, cls_color = _SUOLO_BADGE.get(r.get("classificazione", ""), _SUOLO_BADGE["DA_VERIFICARE"])
+        conf = r.get("confidenza") or "Bassa"
+        conf_color = _CONFIDENZA_COLORE.get(conf, "var(--bad)")
+        titolo = r.get("nome") or r.get("id_geometria") or "area"
+        campi = [
+            ("Tag OSM", r.get("tag_osm")), ("Uso reale", r.get("uso_reale")),
+            ("Destinazione (PUG/PRG)", r.get("destinazione_pug")), ("Vincoli", r.get("vincoli")),
+            ("Proprietà", r.get("proprieta")), ("Causa di abbandono", r.get("causa_abbandono")),
+        ]
+        righe = "".join(f"<tr><td>{_esc(k)}</td><td>{_esc(v)}</td></tr>" for k, v in campi)
+        blocks.append(
+            "<div style='border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin:8px 0;background:#fff'>"
+            "<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px'>"
+            f"<strong>{_esc(titolo)}</strong><span>"
+            f"<span class='badge' style='background:{cls_color}'>{_esc(cls_label)}</span> "
+            f"<span class='badge' style='background:{conf_color}'>Confidenza {_esc(conf.lower())}</span>"
+            f"</span></div><table>{righe}</table>"
+            f"<p class='src'>Azione consigliata: {_esc(r.get('azione_consigliata'))}</p></div>"
+        )
+    return "".join(blocks)
+
+
 def generate_site(
     snapshot: dict[str, Any], *, diff: dict[str, Any] | None = None,
     maturity: dict[str, Any] | None = None,
@@ -163,6 +204,19 @@ def generate_site(
         f"<ul>{''.join(f'<li>{_esc(g)}</li>' for g in gap) or '<li>Nessun gap rilevante.</li>'}</ul>"
     )
     files["rischi.html"] = _render("rischi.html", "Rischi", body, ctx)
+
+    # Stato reale del suolo (Parte V, #130): record riconciliato §4.5 con badge di
+    # confidenza. Disclaimer-modello + proprietà mai presunta pubblica (§6).
+    suolo = state.get("stato_suolo") or []
+    body = (
+        "<h2>Stato reale del suolo</h2>"
+        "<p class='src'>OpenStreetMap descrive ciò che è mappato, non lo stato giuridico o reale "
+        "del suolo. La <strong>confidenza</strong> è esplicita e i campi non verificabili restano "
+        "«da verificare»; la <strong>proprietà</strong> è dichiarata accertata o da verificare, "
+        "mai presunta pubblica.</p>"
+        + _suolo_records_html(suolo)
+    )
+    files["suolo.html"] = _render("suolo.html", "Stato del suolo", body, ctx)
 
     # Avanzamento (diff fra snapshot, se fornito)
     if diff:
