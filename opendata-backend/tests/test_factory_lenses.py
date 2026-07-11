@@ -232,6 +232,7 @@ async def test_riconciliazione_suolo_failsafe(monkeypatch) -> None:
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
     monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -293,6 +294,7 @@ async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
     monkeypatch.setattr(ispramod, "IspraClient", _Ispra)
     monkeypatch.setattr(ispramod, "LandCoverClient", _OCDown)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _OCDown)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -336,8 +338,53 @@ async def test_riconciliazione_suolo_land_cover_alza_confidenza(monkeypatch) -> 
     monkeypatch.setattr(ispramod, "LandCoverClient", _LC)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
 
-    req = ProgrammaRequest(cod_comune="110001", comune_nome="Matera", modalita="idee")
+    # comune non pugliese → nessun adattatore paesaggistico (landscape_adapter None):
+    # l'unica 2ª fonte è la copertura del suolo → basta a portare la confidenza ad Alta.
+    req = ProgrammaRequest(cod_comune="058091", comune_nome="Roma", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
     rec = out["records"][0]
     assert rec["confidenza"] == "Alta"
     assert rec["uso_reale"] != "da verificare" and "CLC" in rec["uso_reale"]
+
+
+async def test_riconciliazione_suolo_vincolo_paesaggistico_alza_confidenza(monkeypatch) -> None:
+    """#128 Fase 2b: con IdroGEO/OpenCoesione/copertura down, la sola tutela
+    paesaggistica (PPTR) concorda col tag OSM → VINCOLATO + confidenza Alta."""
+    import opendata_core.ispra as ispramod
+    import opendata_core.opencoesione as ocmod
+    from opendata_core.landscape.models import LandscapeConstraint
+
+    async def _fake_aree(req):  # noqa: ANN001, ANN202
+        return {"candidati": [{"osm_type": "way", "osm_id": 8, "kind": "brownfield",
+                               "lat": 40.99, "lon": 17.22, "area_mq": 7000}]}
+
+    class _Down:
+        async def __aenter__(self):  # noqa: ANN204
+            raise RuntimeError("down")
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+    class _PPTR:
+        async def __aenter__(self):  # noqa: ANN204
+            return self
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+        async def constraint_at(self, lat, lon):  # noqa: ANN001, ANN201
+            return LandscapeConstraint(vincolato=True, tutele=["Territori costieri"],
+                                       regione="Puglia", source_url="u", licenza="l")
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
+    monkeypatch.setattr(ispramod, "IspraClient", _Down)
+    monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: _PPTR)
+
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+    rec = out["records"][0]
+    assert rec["classificazione"] == "VINCOLATO"
+    assert rec["confidenza"] == "Alta"
+    assert "Territori costieri" in rec["vincoli"]
