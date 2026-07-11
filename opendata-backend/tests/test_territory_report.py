@@ -118,3 +118,45 @@ async def test_report_idempotent_signals_investment(session: AsyncSession) -> No
     rep = (await session.execute(select(func.count()).select_from(TerritoryReport))).scalar_one()
     assert inv == 2
     assert rep == 2
+
+
+# ── #129: gap "PUG non pubblicato" → domanda di riuso non soddisfatta ──
+
+
+def test_gap_analysis_include_pug_non_pubblicato() -> None:
+    sig = {"population": 1, "business": {"x": 1}, "work": {"y": 1}}
+    gaps = svc._gap_analysis(sig, {"n_progetti": 1}, pug_published=False)
+    assert any("PUG" in g and "DCAT-AP_IT" in g for g in gaps)
+    # pubblicato o non verificabile → nessun gap PUG (niente penalità falsa)
+    assert not any("PUG" in g for g in svc._gap_analysis(sig, {"n_progetti": 1}, pug_published=True))
+    assert not any("PUG" in g for g in svc._gap_analysis(sig, {"n_progetti": 1}, pug_published=None))
+
+
+@pytest.mark.asyncio
+async def test_pug_published_states(monkeypatch) -> None:
+    # provincia non mappata → non verificabile (None)
+    monkeypatch.setattr("opendata_backend.config_files.portali_regionali", lambda: {"province_ckan": {}})
+    assert await svc._pug_published("058091", "Roma") is None
+
+    monkeypatch.setattr(
+        "opendata_backend.config_files.portali_regionali",
+        lambda: {"province_ckan": {"072": "https://dati.puglia.it/ckan"}},
+    )
+
+    async def _found(**_k):  # noqa: ANN003
+        return object()
+
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _found)
+    assert await svc._pug_published("072021", "Gioia del Colle") is True
+
+    async def _none(**_k):  # noqa: ANN003
+        return None
+
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _none)
+    assert await svc._pug_published("072021", "Gioia del Colle") is False
+
+    async def _boom(**_k):  # noqa: ANN003
+        raise RuntimeError("ckan down")
+
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _boom)
+    assert await svc._pug_published("072021", "Gioia del Colle") is None

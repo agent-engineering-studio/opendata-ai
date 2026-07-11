@@ -126,9 +126,15 @@ suolo** ricostruito dalle fonti pubbliche oggi disponibili (vincolo idrogeologic
 IdroGEO PAI a scala comunale, **copertura del suolo** puntuale da Corine Land Cover
 ISPRA per capire se un'area è già *impermeabilizzata/edificata*, **vincoli
 paesaggistici** dal piano regionale — PPTR, oggi Puglia — **siti contaminati e
-bonifiche** SIN-SIR dal catasto MOSAICO di ISPRA, progetti OpenCoesione nel comune)
-e propone una **classificazione** (dismesso, **brownfield** se contaminato,
-vincolato, libero…) con **causa di abbandono** e **azione consigliata**. L'incertezza è
+bonifiche** SIN-SIR dal catasto MOSAICO di ISPRA, **destinazione urbanistica** dalla
+zonizzazione PUG/PRG quando il comune la pubblica come open data, progetti
+OpenCoesione nel comune) e propone una **classificazione** (dismesso, **brownfield**
+se contaminato, vincolato, **frangia** urbana, libero…) con **causa di abbandono** e
+**azione consigliata**. Coerente col principio del progetto — *la fonte ufficiale è
+il dato aperto, non un documento caricato* — quando un comune **non** pubblica il PUG
+come dato aperto l'analisi non lo inventa: lo segnala come **dato da aprire**
+(raccomandazione DCAT-AP_IT) e come domanda di riuso non soddisfatta nella maturità
+dell'ente. L'incertezza è
 esplicita, non nascosta: ogni poligono ha una **confidenza** (Alta solo se ≥2 fonti
 concordano, Bassa se l'unica evidenza è il tag OSM) e i campi non ancora
 verificabili con le fonti correnti (catasto, destinazione PUG) restano *"da

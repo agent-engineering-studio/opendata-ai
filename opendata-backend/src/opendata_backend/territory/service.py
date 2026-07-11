@@ -24,7 +24,9 @@ from .narrative import generate_report_narrative
 log = logging.getLogger("opendata-backend.territory")
 
 
-def _gap_analysis(profile_signals: dict[str, Any], inv_summary: dict[str, Any]) -> list[str]:
+def _gap_analysis(
+    profile_signals: dict[str, Any], inv_summary: dict[str, Any], *, pug_published: bool | None = None,
+) -> list[str]:
     gaps: list[str] = []
     if not profile_signals.get("population"):
         gaps.append("Popolazione non disponibile in anagrafica ISTAT.")
@@ -34,7 +36,35 @@ def _gap_analysis(profile_signals: dict[str, Any], inv_summary: dict[str, Any]) 
         gaps.append("Nessun progetto OpenCoesione tracciato per il comune.")
     if not profile_signals.get("work"):
         gaps.append("Dati su lavoro/occupazione non ancora integrati (fase successiva).")
+    # #129: il PUG serve alla riconciliazione del suolo (destinazione urbanistica).
+    # Se il portale regionale è raggiungibile ma non lo espone come open data, è una
+    # domanda di riuso non soddisfatta + un invito alla pubblicazione (pivot: la fonte
+    # ufficiale è il dato aperto, non un documento caricato). `None` = non verificabile.
+    if pug_published is False:
+        gaps.append(
+            "PUG (zonizzazione urbanistica) non pubblicato come open data: pubblicalo come "
+            "dataset DCAT-AP_IT — è una fonte ufficiale richiesta dall'analisi del territorio."
+        )
     return gaps
+
+
+async def _pug_published(istat_code: str, comune_nome: str | None) -> bool | None:
+    """Il PUG del comune è pubblicato come open data interrogabile?
+
+    True se trovato, False se il portale regionale è noto ma non lo espone, None se
+    non verificabile (nessun portale regionale mappato). Fail-safe: mai solleva."""
+    from ..config_files import portali_regionali
+
+    prov = str(istat_code or "").strip().zfill(6)[:3]
+    portale = (portali_regionali().get("province_ckan") or {}).get(prov)
+    if not portale or not comune_nome:
+        return None
+    try:
+        from opendata_core.pug import fetch_zoning
+
+        return (await fetch_zoning(comune_nome=comune_nome, base_url=portale)) is not None
+    except Exception:  # noqa: BLE001 — non verificabile → nessuna penalità falsa
+        return None
 
 
 async def build_report(
@@ -102,7 +132,7 @@ async def build_report(
         },
         "segnali": signals,
         "idee_sviluppo": idee_sviluppo,  # da ApriQui (Fase 3)
-        "gap_dato": _gap_analysis(signals, inv_summary),
+        "gap_dato": _gap_analysis(signals, inv_summary, pug_published=await _pug_published(istat_code, name)),
     }
     context = {
         "place": {"istat_code": istat_code, "name": name},

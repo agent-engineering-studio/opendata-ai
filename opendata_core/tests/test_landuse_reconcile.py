@@ -197,6 +197,38 @@ def test_brownfield_prevale_su_vincolato() -> None:
     assert "VINCOLATO" in r.vincoli and "idrogeologico" in r.vincoli
 
 
+def test_destinazione_pug_risolta_alza_confidenza() -> None:
+    # zona PUG "D" (produttiva) + tag dismesso → destinazione risolta, 2 fonti → Alta
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO, destinazione_pug="D")
+    assert r.destinazione_pug == "D"
+    assert r.confidenza == "Alta"
+    assert not any("PUG" in c and "non è ancora" in c for c in r.caveat)  # caveat PUG rimosso
+
+
+def test_pug_assente_resta_da_verificare() -> None:
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO)
+    assert r.destinazione_pug == "da verificare"
+    assert any("PUG" in c for c in r.caveat)
+
+
+def test_frangia_urbana_tag_non_urbano_in_zona_residenziale() -> None:
+    # greenfield (OSM: libero) ma zona PUG "C" (espansione residenziale) → FRANGIA §4.3.4
+    r = reconcile_polygon(
+        osm_feature={"osm_type": "way", "osm_id": 11, "kind": "greenfield"},
+        destinazione_pug="C2",
+    )
+    assert r.classificazione == "FRANGIA"
+    assert "frangia" in r.azione_consigliata.lower()
+
+
+def test_zona_produttiva_non_e_frangia() -> None:
+    r = reconcile_polygon(
+        osm_feature={"osm_type": "way", "osm_id": 12, "kind": "greenfield"},
+        destinazione_pug="D",
+    )
+    assert r.classificazione == "LIBERO"  # zona D non residenziale → nessuna frangia
+
+
 def test_id_geometria_e_passthrough() -> None:
     r = reconcile_polygon(osm_feature=_OSM_DISMESSO)
     assert r.id_geometria == "way/42"

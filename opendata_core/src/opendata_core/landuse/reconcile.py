@@ -27,8 +27,13 @@ from ..sin_sir.models import ContaminationInfo
 
 Confidenza = Literal["Alta", "Media", "Bassa"]
 Classificazione = Literal[
-    "BROWNFIELD", "VINCOLATO", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE",
+    "BROWNFIELD", "VINCOLATO", "FRANGIA", "DISMESSO", "LIBERO", "SPAZIO_PUBBLICO", "DA_VERIFICARE",
 ]
+
+# Zone omogenee residenziali (PUG/PRG): B (consolidata) e C (espansione).
+_ZONE_RESIDENZIALI = ("b", "c")
+# tag OSM che, in zona residenziale, segnalano una FRANGIA urbana (§4.3 punto 4).
+_KIND_NON_URBANI = ("greenfield", "farmland", "farmyard", "meadow", "orchard", "industrial", "brownfield")
 
 DA_VERIFICARE = "da verificare"
 
@@ -136,6 +141,7 @@ def reconcile_polygon(
     land_cover: LandCoverInfo | None = None,
     vincolo_paesaggistico: LandscapeConstraint | None = None,
     contaminazione: ContaminationInfo | None = None,
+    destinazione_pug: str | None = None,
 ) -> SoilRecord:
     """Costruisce il `SoilRecord` §4.5 per un poligono candidato.
 
@@ -151,6 +157,9 @@ def reconcile_polygon(
             (#128 Fase 2b), o None. Risolve il nodo "vincolo paesaggistico" §4.3.
         contaminazione: siti contaminati SIN/SIR nel punto/comune (MOSAICO ISPRA,
             #128 Fase 2a), o None. Attiva la classificazione BROWNFIELD (§4.4).
+        destinazione_pug: zona omogenea PUG/PRG del poligono (es. "D", "E") letta da
+            open data (#129 Fase 3), o None. Risolve il nodo "destinazione urbanistica"
+            §4.3 e abilita il rilevamento della FRANGIA urbana (punto 4).
 
     Regola di confidenza (§4.5): **Alta** solo se ≥2 fonti concordano; **Bassa** se
     la sola evidenza è il tag OSM; **Media** se 2 fonti ma con un segnale a scala
@@ -216,11 +225,21 @@ def reconcile_polygon(
         if contaminato:
             fonti += 1
 
+    # ── destinazione urbanistica (zonizzazione PUG/PRG open data, #129 Fase 3) ──
+    if destinazione_pug is not None:
+        caveat.remove(_CAVEAT_PUG)  # nodo §4.3 risolto dal dato aperto
+        fonti += 1
+    zona_residenziale = destinazione_pug is not None and destinazione_pug.strip().lower()[:1] in _ZONE_RESIDENZIALI
+    # FRANGIA urbana (§4.3 punto 4): tag non-urbano ma la zonizzazione è residenziale.
+    frangia = zona_residenziale and any(k in kind.lower() for k in _KIND_NON_URBANI)
+
     # ── classificazione (albero §4.3/§4.4, nodi attivabili) ──
     if contaminato:
         classificazione: Classificazione = "BROWNFIELD"  # contaminazione = causa di abbandono §4.4
     elif vincoli_parti:
         classificazione = "VINCOLATO"
+    elif frangia:
+        classificazione = "FRANGIA"  # §4.3 punto 4: tag non-urbano in zona residenziale
     elif dismesso:
         classificazione = "DISMESSO"
     elif "greenfield" in kind.lower():
@@ -259,6 +278,7 @@ def reconcile_polygon(
     azione = {
         "BROWNFIELD": "sito contaminato (SIN/SIR): caratterizzazione e bonifica necessarie prima di ogni riuso",
         "VINCOLATO": "verificare puntualmente il vincolo (PAI/paesaggistico) sul poligono prima di ogni ipotesi di riuso",
+        "FRANGIA": "frangia urbana: il tag OSM non riflette la zonizzazione (zona residenziale) — riqualificare come margine urbano",
         "DISMESSO": "candidabile a rigenerazione/riuso: verificare proprietà, destinazione PUG e bonifica",
         "LIBERO": "verificare la destinazione urbanistica prima di considerarla edificabile",
         "SPAZIO_PUBBLICO": "valutare riqualificazione/uso polifunzionale dello spazio",
@@ -277,6 +297,7 @@ def reconcile_polygon(
         id_geometria=id_geometria,
         tag_osm=kind,
         uso_reale=uso_reale,
+        destinazione_pug=destinazione_pug or DA_VERIFICARE,
         stato_attivita=stato_attivita,
         vincoli=vincoli,
         classificazione=classificazione,

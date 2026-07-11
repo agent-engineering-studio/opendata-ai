@@ -25,6 +25,8 @@ HVD_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
     ("geospatial", (
         "geospatial", "cartograf", "confini", "catasto", "indirizz", "mappa", "mappe",
         "gis", "coordinate", "toponom", "particelle", "civici",
+        # #129: la zonizzazione urbanistica (PUG/PRG) è un dato geospaziale HVD.
+        "zonizzazione", "urbanistic", "pug", "prg", "zone omogenee",
     )),
     ("earth_observation_environment", (
         "ambient", "emission", "qualità dell'aria", "rifiut", "acqua", "suolo",
