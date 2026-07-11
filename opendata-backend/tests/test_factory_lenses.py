@@ -230,6 +230,7 @@ async def test_riconciliazione_suolo_failsafe(monkeypatch) -> None:
 
     monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
+    monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
@@ -290,6 +291,7 @@ async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
 
     monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
     monkeypatch.setattr(ispramod, "IspraClient", _Ispra)
+    monkeypatch.setattr(ispramod, "LandCoverClient", _OCDown)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _OCDown)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
@@ -297,3 +299,45 @@ async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
     rec = out["records"][0]
     assert rec["confidenza"] == "Alta"
     assert rec["classificazione"] == "VINCOLATO"
+
+
+async def test_riconciliazione_suolo_land_cover_alza_confidenza(monkeypatch) -> None:
+    """#128 Fase 2c: con IdroGEO e OpenCoesione down, la sola copertura del suolo
+    (impermeabilizzato) concorda col tag OSM dismesso → 2 fonti → confidenza Alta,
+    nodo 'uso reale' risolto."""
+    import opendata_core.ispra as ispramod
+    import opendata_core.opencoesione as ocmod
+    from opendata_core.ispra.models import LandCoverInfo
+
+    async def _fake_aree(req):  # noqa: ANN001, ANN202
+        return {"candidati": [{"osm_type": "way", "osm_id": 5, "kind": "brownfield",
+                               "lat": 40.79, "lon": 16.92, "area_mq": 9000}]}
+
+    class _Down:
+        async def __aenter__(self):  # noqa: ANN204
+            raise RuntimeError("down")
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+    class _LC:
+        async def __aenter__(self):  # noqa: ANN204
+            return self
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+        async def land_cover_at(self, lat, lon):  # noqa: ANN001, ANN201
+            return LandCoverInfo(clc_code="111", macroclasse=1, descrizione="Superfici artificiali",
+                                 impermeabilizzato=True, source_url="u", licenza="l")
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
+    monkeypatch.setattr(ispramod, "IspraClient", _Down)
+    monkeypatch.setattr(ispramod, "LandCoverClient", _LC)
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
+
+    req = ProgrammaRequest(cod_comune="110001", comune_nome="Matera", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+    rec = out["records"][0]
+    assert rec["confidenza"] == "Alta"
+    assert rec["uso_reale"] != "da verificare" and "CLC" in rec["uso_reale"]

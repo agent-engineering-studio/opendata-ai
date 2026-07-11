@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-from opendata_core.ispra.models import HazardSlice, RiskIndicators
+from opendata_core.ispra.models import HazardSlice, LandCoverInfo, RiskIndicators
 from opendata_core.landuse import SoilRecord, reconcile_polygon
+
+
+def _lc(*, macro: int) -> LandCoverInfo:
+    return LandCoverInfo(
+        clc_code=f"{macro}11", macroclasse=macro,
+        descrizione="test", impermeabilizzato=(macro == 1),
+        source_url="u", licenza="ISPRA CLC",
+    )
 
 _OSM_DISMESSO = {
     "osm_type": "way", "osm_id": 42, "name": "Ex fornace",
@@ -77,6 +85,32 @@ def test_causa_abbandono_da_tag() -> None:
     r = reconcile_polygon(osm_feature={"osm_type": "way", "osm_id": 9, "kind": "ruins"})
     assert r.classificazione == "DISMESSO"
     assert "rovina" in r.causa_abbandono
+
+
+def test_copertura_suolo_risolve_uso_reale_e_alza_confidenza() -> None:
+    # tag dismesso + copertura artificiale (impermeabilizzato) → 2 fonti concordi → Alta
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO, land_cover=_lc(macro=1))
+    assert r.confidenza == "Alta"
+    assert r.uso_reale != "da verificare" and "CLC" in r.uso_reale
+    assert not any("Copernicus" in c for c in r.caveat)  # nodo risolto, caveat rimosso
+    assert any("Corine Land Cover" in c for c in r.caveat)  # ma resta il caveat di scala
+
+
+def test_copertura_libero_ma_impermeabilizzato_e_discrepanza() -> None:
+    # OSM greenfield (LIBERO) ma copertura artificiale → contraddizione → Media
+    r = reconcile_polygon(
+        osm_feature={"osm_type": "way", "osm_id": 3, "kind": "greenfield"},
+        land_cover=_lc(macro=1),
+    )
+    assert r.classificazione == "LIBERO"
+    assert r.confidenza == "Media"
+    assert "impermeabilizzata" in r.discrepanza_osm
+
+
+def test_dismesso_ma_copertura_non_artificiale_media() -> None:
+    r = reconcile_polygon(osm_feature=_OSM_DISMESSO, land_cover=_lc(macro=3))
+    assert r.confidenza == "Media"
+    assert "rinaturalizzazione" in r.discrepanza_osm
 
 
 def test_id_geometria_e_passthrough() -> None:

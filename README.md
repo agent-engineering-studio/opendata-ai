@@ -123,12 +123,14 @@ valore⇄maturità**: i gap di dato emersi dai report penalizzano la dimensione
 **Riconciliazione del suolo.** Per i vuoti urbani e le aree dismesse individuate
 via OpenStreetMap, il report confronta il *tag* OSM con lo **stato reale del
 suolo** ricostruito dalle fonti pubbliche oggi disponibili (vincolo idrogeologico
-IdroGEO PAI a scala comunale, progetti OpenCoesione nel comune) e propone una
-**classificazione** (dismesso, vincolato, libero…) con **causa di abbandono** e
-**azione consigliata**. L'incertezza è esplicita, non nascosta: ogni poligono ha
-una **confidenza** (Alta solo se ≥2 fonti concordano, Bassa se l'unica evidenza è
-il tag OSM) e i campi non verificabili con le fonti correnti (catasto, PUG, uso
-reale da ortofoto) restano *"da verificare"*. Un controllo di qualità **avvisa**
+IdroGEO PAI a scala comunale, **copertura del suolo** puntuale da Corine Land Cover
+ISPRA per capire se un'area è già *impermeabilizzata/edificata*, progetti
+OpenCoesione nel comune) e propone una **classificazione** (dismesso, vincolato,
+libero…) con **causa di abbandono** e **azione consigliata**. L'incertezza è
+esplicita, non nascosta: ogni poligono ha una **confidenza** (Alta solo se ≥2 fonti
+concordano, Bassa se l'unica evidenza è il tag OSM) e i campi non ancora
+verificabili con le fonti correnti (catasto, destinazione PUG) restano *"da
+verificare"*. Un controllo di qualità **avvisa**
 (senza mai bloccare il report) quando lo stato del suolo non è verificabile —
 coerente col principio: ogni fonte mancante **degrada la confidenza, non blocca**.
 

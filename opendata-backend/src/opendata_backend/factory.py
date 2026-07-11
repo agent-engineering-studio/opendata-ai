@@ -1478,10 +1478,35 @@ class OrchestratorSession:
             _log_lens_skip("riconciliazione suolo: OpenCoesione non disponibile per %s "
                            "(segnale attività assente)", req.cod_comune, exc=exc)
 
+        # Copertura del suolo puntuale (Corine Land Cover ISPRA, #128 Fase 2c): risolve
+        # il nodo "impermeabilizzato" e alza la confidenza quando concorda col tag OSM.
+        # Query per centroide (una per candidato, con cache); fail-safe come le altre fonti.
+        coperture: dict[str, Any] = {}
+        try:
+            from opendata_core.ispra import LandCoverClient
+
+            async def _coperture() -> dict[str, Any]:
+                out: dict[str, Any] = {}
+                async with LandCoverClient() as lc:
+                    for cand in candidati:
+                        lat, lon = cand.get("lat"), cand.get("lon")
+                        if lat is None or lon is None:
+                            continue
+                        out[f"{cand.get('osm_type')}/{cand.get('osm_id')}"] = await lc.land_cover_at(lat, lon)
+                return out
+
+            coperture = await asyncio.wait_for(_coperture(), timeout=40.0)
+        except Exception as exc:  # noqa: BLE001 — copertura assente ⇒ confidenza ridotta, non blocco
+            _log_lens_skip("riconciliazione suolo: copertura del suolo ISPRA non disponibile per %s "
+                           "(confidenza ridotta)", req.cod_comune, exc=exc)
+
         from opendata_core.landuse import reconcile_polygon
 
         records = [
-            reconcile_polygon(osm_feature=cand, idrogeo=idrogeo, investimenti=investimenti).model_dump()
+            reconcile_polygon(
+                osm_feature=cand, idrogeo=idrogeo, investimenti=investimenti,
+                land_cover=coperture.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
+            ).model_dump()
             for cand in candidati
         ]
         return {"records": records} if records else None
