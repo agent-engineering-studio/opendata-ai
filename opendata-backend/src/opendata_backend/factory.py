@@ -1548,6 +1548,32 @@ class OrchestratorSession:
             _log_lens_skip("riconciliazione suolo: siti contaminati SIN-SIR non disponibili per %s "
                            "(confidenza ridotta)", req.cod_comune, exc=exc)
 
+        # Destinazione urbanistica PUG/PRG (open data, #129 Fase 3): consultata DAL
+        # VIVO sul portale CKAN regionale (una ricerca per comune, poi zona per
+        # centroide). Se non pubblicata → destinazione "da verificare" e la mancanza
+        # è registrata come gap di maturità nel report Territorio (non qui).
+        zone_pug: dict[str, Any] = {}
+        try:
+            from opendata_core.pug import fetch_zoning, zone_at
+
+            from .config_files import portali_regionali
+
+            prov = (req.cod_comune or "").strip().zfill(6)[:3]
+            portale = (portali_regionali().get("province_ckan") or {}).get(prov)
+            if portale and req.comune_nome:
+                zoning = await asyncio.wait_for(
+                    fetch_zoning(comune_nome=req.comune_nome, base_url=portale), timeout=40.0,
+                )
+                if zoning is not None:
+                    for cand in candidati:
+                        lat, lon = cand.get("lat"), cand.get("lon")
+                        if lat is None or lon is None:
+                            continue
+                        zone_pug[f"{cand.get('osm_type')}/{cand.get('osm_id')}"] = zone_at(zoning, lat, lon)
+        except Exception as exc:  # noqa: BLE001 — PUG non pubblicato/non interrogabile ⇒ da verificare
+            _log_lens_skip("riconciliazione suolo: zonizzazione PUG non consultabile per %s "
+                           "(destinazione da verificare)", req.cod_comune, exc=exc)
+
         from opendata_core.landuse import reconcile_polygon
 
         records = [
@@ -1556,6 +1582,7 @@ class OrchestratorSession:
                 land_cover=coperture.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
                 vincolo_paesaggistico=vincoli_paes.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
                 contaminazione=contaminazioni.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
+                destinazione_pug=zone_pug.get(f"{cand.get('osm_type')}/{cand.get('osm_id')}"),
             ).model_dump()
             for cand in candidati
         ]

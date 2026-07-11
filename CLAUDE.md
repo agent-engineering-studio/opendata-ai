@@ -40,7 +40,10 @@ Colle (ISTAT 072021).
   pesi/penalità sono **iniettati**): `maturity/` (5-star/FAIR/DCAT-AP_IT/ISO25012/
   HVD → 4 dimensioni ODM, `assess_entity`), `value/` (art.14 + combinabilità),
   `territory/` (resolve + profilo), `landuse/` (riconciliazione OSM↔stato reale del
-  suolo, `reconcile_polygon`→`SoilRecord` con confidenza graduata, #127), connettori
+  suolo, `reconcile_polygon`→`SoilRecord` con confidenza graduata, #127; fonti
+  ground-truth iniettate: `ispra/landcover.py` copertura suolo WMS, `landscape/`
+  vincoli paesaggistici PPTR pluggable per regione, `sin_sir/` contaminati MOSAICO,
+  `pug/` zonizzazione PUG open data — #128/#129), connettori
   `meteo`/`gtfs`/`wikidata`/`portals`, `maturity/harvest.py` (CKAN), `opencoesione/`
   (client REST).
 - **Warehouse `opendata.*`** (migrazioni stub 0007–0009): `entities`,

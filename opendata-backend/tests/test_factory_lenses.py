@@ -24,6 +24,11 @@ _LENSES = (
 )
 
 
+async def _pug_absent(**_kwargs) -> None:  # noqa: ANN003
+    """Stub: PUG non pubblicato (evita la rete nei test della lente per i comuni pugliesi)."""
+    return None
+
+
 def _session_with(**resolvers) -> OrchestratorSession:
     s = OrchestratorSession.__new__(OrchestratorSession)  # niente __init__: serve solo self._resolve_*
     for name, fn in resolvers.items():
@@ -234,6 +239,7 @@ async def test_riconciliazione_suolo_failsafe(monkeypatch) -> None:
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
     monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -297,6 +303,7 @@ async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _OCDown)
     monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _OCDown)
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -340,6 +347,7 @@ async def test_riconciliazione_suolo_land_cover_alza_confidenza(monkeypatch) -> 
     monkeypatch.setattr(ispramod, "LandCoverClient", _LC)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
     # comune non pugliese → nessun adattatore paesaggistico (landscape_adapter None):
     # l'unica 2ª fonte è la copertura del suolo → basta a portare la confidenza ad Alta.
@@ -385,6 +393,7 @@ async def test_riconciliazione_suolo_vincolo_paesaggistico_alza_confidenza(monke
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
     monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: _PPTR)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
     req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -430,6 +439,7 @@ async def test_riconciliazione_suolo_contaminazione_brownfield(monkeypatch) -> N
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
     monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _SinSir)
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
     req = ProgrammaRequest(cod_comune="073027", comune_nome="Taranto", modalita="idee")
     out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
@@ -437,3 +447,45 @@ async def test_riconciliazione_suolo_contaminazione_brownfield(monkeypatch) -> N
     assert rec["classificazione"] == "BROWNFIELD"
     assert rec["confidenza"] == "Alta"
     assert "contaminazione" in rec["causa_abbandono"]
+
+
+async def test_riconciliazione_suolo_pug_risolve_destinazione(monkeypatch) -> None:
+    """#129 Fase 3: PUG pubblicato come open data → destinazione_pug risolta (zona)
+    e confidenza Alta (OSM + PUG concordi)."""
+    import opendata_core.ispra as ispramod
+    import opendata_core.opencoesione as ocmod
+    from opendata_core.pug import PugZoning
+
+    async def _fake_aree(req):  # noqa: ANN001, ANN202
+        return {"candidati": [{"osm_type": "way", "osm_id": 13, "kind": "brownfield",
+                               "lat": 40.8, "lon": 16.9, "area_mq": 6000}]}
+
+    class _Down:
+        async def __aenter__(self):  # noqa: ANN204
+            raise RuntimeError("down")
+
+        async def __aexit__(self, *exc):  # noqa: ANN002, ANN204
+            return False
+
+    async def _fetch(**_k):  # noqa: ANN003
+        return PugZoning(zone_key="zona", features=[], dataset_title="Zonizzazione",
+                         source_url="u", licenza="CC-BY")
+
+    monkeypatch.setattr(OrchestratorSession, "_resolve_aree_candidate", staticmethod(_fake_aree))
+    monkeypatch.setattr(ispramod, "IspraClient", _Down)
+    monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
+    monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
+    monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
+    monkeypatch.setattr(
+        "opendata_backend.config_files.portali_regionali",
+        lambda: {"province_ckan": {"072": "https://dati.puglia.it/ckan"}},
+    )
+    monkeypatch.setattr("opendata_core.pug.fetch_zoning", _fetch)
+    monkeypatch.setattr("opendata_core.pug.zone_at", lambda _z, _lat, _lon: "D")
+
+    req = ProgrammaRequest(cod_comune="072021", comune_nome="Gioia del Colle", modalita="idee")
+    out = await OrchestratorSession._resolve_riconciliazione_suolo_uncached(req)
+    rec = out["records"][0]
+    assert rec["destinazione_pug"] == "D"
+    assert rec["confidenza"] == "Alta"
