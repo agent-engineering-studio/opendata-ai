@@ -64,6 +64,9 @@ jobs:
           - name: centriditalia-mcp-server
             context: .
             dockerfile: centriditalia-mcp-server/Dockerfile
+          - name: opendata-mcp-server
+            context: .
+            dockerfile: opendata-mcp-server/Dockerfile
           - name: ispra-mcp-server
             context: .
             dockerfile: ispra-mcp-server/Dockerfile

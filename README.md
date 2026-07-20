@@ -431,6 +431,14 @@ dedicato per ciascuno:
 | **bdap-mcp-server** | Bilanci comunali SIOPE (entrate/spese per titolo) via BDAP, query OData mirata (standalone, non ancora nel fan-out) | [`bdap-mcp-server/README.md`](bdap-mcp-server/README.md) |
 | **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
 | **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |
+| **opendata-mcp-server** *(prodotto)* | Le 4 modalità — Esplora/Territorio/Maturità/Qualità (+classify) — come tool MCP per client esterni (OpenClaw, Claude Desktop): proxy sottile verso il backend | [`opendata-mcp-server/README.md`](opendata-mcp-server/README.md) |
+
+Gli 8+ server qui sopra espongono le **fonti dati** al LLM del backend. Il
+**`opendata-mcp-server`** è diverso: espone le **funzioni di prodotto** (le 4
+modalità) come tool MCP a un client/harness esterno, facendo da proxy sugli
+endpoint REST del backend (invariante R13 — complementare all'A2A, che espone
+l'intero agente). Snippet di configurazione per OpenClaw / Claude Desktop nel
+suo README.
 
 ## Infrastructure
 
