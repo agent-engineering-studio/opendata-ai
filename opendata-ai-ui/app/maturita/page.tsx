@@ -408,6 +408,11 @@ function MaturitaInner() {
         se ci sono almeno due valutazioni salvate, come il punteggio è cambiato nel
         tempo. Per gli enti senza open data viene proposta una guida operativa per avviarli.
       </p>
+      <p className="text-slate-500 mb-3" style={{ fontSize: 13 }}>
+        Se questa installazione è configurata per una <strong>singola regione</strong>{" "}
+        (variabile <code>REGION</code>), la valutazione degli enti agganciati a un comune è
+        ristretta a quella regione: i comuni fuori ambito vengono respinti.
+      </p>
 
       <form onSubmit={assess} className="d-flex flex-wrap gap-2 mb-4" style={{ maxWidth: 720 }}>
         <input

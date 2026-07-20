@@ -9,6 +9,7 @@ import { DashboardGate } from "@/components/DashboardGate";
 import { DisclaimerBanner } from "@/components/territorio/DisclaimerBanner";
 import { LentiAnalitiche } from "@/components/territorio/LentiAnalitiche";
 import { ProposalCard } from "@/components/territorio/ProposalCard";
+import { RegioneBadge } from "@/components/territorio/RegioneBadge";
 import { SourcesList } from "@/components/territorio/SourcesList";
 import { StatoSuolo } from "@/components/territorio/StatoSuolo";
 import { SwotGrid } from "@/components/territorio/SwotGrid";
@@ -283,6 +284,7 @@ function TerritorioInner() {
     <main className="container py-4" style={{ maxWidth: 960 }}>
       {/* ── Header di selezione: comune + mappa del confine comunale ── */}
       <div className="no-print">
+        <RegioneBadge />
         <h1 className="h3 mb-1">Studio del territorio</h1>
         <p className="text-muted mb-4">
           Analisi completa evidence-based per un comune: quadro di sintesi,

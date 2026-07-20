@@ -864,6 +864,9 @@ function QualitaInner() {
         esamina e ti accompagna passo per passo, dalla diagnosi alla pubblicazione (con export
         anche in <strong>Parquet</strong>) — senza bisogno di essere un esperto di database.
         Tutto deterministico: nessun dato inventato, solo ciò che si misura sul file.
+        A differenza di Esplora, Territorio e Maturità — che in un&apos;installazione
+        <strong> mono-regione</strong> (variabile <code>REGION</code>) sono filtrati su quella
+        regione — il Data Quality Lab lavora su <strong>qualsiasi dataset</strong> tu gli fornisca.
       </p>
       <PercorsoQualita />
 
