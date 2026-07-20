@@ -1631,6 +1631,73 @@ def province_ckan_map(settings: Settings) -> dict[str, str]:
     return dict((portali_regionali().get("province_ckan") or {}))
 
 
+def region_search_preamble(settings: Settings, source: str) -> str:
+    """Preambolo di scoping regionale per un dataset-specialist del fan-out.
+
+    Anteposto alle `*_INSTRUCTIONS` in `factory.py` quando `REGION` è impostato,
+    vincola la ricerca alla regione configurata:
+      - `ckan` → portale regionale come base_url + `fq` organizzazione;
+      - `ods`  → filtro geografico sul nome regione (i portali ODS variano);
+      - SDMX (`istat`/`eurostat`/`oecd`) → pre-filtro sulla dimensione
+        territoriale (CL_ITTER107 / GEO) col codice NUTS2 della regione.
+
+    Ritorna stringa vuota quando `REGION` è assente/ignoto → il fan-out resta
+    nazionale/internazionale (comportamento invariato). Il preambolo NON tocca il
+    contratto `<!--RESOURCES_JSON-->`: è solo scoping, in testa alle istruzioni.
+    """
+    reg = region_config(settings)
+    if not reg:
+        return ""
+    nome = str(reg.get("nome") or settings.region_istat)
+
+    if source == "ckan":
+        base = str(reg.get("ckan_base_url") or "")
+        fq = str(reg.get("portal_fq") or "")
+        lines = [
+            f"=== REGIONAL SCOPING (MANDATORY — regione {nome}) ===",
+            "This deployment is scoped to a SINGLE region. Override the PORTAL "
+            "SELECTION section below:",
+        ]
+        if base:
+            lines.append(f"  - ALWAYS use base_url={base} (the regional portal). "
+                         "Do NOT query dati.gov.it or any national/foreign portal.")
+        if fq:
+            lines.append(f"  - ALWAYS pass fq=\"{fq}\" so results are limited to the "
+                         "regional organisation.")
+        lines.append(f"  - Treat every query as implicitly about {nome}: keep only "
+                     f"datasets pertaining to {nome} or its comuni.\n\n")
+        return "\n".join(lines)
+
+    if source == "ods":
+        return (
+            f"=== REGIONAL SCOPING (MANDATORY — regione {nome}) ===\n"
+            f"This deployment is scoped to {nome}. Treat every query as implicitly "
+            f"about {nome}: add \"{nome}\" to the keywords and, after the search, KEEP "
+            f"only datasets whose title/description mentions {nome} or a comune of "
+            f"{nome}; DROP the others.\n\n"
+        )
+
+    # SDMX sources (istat / eurostat / oecd)
+    itter = str(reg.get("itter107") or "")
+    if not itter:
+        return ""
+    return (
+        f"=== REGIONAL SCOPING (MANDATORY — regione {nome}) ===\n"
+        f"This deployment is scoped to {nome}. When the dataflow exposes a "
+        f"territorial dimension (CL_ITTER107 for ISTAT, GEO for Eurostat/OECD), "
+        f"ALWAYS pre-filter it to the region code \"{itter}\" (NUTS2 {nome}) — or a "
+        f"comune within it — so the returned series is already restricted to "
+        f"{nome}. Never return national/EU aggregates when a {nome} breakdown "
+        f"exists.\n\n"
+    )
+
+
+def region_scoped_instructions(base: str, settings: Settings, *, source: str) -> str:
+    """`base` istruzioni con il preambolo di scoping regionale in testa (se attivo)."""
+    preamble = region_search_preamble(settings, source)
+    return f"{preamble}{base}" if preamble else base
+
+
 def check_territorio_scope(cod_comune: str, settings: Settings) -> None:
     """Solleva ValueError se il comune è fuori dall'ambito configurato."""
     scope = province_scope(settings)
