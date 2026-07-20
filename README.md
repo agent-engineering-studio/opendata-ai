@@ -705,6 +705,19 @@ Backend → Aruba VPS, frontend → GitHub Pages. Full procedure in
 - [ ] Configure GitHub repo Variables/Secrets (CI deploy expects them)
 - [ ] First-time `git submodule update --init` if the agent-stack repo is accessible
 
+## Contributing and governance
+
+New here? Welcome — contributions of every size are appreciated, from a typo fix
+to a new connector. Start with these:
+
+- [Contributing guide](CONTRIBUTING.md) — how to set up, run the tests, and open a PR.
+- [Code of Conduct](CODE_OF_CONDUCT.md) — how we work together.
+- [Security policy](SECURITY.md) — how to report a vulnerability responsibly.
+- [Roadmap](ROADMAP.md) — where the project is heading and where to jump in.
+- [Open-source impact](docs/OSS_IMPACT.md) — what this project is for and who it helps.
+
+Good first issues are labelled [`good first issue`](https://github.com/agent-engineering-studio/opendata-ai/labels/good%20first%20issue).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
