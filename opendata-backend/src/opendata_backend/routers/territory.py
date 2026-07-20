@@ -21,6 +21,7 @@ from ..civic.snapshot import SnapshotError, create_snapshot
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..shared.ratelimit import enforce_rate_limit
+from ..shared.scope import enforce_region_scope
 from ..territory.service import build_report, get_profile
 
 router = APIRouter(tags=["territory"])
@@ -49,6 +50,7 @@ async def territory_report(
     istat = body.istat_code.strip()
     if not istat:
         raise HTTPException(status_code=422, detail="campo 'istat_code' obbligatorio")
+    await enforce_region_scope(session, istat, settings)
     return await build_report(
         session, istat_code=istat, temi=body.temi,
         anno_da=body.anno_da, anno_a=body.anno_a, settings=settings,
@@ -59,9 +61,11 @@ async def territory_report(
 async def territory_profile(
     istat_code: str,
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict[str, Any]:
     """Profilo canonico cache-ato del comune (feature_store)."""
+    await enforce_region_scope(session, istat_code.strip(), settings)
     profile = await get_profile(session, istat_code.strip())
     if profile is None:
         raise HTTPException(status_code=404, detail="profilo non disponibile: genera prima un report")
@@ -73,10 +77,12 @@ async def snapshot_create(
     istat_code: str,
     body: SnapshotIn,
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict[str, Any]:
     """Crea uno snapshot civico versionato e apre il check-in community (se c'è un precedente)."""
     istat = istat_code.strip()
+    await enforce_region_scope(session, istat, settings)
     try:
         snap = await create_snapshot(
             session, istat_code=istat, snapshot_id=body.snapshot_id.strip(),
@@ -96,9 +102,11 @@ async def site_export(
     istat_code: str,
     snapshot_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
 ) -> Response:
     """Bundle zip del sito civico (pubblicabile su GitHub Pages/hosting comune)."""
+    await enforce_region_scope(session, istat_code.strip(), settings)
     files = await build_site(session, istat_code=istat_code.strip(), snapshot_id=snapshot_id)
     if files is None:
         raise HTTPException(status_code=404, detail="nessuno snapshot: crea prima uno snapshot civico")
@@ -115,9 +123,11 @@ async def site_preview(
     page: str = Query(default="index.html"),
     snapshot_id: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
     user: ClerkUser = Depends(enforce_rate_limit),
 ) -> HTMLResponse:
     """Anteprima HTML di una pagina del sito civico (default: Stato dell'arte)."""
+    await enforce_region_scope(session, istat_code.strip(), settings)
     files = await build_site(session, istat_code=istat_code.strip(), snapshot_id=snapshot_id)
     if files is None:
         raise HTTPException(status_code=404, detail="nessuno snapshot: crea prima uno snapshot civico")

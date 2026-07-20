@@ -23,6 +23,7 @@ from ..db.session import get_db_session
 from ..maturity.markdown import build_scorecard_markdown
 from ..maturity.service import build_ranking, build_scorecard, run_assessment
 from ..shared.ratelimit import enforce_rate_limit
+from ..shared.scope import enforce_region_scope
 
 log = logging.getLogger("opendata-backend.maturity.router")
 
@@ -53,6 +54,8 @@ async def assess(
     entity = body.entity.strip()
     if not entity:
         raise HTTPException(status_code=422, detail="campo 'entity' obbligatorio")
+    # Enforcement scope regionale quando l'ente è agganciato a un comune (F3).
+    await enforce_region_scope(session, body.istat_code, settings)
     return await run_assessment(
         session, entity=entity, base_url=body.base_url, settings=settings,
         force=body.force, istat_code=body.istat_code, comune_nome=body.comune_nome,
@@ -76,6 +79,8 @@ async def assess_stream(
     entity = body.entity.strip()
     if not entity:
         raise HTTPException(status_code=422, detail="campo 'entity' obbligatorio")
+    # Enforcement scope prima di aprire lo stream (422 pulito, non un evento error).
+    await enforce_region_scope(session, body.istat_code, settings)
 
     async def _events():
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
