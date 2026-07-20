@@ -59,6 +59,19 @@ def portali_regionali() -> dict[str, Any]:
 
 
 @lru_cache(maxsize=None)
+def regioni() -> dict[str, Any]:
+    """Registro regioni ISTAT → scoping mono-regione (regioni.yaml).
+
+    Ritorna il mapping `cod_regione` (str 2 cifre) → config regione, da cui la
+    derivazione in `config.py` (province, portale CKAN, OpenCoesione, fq) parte
+    quando `REGION` è impostato. Vedi `region_config`/`province_scope`.
+    """
+    data = _load_yaml("regioni.yaml")
+    regs = data.get("regioni")
+    return regs if isinstance(regs, dict) else {}
+
+
+@lru_cache(maxsize=None)
 def maturity_coverage() -> dict[str, Any]:
     """Template collection ottimale per tipo di ente (maturity_coverage.yaml)."""
     return _load_yaml("maturity_coverage.yaml")
@@ -81,6 +94,7 @@ __all__ = [
     "value_taxonomy",
     "civic_kpi",
     "portali_regionali",
+    "regioni",
     "maturity_coverage",
     "rigenerazione_patterns",
 ]
