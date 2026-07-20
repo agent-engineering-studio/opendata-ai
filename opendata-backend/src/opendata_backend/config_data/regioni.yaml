@@ -1,0 +1,29 @@
+# Registro regioni ISTAT → scoping mono-regione (issue #191, Fase F1).
+#
+# Sorgente di verità dello scoping regionale: la variabile `REGION` nel .env
+# (codice ISTAT regione a 2 cifre) seleziona una voce di questa mappa, da cui il
+# backend deriva province, portale CKAN, `oc_cod_regione` (OpenCoesione), `fq`
+# e i provider paesaggistico/PUG. Vuoto = nessun limite (dev): retro-compat col
+# legacy `TERRITORIO_PROVINCE`.
+#
+# I motori puri di `opendata_core/` NON leggono questa config: la regione è
+# **iniettata** (invariante del capability layer). Qui vive solo la derivazione.
+#
+# chiave = `cod_regione` ISTAT a 2 cifre (str). Campi per regione:
+#   nome                 nome esteso (badge UI, narrative)
+#   province             codici provincia ISTAT a 3 cifre ammessi nello scope
+#   ckan_base_url        portale CKAN regionale (base del fan-out ricerca, F2)
+#   oc_cod_regione       codice regione OpenCoesione (int) per i progetti finanziati
+#   portal_fq            filtro CKAN `fq` sull'organizzazione regionale
+#   landscape_provider   slug adattatore vincoli paesaggistici (opendata_core/landscape)
+#   pug_provider         slug adattatore zonizzazione PUG (opendata_core/pug)
+regioni:
+  # ── Puglia (ambito di produzione pilota) ──────────────────────────────
+  "16":
+    nome: "Puglia"
+    province: ["071", "072", "073", "074", "075", "110"]  # FG, BA, TA, BR, LE, BAT
+    ckan_base_url: "https://dati.puglia.it/ckan"
+    oc_cod_regione: 16
+    portal_fq: "organization:regione-puglia"
+    landscape_provider: "puglia"
+    pug_provider: "puglia"

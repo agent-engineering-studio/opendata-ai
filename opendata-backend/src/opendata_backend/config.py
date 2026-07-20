@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Provider = Literal["auto", "ollama", "ollama_cloud", "azure_foundry", "claude"]
@@ -1372,12 +1372,24 @@ class Settings(BaseSettings):
     # via env SPECIALIST_TIMEOUT_SEC se un comune grande lo richiede.
     specialist_timeout_sec: float = Field(default=120.0)
 
-    # ── Ambito territoriale del verticale /territorio ─────────────────
+    # ── Scoping mono-regione (issue #191, F1) ─────────────────────────
+    # Sorgente di verità unica: il codice ISTAT regione a 2 cifre (es. "16" =
+    # Puglia). Selezione una voce di `config_data/regioni.yaml`, da cui si
+    # derivano province, portale CKAN, `oc_cod_regione` e `fq` (vedi
+    # `region_config`, `province_scope`, `resolve_ideas_portal_fq`, …).
+    # Vuoto = nessun limite (dev), con fallback retro-compatibile al legacy
+    # `TERRITORIO_PROVINCE`. L'env è `REGION` (alias, non `REGION_ISTAT`).
+    region_istat: str = Field(
+        default="", validation_alias=AliasChoices("REGION", "region_istat")
+    )
+
+    # ── Ambito territoriale del verticale /territorio (legacy) ────────
     # Lista (comma-separated) di codici provincia ISTAT a 3 cifre ammessi.
     # Vuoto = nessun limite (dev). In produzione il verticale è focalizzato
     # sulla Puglia: "071,072,073,074,075,110" (FG, BA, TA, BR, LE, BAT).
     # Vincola /territorio/comuni (filtra l'autocomplete), /territorio/zone
-    # e /programma (422 fuori ambito).
+    # e /programma (422 fuori ambito). Usato SOLO quando `REGION` è vuoto:
+    # con `REGION` impostato le province derivano da `regioni.yaml`.
     territorio_province: str = Field(default="")
 
     # HTTP API
@@ -1534,13 +1546,89 @@ def tier_for_price(price_id: str | None, settings: Settings) -> str | None:
     return None
 
 
+def region_config(settings: Settings) -> dict[str, object] | None:
+    """Config della regione selezionata da `REGION`, o None se assente/ignota.
+
+    `REGION` (env) = codice ISTAT regione a 2 cifre. Vuoto → None (dev, nessun
+    limite: si applica il fallback legacy `TERRITORIO_PROVINCE`). Un codice non
+    presente in `regioni.yaml` restituisce comunque None (fail-safe: nessuna
+    derivazione, comportamento legacy) — la scelta è deliberata per non bloccare
+    l'avvio su una config regionale mancante.
+    """
+    from .config_files import regioni
+
+    code = (settings.region_istat or "").strip()
+    if not code:
+        return None
+    reg = regioni().get(code.zfill(2))
+    return reg if isinstance(reg, dict) else None
+
+
 def province_scope(settings: Settings) -> frozenset[str]:
-    """I codici provincia ammessi (3 cifre); frozenset vuoto = nessun limite."""
+    """I codici provincia ammessi (3 cifre); frozenset vuoto = nessun limite.
+
+    Derivati da `REGION` (via `regioni.yaml`) quando impostato; altrimenti dal
+    legacy `TERRITORIO_PROVINCE` (retro-compat).
+    """
+    reg = region_config(settings)
+    if reg:
+        province = reg.get("province") or []
+        return frozenset(str(p).strip().zfill(3) for p in province if str(p).strip())
     return frozenset(
         p.strip().zfill(3)
         for p in settings.territorio_province.split(",")
         if p.strip()
     )
+
+
+def resolve_ideas_portal_fq(settings: Settings) -> str:
+    """Filtro CKAN `fq` sull'organizzazione regionale, derivato da `REGION`.
+
+    Con `REGION` impostato usa il `portal_fq` di `regioni.yaml`; altrimenti il
+    valore del campo `Settings.ideas_portal_fq` (retro-compat, default Puglia).
+    """
+    reg = region_config(settings)
+    if reg and reg.get("portal_fq"):
+        return str(reg["portal_fq"])
+    return settings.ideas_portal_fq
+
+
+def resolve_ideas_oc_cod_regione(settings: Settings) -> int:
+    """Codice regione OpenCoesione, derivato da `REGION`.
+
+    Con `REGION` impostato usa l'`oc_cod_regione` di `regioni.yaml`; altrimenti
+    il campo `Settings.ideas_oc_cod_regione` (retro-compat, default 16=Puglia).
+    """
+    reg = region_config(settings)
+    if reg and reg.get("oc_cod_regione") is not None:
+        return int(reg["oc_cod_regione"])  # type: ignore[arg-type]
+    return settings.ideas_oc_cod_regione
+
+
+def region_ckan_base_url(settings: Settings) -> str | None:
+    """Portale CKAN regionale derivato da `REGION` (None se `REGION` vuoto/ignoto).
+
+    Base del fan-out di ricerca scoped (wiring in F2). In F1 è solo derivazione.
+    """
+    reg = region_config(settings)
+    url = reg.get("ckan_base_url") if reg else None
+    return str(url) if url else None
+
+
+def province_ckan_map(settings: Settings) -> dict[str, str]:
+    """Mappa provincia (3 cifre) → base_url CKAN, coerente con `REGION`.
+
+    Con `REGION` impostato deriva dalla regione (ogni sua provincia → il suo
+    `ckan_base_url`); altrimenti usa il registro legacy `portali_regionali.yaml`.
+    """
+    from .config_files import portali_regionali
+
+    reg = region_config(settings)
+    if reg and reg.get("ckan_base_url"):
+        base = str(reg["ckan_base_url"])
+        province = reg.get("province") or []
+        return {str(p).strip().zfill(3): base for p in province if str(p).strip()}
+    return dict((portali_regionali().get("province_ckan") or {}))
 
 
 def check_territorio_scope(cod_comune: str, settings: Settings) -> None:

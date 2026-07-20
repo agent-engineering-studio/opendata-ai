@@ -22,7 +22,7 @@ from opendata_core.maturity.models import DatasetInput
 from opendata_core.maturity.quality import assess_quality
 from opendata_core.opencoesione import OpenCoesioneClient
 
-from ..config import Settings
+from ..config import Settings, resolve_ideas_oc_cod_regione, resolve_ideas_portal_fq
 from .models import AREAS, FundingProject, IdeaDataset
 
 log = logging.getLogger("opendata-backend.ideas")
@@ -108,8 +108,9 @@ async def discover_datasets(
     async def _search(c: CkanClient) -> dict | None:
         for query in _candidate_queries(area=area, challenge_text=challenge_text):
             params: dict[str, object] = {"q": query, "rows": settings.ideas_max_datasets}
-            if settings.ideas_portal_fq:
-                params["fq"] = settings.ideas_portal_fq
+            portal_fq = resolve_ideas_portal_fq(settings)
+            if portal_fq:
+                params["fq"] = portal_fq
             result = await c.action("package_search", base_url=portal, params=params)
             if (result or {}).get("results"):
                 return result
@@ -160,17 +161,18 @@ async def discover_funding(
 ) -> list[FundingProject]:
     """Progetti comparabili finanziati in regione (OpenCoesione), fail-safe."""
     tema = AREAS[area]["oc_tema"] if area else None
+    cod_regione = resolve_ideas_oc_cod_regione(settings)
     try:
         if client is not None:
             result = await client.search_projects(
-                cod_regione=settings.ideas_oc_cod_regione,
+                cod_regione=cod_regione,
                 tema=tema,
                 limit=settings.ideas_max_funding,
             )
         else:
             async with OpenCoesioneClient() as c:
                 result = await c.search_projects(
-                    cod_regione=settings.ideas_oc_cod_regione,
+                    cod_regione=cod_regione,
                     tema=tema,
                     limit=settings.ideas_max_funding,
                 )

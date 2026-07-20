@@ -39,6 +39,7 @@ def _settings() -> SimpleNamespace:
     return SimpleNamespace(
         llm_provider="claude",
         anthropic_api_key=None,
+        region_istat="",  # nessuno scoping regionale → default ideas_* (legacy)
         ideas_portal_base_url=None,
         ckan_default_base_url="https://portal.example/opendata",
         ideas_portal_fq="organization:regione-puglia",
