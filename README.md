@@ -119,6 +119,9 @@ individuare in fretta il dataset giusto da integrare, funzionari e cittadini che
 vogliono una risposta documentata. Sostituisce ore di ricerca manuale su decine
 di cataloghi eterogenei con un'unica domanda.
 
+**Da dove partire.** Query di esempio copia-e-incolla (CKAN, ISTAT, risorse
+mappa e tabellari) in **[`docs/EXAMPLES.md`](docs/EXAMPLES.md)**.
+
 ---
 
 ### 2. Territorio — studio evidence-based di un comune
