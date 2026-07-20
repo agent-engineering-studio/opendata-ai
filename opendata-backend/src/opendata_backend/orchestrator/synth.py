@@ -515,12 +515,12 @@ def _strip_placeholder_sentences(text: str) -> str:
 def _normalise_source_tag(executor_id: str) -> str | None:
     """Map the participant's executor_id to a clean source tag.
 
-    Recognised tags: 'ckan', 'istat', 'eurostat', 'oecd', 'opencoesione'.
-    Match is substring-based against a lowercased executor_id so renames at the
-    Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
+    Recognised tags: 'ckan', 'ods', 'socrata', 'istat', 'eurostat', 'oecd',
+    'opencoesione'. Match is substring-based against a lowercased executor_id so
+    renames at the Settings level (e.g. `ckan_agent_name="ckan-it"`) keep working.
     """
     lower = executor_id.lower()
-    for tag in ("opencoesione", "eurostat", "oecd", "istat", "ckan", "ods", "ispra", "osm", "web", "kg"):
+    for tag in ("opencoesione", "eurostat", "oecd", "istat", "socrata", "ckan", "ods", "ispra", "osm", "web", "kg"):
         # longest-first: eurostat before istat so a literal "eurostat" doesn't
         # get matched as istat; opencoesione first for the same reason. "kg"
         # è ultimo perché cortissimo (matcherebbe dentro nomi più lunghi).
@@ -557,7 +557,7 @@ def _resources_to_json_block(resources: list[Resource]) -> str:
 
 
 _SYNTH_SOURCE_ORDER = (
-    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg", "web"
+    "ckan", "ods", "socrata", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "kg", "web"
 )
 
 

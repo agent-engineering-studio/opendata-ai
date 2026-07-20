@@ -376,6 +376,9 @@ un formato che si è rotto, una pagella di maturità in calo.
 - **OECD** *(opt-in)* — `istat-mcp-server` (agency `all`)
   - Endpoint: `sdmx.oecd.org/public/rest`
   - Fetch: same as ISTAT (SDMX 2.1)
+- **Socrata** *(opt-in — `ENABLE_SOCRATA`)* — `socrata-mcp-server`
+  - Endpoint: any Socrata portal via `base_url` (SODA / Discovery API, SoQL)
+  - Fetch: dataset catalog + records — joins the search fan-out when enabled
 - **OpenStreetMap** *(render-only)* — `osm-mcp`
   - Endpoint: `nominatim` / `overpass` / `osrm`
   - Fetch: renders GeoJSON layers into Leaflet HTML
@@ -427,7 +430,7 @@ dedicato per ciascuno:
 | **centriditalia-mcp-server** | Accoglienza migranti (openpolis): centri CAS/CPA/hotspot + SAI, capienza/presenze/costo per territorio — CSV bulk→mirror SQLite, licenza CC-BY (standalone, non nel fan-out) | [`centriditalia-mcp-server/README.md`](centriditalia-mcp-server/README.md) |
 | **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
 | **ods-mcp-server** | OpenDataSoft Explore API v2.1, `base_url` per-portale | [`ods-mcp-server/README.md`](ods-mcp-server/README.md) |
-| **socrata-mcp-server** | Socrata Discovery/Views/SODA API, `base_url` per-portale (standalone, non ancora nel fan-out) | [`socrata-mcp-server/README.md`](socrata-mcp-server/README.md) |
+| **socrata-mcp-server** | Socrata Discovery/Views/SODA API, `base_url` per-portale — nel fan-out di ricerca (opt-in `ENABLE_SOCRATA`) | [`socrata-mcp-server/README.md`](socrata-mcp-server/README.md) |
 | **bdap-mcp-server** | Bilanci comunali SIOPE (entrate/spese per titolo) via BDAP, query OData mirata (standalone, non ancora nel fan-out) | [`bdap-mcp-server/README.md`](bdap-mcp-server/README.md) |
 | **maturity-mcp-server** | Scorecard maturità open data (ODM 2025) | [`maturity-mcp-server/README.md`](maturity-mcp-server/README.md) |
 | **web-mcp** | Web search/fetch via SearXNG self-hosted | [`web-mcp/README.md`](web-mcp/README.md) |

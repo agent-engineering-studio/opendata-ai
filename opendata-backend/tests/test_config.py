@@ -144,6 +144,29 @@ def test_ods_settings_and_instructions_contract(monkeypatch) -> None:
     assert "OpenDataSoft" in ODS_INSTRUCTIONS
 
 
+def test_socrata_settings_and_instructions_contract(monkeypatch) -> None:
+    """Socrata fan-out wiring (#98, R5): opt-in flag + settings + RESOURCES_JSON contract."""
+    from opendata_backend.config import SOCRATA_INSTRUCTIONS
+    from opendata_backend.factory import DATASET_SOURCES
+    from opendata_backend.orchestrator.synth import _normalise_source_tag
+
+    for var in ("ENABLE_SOCRATA", "SOCRATA_MCP_URL", "SOCRATA_AGENT_NAME"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings()  # type: ignore[call-arg]
+    assert s.enable_socrata is False  # opt-in come ods/eurostat/oecd
+    assert s.socrata_mcp_url.endswith("/mcp")
+    assert s.socrata_agent_name == "socrata"
+    assert s.socrata_default_base_url.startswith("http")
+    assert "socrata" in DATASET_SOURCES
+    # contratto R5: stessa forma di CKAN/ODS
+    assert "<!--RESOURCES_JSON-->" in SOCRATA_INSTRUCTIONS
+    assert "socrata_search_datasets" in SOCRATA_INSTRUCTIONS
+    assert "Socrata" in SOCRATA_INSTRUCTIONS
+    # tag di sorgente riconosciuto (anche con agent renominato)
+    assert _normalise_source_tag("socrata") == "socrata"
+    assert _normalise_source_tag("socrata-us") == "socrata"
+
+
 def test_opencoesione_settings_defaults(monkeypatch) -> None:
     for var in ("OPENCOESIONE_MCP_URL", "OPENCOESIONE_AGENT_NAME"):
         monkeypatch.delenv(var, raising=False)

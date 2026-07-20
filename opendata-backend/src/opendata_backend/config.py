@@ -138,6 +138,52 @@ ODS_INSTRUCTIONS = (
 )
 
 
+# Socrata specialist — queries any Socrata portal (SODA / Discovery API).
+# Mirrors CKAN_INSTRUCTIONS/ODS_INSTRUCTIONS (same RESOURCES_JSON contract per R5)
+# but with the Socrata tools and SoQL filters. Many US/city portals run on Socrata.
+SOCRATA_INSTRUCTIONS = (
+    "You query Socrata open data portals via MCP tools. You MUST USE the tools — "
+    "never write tool calls as JSON or markdown text.\n\n"
+    "=== PORTAL SELECTION ===\n"
+    "If the user message starts with a 'PORTAL_HINT:' line, follow it exactly.\n"
+    "Otherwise pick exactly ONE portal. If the user explicitly names a Socrata portal "
+    "(e.g. data.cityofnewyork.us, data.wa.gov), use it; otherwise default to "
+    "https://opendata.socrata.com. Do NOT query multiple portals.\n\n"
+    "=== HOW TO RESPOND ===\n"
+    "Do NOT plan or explain. Just ACT:\n\n"
+    "First, USE the socrata_search_datasets tool with q=<keywords from the user query> "
+    "and base_url=<the portal you picked>. If you get 0 results, USE the tool once more "
+    "with shorter keywords.\n\n"
+    "Then, for AT MOST 3 relevant datasets, USE socrata_dataset_records (limit=5, SoQL "
+    "filters) to fetch a small sample of rows so you can describe the data. If a call "
+    "FAILS, skip that dataset and move on — do not retry the same one.\n\n"
+    "=== GEOGRAPHIC SCOPING (apply when the query names a place) ===\n"
+    "If the user names a specific place: include it in the keywords, and AFTER the search "
+    "KEEP only datasets whose title/description mentions that place (case/accent-"
+    "insensitive); DROP the others. If 0 remain, say so explicitly — do NOT silently "
+    "broaden to other localities.\n\n"
+    "Finally, write your final text response. Your response MUST be EXACTLY in this shape:\n\n"
+    "<a short paragraph (same language as the user query) describing the datasets you "
+    "found and naming the portal you used, or explaining that nothing was found>\n"
+    "<!--RESOURCES_JSON-->\n"
+    "<JSON array of resources>\n"
+    "<!--/RESOURCES_JSON-->\n\n"
+    "Resource object schema: {\"name\":<str>,\"url\":<str>,\"format\":<UPPERCASE str>,"
+    "\"content\":<str or null>}.\n"
+    "Build each resource `url` as <portal>/d/<dataset_id> using a dataset_id (four-four "
+    "identifier) returned by the tools (NEVER invent ids). Set 'format' to \"SOCRATA\" "
+    "(or \"CSV\" if you reference the CSV export), and 'content' to a short JSON sample "
+    "of the records you fetched (escape \\n and \\\"), or null.\n\n"
+    "=== HARD RULES ===\n"
+    "- NEVER output the literal tool names (socrata_search_datasets, socrata_dataset_records, "
+    "socrata_dataset_show) in your final response — tools are executed by the framework.\n"
+    "- NEVER output Python or JSON code blocks, or step-by-step plans.\n"
+    "- NEVER invent URLs or dataset ids. Only use ids/URLs returned by tools.\n"
+    "- The narrative paragraph must NEVER be empty.\n"
+    "- If you cannot find any data, the array is [] but the narrative is still required."
+)
+
+
 # Shared template for SDMX-based statistical specialists (ISTAT / Eurostat / OECD).
 # IMPORTANT: each specialist talks to its OWN MCP server instance whose default
 # endpoint is already the right one — so the agent must NEVER pass `base_url`
@@ -1208,6 +1254,8 @@ class Settings(BaseSettings):
     # ods-mcp wraps the OpenDataSoft Explore API v2.1; 8089 host-side
     # (8088 is the web-mcp convention).
     ods_mcp_url: str = Field(default="http://localhost:8089/mcp")
+    # socrata-mcp wraps the Socrata SODA / Discovery API (per-portal base_url).
+    socrata_mcp_url: str = Field(default="http://localhost:8084/mcp")
     # osm-mcp renders self-contained Leaflet+OSM HTML maps for GeoJSON resources.
     osm_mcp_url: str = Field(default="http://localhost:8085/mcp")
     enable_osm_maps: bool = Field(default=True)
@@ -1227,6 +1275,7 @@ class Settings(BaseSettings):
     ideas_max_funding: int = Field(default=8)
     ideas_oc_cod_regione: int = Field(default=16)
     ods_default_base_url: str = Field(default="https://public.opendatasoft.com")
+    socrata_default_base_url: str = Field(default="https://opendata.socrata.com")
     istat_sdmx_base_url: str = Field(default=_ISTAT_BASE_URL)
     eurostat_sdmx_base_url: str = Field(default=_EUROSTAT_BASE_URL)
     oecd_sdmx_base_url: str = Field(default=_OECD_BASE_URL)
@@ -1269,6 +1318,7 @@ class Settings(BaseSettings):
     # Keep them stable (the UI's ResourceCard reads `source` to colour-code).
     ckan_agent_name: str = Field(default="ckan")
     ods_agent_name: str = Field(default="ods")
+    socrata_agent_name: str = Field(default="socrata")
     istat_agent_name: str = Field(default="istat")
     eurostat_agent_name: str = Field(default="eurostat")
     oecd_agent_name: str = Field(default="oecd")
@@ -1290,6 +1340,9 @@ class Settings(BaseSettings):
     # OpenDataSoft specialist — opt-in like eurostat/oecd/opencoesione (adds 1
     # specialist LLM call per dataset query; flip to true to include ODS portals).
     enable_ods: bool = Field(default=False)
+    # Socrata specialist — opt-in like ODS (adds 1 specialist LLM call per dataset
+    # query; flip to true to include Socrata portals, e.g. US/city open data).
+    enable_socrata: bool = Field(default=False)
     enable_eurostat: bool = Field(default=False)
     enable_oecd: bool = Field(default=False)
     # OpenCoesione adds 1 specialist LLM call per query — opt-in like the others.
@@ -1703,7 +1756,7 @@ def region_search_preamble(settings: Settings, source: str) -> str:
                      f"datasets pertaining to {nome} or its comuni.\n\n")
         return "\n".join(lines)
 
-    if source == "ods":
+    if source in ("ods", "socrata"):
         return (
             f"=== REGIONAL SCOPING (MANDATORY — regione {nome}) ===\n"
             f"This deployment is scoped to {nome}. Treat every query as implicitly "

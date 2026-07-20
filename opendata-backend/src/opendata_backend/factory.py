@@ -49,6 +49,7 @@ from .config import (
     PROGRAMMA_INSTRUCTIONS,
     REPORT_DEPTH_CONCISE_NOTE,
     REPORT_DEPTH_ESTESA,
+    SOCRATA_INSTRUCTIONS,
     SYNTH_INSTRUCTIONS,
     WEB_INSTRUCTIONS,
     Settings,
@@ -75,7 +76,7 @@ log = logging.getLogger("orchestrator.factory")
 # the A2A search/geo skills) so they don't drag in OpenCoesione/ISPRA/OSM/web —
 # those belong to the /territorio profile. Single source of truth, passed as
 # `sources=` to run_streaming. eurostat/oecd are opt-in; harmless if disabled.
-DATASET_SOURCES = frozenset({"ckan", "ods", "istat", "eurostat", "oecd"})
+DATASET_SOURCES = frozenset({"ckan", "ods", "socrata", "istat", "eurostat", "oecd"})
 
 # Upstream sources for the best-effort lenses (Overpass, Nominatim, ISTAT SDMX) are
 # routinely unreachable, throttled or slow — that is an expected operating
@@ -383,6 +384,7 @@ class OrchestratorSession:
             label for label, on in (
                 ("ckan", s.enable_ckan),
                 ("ods", s.enable_ods),
+                ("socrata", s.enable_socrata),
                 ("istat", s.enable_istat),
                 ("eurostat", s.enable_eurostat),
                 ("oecd", s.enable_oecd),
@@ -438,6 +440,19 @@ class OrchestratorSession:
                 name=s.ods_agent_name,
                 url=s.ods_mcp_url,
                 description="Tools to query any OpenDataSoft portal via the Explore API v2.1.",
+                default_options=default_options,
+                participants=participants,
+            )
+
+        # Socrata specialist — same shape as CKAN/ODS (one portal per call, SoQL
+        # filters). Opt-in; joins the dataset fan-out (DATASET_SOURCES) when enabled.
+        if s.enable_socrata:
+            await self._add_mcp_specialist(
+                chat_client=chat_client,
+                instructions=region_scoped_instructions(SOCRATA_INSTRUCTIONS, s, source="socrata"),
+                name=s.socrata_agent_name,
+                url=s.socrata_mcp_url,
+                description="Tools to query any Socrata portal via the SODA / Discovery API.",
                 default_options=default_options,
                 participants=participants,
             )
