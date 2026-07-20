@@ -218,6 +218,11 @@ dimensioni con le **leve di miglioramento** ordinate per impatto sul punteggio �
 così l'ente sa *cosa cambiare per primo* per salire di livello. Sotto la soglia
 minima di dati dichiara *"dato insufficiente"* invece di assegnare punteggi
 fuorvianti. La scorecard è **esportabile** (CSV, e PNG/PDF della scheda).
+Per le entità **Regione** compare un **indicatore dedicato** — *"Piano
+paesaggistico (PPR/PPTR) pubblicato come servizio interrogabile?"* (sì/no +
+formato + licenza) — segnale di apertura del dato geospaziale, alimentato dal
+registro degli adattatori paesaggistici e **onesto sulla copertura** (regione
+senza adattatore → *"non rilevato"*, mai un falso "assente").
 
 **A cosa serve / per chi.** È lo strumento del **Responsabile per la Transizione
 Digitale (RTD)** e dell'open data manager: dà una fotografia oggettiva e

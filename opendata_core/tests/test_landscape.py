@@ -10,6 +10,7 @@ from opendata_core.landscape import (
     constraint_at,
     landscape_adapter,
     landscape_adapter_for,
+    landscape_service_status,
 )
 from opendata_core.landscape.puglia import _is_tutela, _parse_identify
 
@@ -156,3 +157,33 @@ async def test_sardegna_partial_fail_no_tutele_degrades_to_none(monkeypatch) -> 
     async with SardegnaPPRClient() as c:
         monkeypatch.setattr(c._client, "get", _one_ok_rest_fail)
         assert await c.constraint_at(39.2, 9.1) is None
+
+
+# ── landscape_service_status (#168): indicatore "PPTR interrogabile?" ──
+
+
+def test_service_status_covered_regions() -> None:
+    p = landscape_service_status(regione="Puglia")
+    assert p["queryable"] is True and p["stato"] == "interrogabile"
+    assert "ArcGIS" in p["formato"] and p["provider"] == "puglia"
+    s = landscape_service_status(regione="Sardegna")
+    assert s["queryable"] is True and "WFS" in s["formato"]
+
+
+def test_service_status_accepts_full_entity_name() -> None:
+    # nomi entità reali: "Regione Puglia", "Regione Autonoma della Sardegna"
+    assert landscape_service_status(regione="Regione Puglia")["provider"] == "puglia"
+    assert landscape_service_status(
+        regione="Regione Autonoma della Sardegna")["provider"] == "sardegna"
+
+
+def test_service_status_by_provider_slug() -> None:
+    assert landscape_service_status(provider="sardegna")["queryable"] is True
+
+
+def test_service_status_uncovered_region_is_honest() -> None:
+    r = landscape_service_status(regione="Lazio")
+    assert r["queryable"] is False and r["stato"] == "non rilevato"
+    assert r["formato"] is None and r["provider"] is None
+    # né una regione vuota inventa copertura
+    assert landscape_service_status(regione=None)["queryable"] is False

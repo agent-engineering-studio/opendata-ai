@@ -141,6 +141,15 @@ type Scorecard = {
   insufficient_data?: boolean;
   guida?: Guida | null;
   unmet_reuse_demand?: { count: number; items: string[]; penalty: number };
+  // Indicatore "PPTR/PPR come servizio interrogabile?" (#168) — solo per le Regioni.
+  regione_pptr?: {
+    queryable: boolean;
+    stato: string;
+    regione: string | null;
+    provider: string | null;
+    formato: string | null;
+    licenza: string | null;
+  } | null;
 };
 
 // Etichette leggibili delle 6 categorie HVD (Reg. UE 2023/138) — allineate a
@@ -1169,6 +1178,46 @@ function ScorecardView({ scorecard, portfolio }: { scorecard: Scorecard; portfol
                     entityName={scorecard.entity.name}
                     fileSlug={`maturita-${slug || "ente"}-confronto`}
                   />
+                </div>
+              ) : null}
+
+              {/* Indicatore "PPTR come servizio interrogabile?" (#168): solo Regioni */}
+              {scorecard.regione_pptr ? (
+                <div className="col-lg-6">
+                  <div className="card shadow-sm h-100">
+                    <div className="card-body">
+                      <h3 className="h6 mb-1">Piano paesaggistico come servizio interrogabile</h3>
+                      <p className="text-muted small mb-3">
+                        Indicatore dedicato alle <strong>Regioni</strong>: il piano
+                        paesaggistico (PPR/PPTR) è pubblicato come <strong>servizio OGC
+                        interrogabile</strong> (WFS/ArcGIS REST), non solo come PDF o mappa?
+                        È un segnale di apertura del dato (machine-readable, geospaziale HVD);
+                        non fa parte del punteggio 5-star del catalogo.
+                      </p>
+                      {scorecard.regione_pptr.queryable ? (
+                        <>
+                          <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle mb-2">
+                            ✓ Interrogabile
+                          </span>
+                          <ul className="list-unstyled small mb-0">
+                            <li><strong>Formato:</strong> {scorecard.regione_pptr.formato}</li>
+                            <li><strong>Licenza:</strong> {scorecard.regione_pptr.licenza}</li>
+                          </ul>
+                        </>
+                      ) : (
+                        <>
+                          <span className="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle mb-2">
+                            Non rilevato
+                          </span>
+                          <p className="small text-muted mb-0">
+                            Nessun adattatore verifica ancora il piano paesaggistico di questa
+                            regione: lo stato è <em>non rilevato</em>, non &laquo;assente&raquo;.
+                            La copertura cresce una regione alla volta (oggi: Puglia, Sardegna).
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 

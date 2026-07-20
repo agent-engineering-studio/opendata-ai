@@ -20,6 +20,7 @@ from opendata_core.maturity import (
     build_guida_opendata,
     infer_entity_type,
 )
+from opendata_core.landscape import landscape_service_status
 from opendata_core.maturity.harvest import HarvestResult, harvest_entity
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -231,7 +232,10 @@ async def run_assessment(
     assessed_at = datetime.now(timezone.utc)
     ent = await repo.upsert_entity(
         session, name=harvest.org_title or entity, ckan_org_id=harvest.ckan_org_id,
-        entity_type="ente", portal_url=base_url,
+        # Tipizza "regione" quando inferito (abilita l'indicatore PPTR #168);
+        # per il resto resta "ente" (comportamento invariato per comuni/enti).
+        entity_type=("regione" if entity_type == "regione" else "ente"),
+        portal_url=base_url,
     )
     await repo.save_dataset_quality(
         session, entity_id=ent.id, qualities=result.dataset_quality, assessed_at=assessed_at
@@ -350,6 +354,13 @@ async def build_scorecard(session: AsyncSession, entity_id: int) -> dict[str, An
         "cluster_median": await _cluster_median(session, ent.type),
         # Confronto con enti simili (#50): posizione + mediane per dimensione.
         "peer_comparison": await _peer_comparison(session, ent),
+        # Indicatore "PPTR/PPR come servizio interrogabile?" — SOLO per le Regioni
+        # (#168). Voce dedicata, NON mescolata al punteggio 5-star. Onesto sulla
+        # copertura: regione senza adattatore → "non rilevato". None per non-Regioni.
+        "regione_pptr": (
+            landscape_service_status(regione=ent.region or ent.name)
+            if (ent.type or "").lower() == "regione" else None
+        ),
     }
 
 
