@@ -58,6 +58,9 @@ jobs:
           - name: opencoesione-mcp-server
             context: .
             dockerfile: opencoesione-mcp-server/Dockerfile
+          - name: openpnrr-mcp-server
+            context: .
+            dockerfile: openpnrr-mcp-server/Dockerfile
           - name: ispra-mcp-server
             context: .
             dockerfile: ispra-mcp-server/Dockerfile
