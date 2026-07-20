@@ -192,6 +192,46 @@ export default function IdeeLabPage() {
     URL.revokeObjectURL(a.href);
   }
 
+  // Export PDF: l'HTML della scheda (già renderizzato da AssistantMarkdown)
+  // viene aperto in una finestra di stampa pulita — fuori dal layout h-screen
+  // dell'app, che in stampa ritaglierebbe a una pagina — e il browser salva
+  // in PDF. Testo selezionabile, paginazione automatica, fonti con URL.
+  function exportPdf() {
+    const node = document.getElementById("scheda-idea");
+    if (!node || !report) return;
+    const win = window.open("", "_blank", "width=900,height=1100");
+    if (!win) {
+      setError("Il browser ha bloccato la finestra di stampa: consenti i popup per questa pagina.");
+      return;
+    }
+    win.document.write(`<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><title>${report.titolo} — OpenData AI</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #17324d;
+         max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.55; font-size: 13px; }
+  h1 { font-size: 22px; line-height: 1.2; } h2 { font-size: 16px; margin-top: 22px; }
+  h1, h2, h3 { color: #002b56; break-after: avoid; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; vertical-align: top; }
+  pre { background: #f5f5f5; border: 1px solid #e3e4e6; padding: 12px; font-size: 11px;
+        white-space: pre-wrap; word-break: break-word; }
+  code { font-size: 11px; }
+  a { color: #000; }
+  /* Le fonti restano verificabili su carta: URL esplicito accanto al link. */
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 0.75em; word-break: break-all; }
+  blockquote, table, pre, li { break-inside: avoid; }
+  .pdf-footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e3e4e6;
+                font-size: 11px; color: #5b6f82; }
+</style></head><body>
+${node.innerHTML}
+<div class="pdf-footer">Generato da OpenData AI · Idea Lab · ${report.generato_il} · ID ${report.idea_id}</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    // Attendi il layout della finestra prima di aprire il dialogo di stampa.
+    win.setTimeout(() => win.print(), 300);
+  }
+
   function restart() {
     setMessages([]); setStage(null); setDatasets([]); setFunding([]);
     setSuggestions([]); setReportReady(false); setReport(null); setError(null);
@@ -414,13 +454,20 @@ export default function IdeeLabPage() {
             {report && (
               <div className="card shadow-sm mt-3">
                 <div className="card-body">
-                  <div className="d-flex justify-content-between align-items-start mb-2">
+                  <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
                     <span className="badge bg-primary">Scheda progetto</span>
-                    <button className="btn btn-sm btn-outline-primary" onClick={downloadReport}>
-                      Scarica (.md)
-                    </button>
+                    <span className="d-flex gap-2">
+                      <button className="btn btn-sm btn-outline-primary" onClick={downloadReport}>
+                        Scarica (.md)
+                      </button>
+                      <button className="btn btn-sm btn-primary" onClick={exportPdf}>
+                        Esporta PDF
+                      </button>
+                    </span>
                   </div>
-                  <AssistantMarkdown text={report.report_md} />
+                  <div id="scheda-idea">
+                    <AssistantMarkdown text={report.report_md} />
+                  </div>
                 </div>
               </div>
             )}
