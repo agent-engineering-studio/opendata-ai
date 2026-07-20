@@ -198,6 +198,28 @@ services:
       - centriditalia_mirror:/data
     restart: unless-stopped
 
+  # ───── Product MCP server (Streamable HTTP) — Esplora/Territorio/Maturità/Qualità ─────
+  # Espone le 4 modalità di prodotto come tool MCP a client esterni (OpenClaw,
+  # Claude Desktop). Proxy sottile verso opendata-backend (#131, Opzione A).
+  opendata-mcp:
+    build:
+      context: .
+      dockerfile: opendata-mcp-server/Dockerfile
+    image: opendata-mcp-server:local
+    container_name: opendata-mcp
+    ports:
+      - "${OPENDATA_MCP_PORT:-18093}:8093"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8093"
+      MCP_PATH: /mcp
+      OPENDATA_API_BASE_URL: ${OPENDATA_API_BASE_URL:-http://opendata-backend:8000}
+      OPENDATA_API_KEY: ${OPENDATA_API_KEY:-}
+      OPENDATA_API_TIMEOUT: ${OPENDATA_API_TIMEOUT:-300}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── ISPRA IdroGEO MCP server (Streamable HTTP) ─────
   ispra-mcp:
     build:
