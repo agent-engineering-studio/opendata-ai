@@ -52,6 +52,7 @@ from .config import (
     SYNTH_INSTRUCTIONS,
     WEB_INSTRUCTIONS,
     Settings,
+    region_scoped_instructions,
     resolve_provider,
     resolve_report_depth,
 )
@@ -420,7 +421,7 @@ class OrchestratorSession:
         if s.enable_ckan:
             await self._add_mcp_specialist(
                 chat_client=chat_client,
-                instructions=CKAN_INSTRUCTIONS,
+                instructions=region_scoped_instructions(CKAN_INSTRUCTIONS, s, source="ckan"),
                 name=s.ckan_agent_name,
                 url=s.ckan_mcp_url,
                 description="Tools to query any CKAN open data portal via the Action API.",
@@ -433,7 +434,7 @@ class OrchestratorSession:
         if s.enable_ods:
             await self._add_mcp_specialist(
                 chat_client=chat_client,
-                instructions=ODS_INSTRUCTIONS,
+                instructions=region_scoped_instructions(ODS_INSTRUCTIONS, s, source="ods"),
                 name=s.ods_agent_name,
                 url=s.ods_mcp_url,
                 description="Tools to query any OpenDataSoft portal via the Explore API v2.1.",
@@ -453,7 +454,7 @@ class OrchestratorSession:
                 continue
             await self._add_mcp_specialist(
                 chat_client=chat_client,
-                instructions=instructions,
+                instructions=region_scoped_instructions(instructions, s, source=name),
                 name=name,
                 url=url,
                 description=desc,
@@ -1557,10 +1558,13 @@ class OrchestratorSession:
         try:
             from opendata_core.pug import fetch_zoning, zone_at
 
-            from .config_files import portali_regionali
+            from .config import get_settings, province_ckan_map
 
+            # Portale CKAN coerente con la regione configurata (REGION, F2): con
+            # REGION impostato deriva dalla regione, altrimenti dal registro
+            # legacy per provincia (portali_regionali.yaml).
             prov = (req.cod_comune or "").strip().zfill(6)[:3]
-            portale = (portali_regionali().get("province_ckan") or {}).get(prov)
+            portale = province_ckan_map(get_settings()).get(prov)
             if portale and req.comune_nome:
                 zoning = await asyncio.wait_for(
                     fetch_zoning(comune_nome=req.comune_nome, base_url=portale), timeout=40.0,

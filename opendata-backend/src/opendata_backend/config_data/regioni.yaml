@@ -15,6 +15,7 @@
 #   ckan_base_url        portale CKAN regionale (base del fan-out ricerca, F2)
 #   oc_cod_regione       codice regione OpenCoesione (int) per i progetti finanziati
 #   portal_fq            filtro CKAN `fq` sull'organizzazione regionale
+#   itter107             codice territoriale ISTAT CL_ITTER107 / NUTS2 (pre-filtro SDMX, F2)
 #   landscape_provider   slug adattatore vincoli paesaggistici (opendata_core/landscape)
 #   pug_provider         slug adattatore zonizzazione PUG (opendata_core/pug)
 regioni:
@@ -25,5 +26,6 @@ regioni:
     ckan_base_url: "https://dati.puglia.it/ckan"
     oc_cod_regione: 16
     portal_fq: "organization:regione-puglia"
+    itter107: "ITF4"  # NUTS2 Puglia (ISTAT CL_ITTER107 / Eurostat GEO)
     landscape_provider: "puglia"
     pug_provider: "puglia"
