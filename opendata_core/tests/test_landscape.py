@@ -9,6 +9,7 @@ from opendata_core.landscape import (
     PugliaPPTRClient,
     constraint_at,
     landscape_adapter,
+    landscape_adapter_for,
 )
 from opendata_core.landscape.puglia import _is_tutela, _parse_identify
 
@@ -54,6 +55,22 @@ def test_landscape_adapter_solo_regioni_coperte() -> None:
     assert landscape_adapter("110001") is PugliaPPTRClient  # provincia BAT
     assert landscape_adapter("058091") is None              # Roma → non coperta
     assert landscape_adapter(None) is None
+
+
+def test_landscape_adapter_for_slug_iniettato() -> None:
+    # Selezione per slug provider iniettato (F4): case-insensitive.
+    assert landscape_adapter_for("puglia") is PugliaPPTRClient
+    assert landscape_adapter_for("PUGLIA") is PugliaPPTRClient
+    assert landscape_adapter_for("sicilia") is None  # non ancora coperta
+    assert landscape_adapter_for(None) is None
+    assert landscape_adapter_for("") is None
+
+
+def test_landscape_adapter_provider_ha_precedenza_sul_comune() -> None:
+    # provider iniettato vince sulla risoluzione by-comune (anche fuori Puglia).
+    assert landscape_adapter("058091", provider="puglia") is PugliaPPTRClient
+    # provider sconosciuto → None anche se il comune sarebbe coperto.
+    assert landscape_adapter("072021", provider="sicilia") is None
 
 
 async def test_constraint_at_regione_non_coperta_none() -> None:

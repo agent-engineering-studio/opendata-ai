@@ -237,7 +237,7 @@ async def test_riconciliazione_suolo_failsafe(monkeypatch) -> None:
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
     monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
-    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c, provider=None: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
     monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
@@ -301,7 +301,7 @@ async def test_riconciliazione_suolo_alta_con_due_fonti(monkeypatch) -> None:
     monkeypatch.setattr(ispramod, "IspraClient", _Ispra)
     monkeypatch.setattr(ispramod, "LandCoverClient", _OCDown)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _OCDown)
-    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c, provider=None: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _OCDown)
     monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
@@ -391,7 +391,7 @@ async def test_riconciliazione_suolo_vincolo_paesaggistico_alza_confidenza(monke
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
     monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
-    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: _PPTR)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c, provider=None: _PPTR)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
     monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
@@ -437,7 +437,7 @@ async def test_riconciliazione_suolo_contaminazione_brownfield(monkeypatch) -> N
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
     monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
-    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c, provider=None: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _SinSir)
     monkeypatch.setattr("opendata_core.pug.fetch_zoning", _pug_absent)
 
@@ -475,7 +475,7 @@ async def test_riconciliazione_suolo_pug_risolve_destinazione(monkeypatch) -> No
     monkeypatch.setattr(ispramod, "IspraClient", _Down)
     monkeypatch.setattr(ispramod, "LandCoverClient", _Down)
     monkeypatch.setattr(ocmod, "OpenCoesioneClient", _Down)
-    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c: None)
+    monkeypatch.setattr("opendata_core.landscape.landscape_adapter", lambda _c, provider=None: None)
     monkeypatch.setattr("opendata_core.sin_sir.SinSirClient", _Down)
     monkeypatch.setattr(
         "opendata_backend.config_files.portali_regionali",

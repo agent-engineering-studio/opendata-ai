@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from opendata_backend.config import Settings
 from opendata_backend.db.models import Base
 from opendata_backend.db.repositories import monitor as repo
+from opendata_backend.db.territory_models import Entity
 from opendata_backend.monitor import runner
 
 
@@ -41,6 +42,35 @@ async def _fake_fetch_ok(*a, **k):
 
 async def _fake_fetch_404(*a, **k):
     return {"status_code": 404, "errore": None, "last_modified": None, "testo": None}
+
+
+async def test_targets_in_region_binds_to_entity_region(session: AsyncSession) -> None:
+    # Due enti in regioni diverse; i loro watch di maturità sono filtrati per REGION.
+    pug = Entity(name="Comune di Gioia del Colle", type="comune", region="Puglia")
+    lom = Entity(name="Comune di Milano", type="comune", region="Lombardia")
+    session.add_all([pug, lom])
+    await session.flush()
+    t_pug = await repo.create_target(session, url="https://x.it/p", kind="maturity", entity_id=pug.id)
+    t_lom = await repo.create_target(session, url="https://x.it/l", kind="maturity", entity_id=lom.id)
+    t_orphan = await repo.create_target(session, url="https://x.it/o")  # senza entity → fail-open
+    await session.commit()
+
+    all_targets = [t_pug, t_lom, t_orphan]
+    kept = await runner._targets_in_region(session, all_targets, Settings(region_istat="16"))  # type: ignore[call-arg]
+    kept_ids = {t.id for t in kept}
+    assert t_pug.id in kept_ids      # Puglia → tenuto
+    assert t_orphan.id in kept_ids   # senza ente → fail-open
+    assert t_lom.id not in kept_ids  # Lombardia → scartato
+
+
+async def test_targets_in_region_no_region_no_filter(session: AsyncSession) -> None:
+    lom = Entity(name="Comune di Milano", type="comune", region="Lombardia")
+    session.add(lom)
+    await session.flush()
+    t = await repo.create_target(session, url="https://x.it/l", kind="maturity", entity_id=lom.id)
+    await session.commit()
+    kept = await runner._targets_in_region(session, [t], Settings(region_istat=""))  # type: ignore[call-arg]
+    assert [x.id for x in kept] == [t.id]
 
 
 async def test_check_target_link_ok_no_notification(session: AsyncSession, monkeypatch) -> None:

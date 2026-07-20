@@ -1509,7 +1509,13 @@ class OrchestratorSession:
         try:
             from opendata_core.landscape import landscape_adapter
 
-            adapter_cls = landscape_adapter(req.cod_comune)
+            from .config import get_settings, region_landscape_provider
+
+            # Provider paesaggistico iniettato da REGION (F4) quando configurato;
+            # altrimenti risoluzione by-comune (provincia). Il motore resta puro.
+            adapter_cls = landscape_adapter(
+                req.cod_comune, provider=region_landscape_provider(get_settings())
+            )
             if adapter_cls is not None:
                 async def _paesaggio(cls: Any) -> dict[str, Any]:
                     out: dict[str, Any] = {}

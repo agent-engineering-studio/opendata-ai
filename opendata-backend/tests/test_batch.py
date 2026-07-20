@@ -10,6 +10,7 @@ from sqlalchemy import MetaData, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import opendata_backend.ingest.batch as batch
+from opendata_backend.config import Settings
 from opendata_backend.db.models import Base
 from opendata_backend.db.repositories import territory as trepo
 from opendata_backend.db.territory_models import CivicSnapshot
@@ -40,6 +41,23 @@ def _fake_assessment(monkeypatch) -> None:
         return {"level": "Beginner", "overall": 0.0}
 
     monkeypatch.setattr(batch, "run_assessment", fake_run_assessment)
+
+
+def test_filter_targets_by_region() -> None:
+    targets = [
+        {"entity": "comune-di-gioia-del-colle", "istat": "072021"},  # Puglia
+        {"entity": "comune-di-milano", "istat": "015146"},            # fuori
+        {"entity": "portale-solo-ckan"},                              # senza istat → tenuto
+    ]
+    kept = batch.filter_targets_by_region(targets, Settings(region_istat="16"))  # type: ignore[call-arg]
+    entities = {t["entity"] for t in kept}
+    assert entities == {"comune-di-gioia-del-colle", "portale-solo-ckan"}
+
+
+def test_filter_targets_by_region_no_limit() -> None:
+    targets = [{"entity": "comune-di-milano", "istat": "015146"}]
+    s = Settings(region_istat="", territorio_province="")  # type: ignore[call-arg]
+    assert batch.filter_targets_by_region(targets, s) == targets
 
 
 async def test_batch_idempotent_snapshots(session: AsyncSession) -> None:

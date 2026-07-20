@@ -1631,6 +1631,41 @@ def province_ckan_map(settings: Settings) -> dict[str, str]:
     return dict((portali_regionali().get("province_ckan") or {}))
 
 
+def region_name(settings: Settings) -> str | None:
+    """Nome esteso della regione configurata (`REGION`), o None se assente."""
+    reg = region_config(settings)
+    return str(reg["nome"]) if reg and reg.get("nome") else None
+
+
+def region_landscape_provider(settings: Settings) -> str | None:
+    """Slug del provider vincoli paesaggistici da iniettare (`REGION`), o None.
+
+    Consumato dal motore puro `opendata_core.landscape.landscape_adapter(...,
+    provider=...)`: la scelta è iniettata, il motore non legge config (invariante).
+    """
+    reg = region_config(settings)
+    return str(reg["landscape_provider"]) if reg and reg.get("landscape_provider") else None
+
+
+def region_pug_provider(settings: Settings) -> str | None:
+    """Slug del provider zonizzazione PUG da iniettare (`REGION`), o None."""
+    reg = region_config(settings)
+    return str(reg["pug_provider"]) if reg and reg.get("pug_provider") else None
+
+
+def in_region_scope(cod_comune: str | None, settings: Settings) -> bool:
+    """True se il comune rientra nell'ambito (prefisso provincia). Ambito vuoto = True.
+
+    Predicato puro (nessun DB) per filtrare i target dei console-script
+    (`opendata-batch`, `opendata-monitor`) senza dover risolvere l'anagrafica.
+    Riusa `province_scope` (derivato da `REGION` o dal legacy `TERRITORIO_PROVINCE`).
+    """
+    scope = province_scope(settings)
+    if not scope:
+        return True
+    return str(cod_comune or "").strip()[:3] in scope
+
+
 def region_search_preamble(settings: Settings, source: str) -> str:
     """Preambolo di scoping regionale per un dataset-specialist del fan-out.
 
