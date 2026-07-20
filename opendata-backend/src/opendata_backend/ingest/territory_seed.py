@@ -62,16 +62,30 @@ def _geom_expr(geojson: str | None, centroid: tuple[float, float] | None) -> str
     return "NULL"
 
 
-async def seed(engine: AsyncEngine, *, fetch_geometry: bool = True) -> dict[str, Any]:
-    """Esegue il seed idempotente; ritorna un riepilogo {place_id, entity_id, geom}."""
+async def seed(
+    engine: AsyncEngine,
+    *,
+    fetch_geometry: bool = True,
+    istat: str = PILOT_ISTAT,
+    place_name: str = PILOT_PLACE_NAME,
+    entity_name: str = PILOT_ENTITY_NAME,
+    query: str = PILOT_QUERY,
+    region: str | None = None,
+) -> dict[str, Any]:
+    """Esegue il seed idempotente; ritorna un riepilogo {place_id, entity_id, geom}.
+
+    `region` (nome regione) è iniettato dal chiamante: derivato da `REGION`
+    (`regioni.yaml`) in `main`, non più cablato a "Puglia". Il pilota di default
+    resta Gioia del Colle ma è parametrizzabile per altre regioni.
+    """
     geojson, centroid = (None, None)
     if fetch_geometry:
-        geojson, centroid = await _resolve_geometry(PILOT_QUERY)
+        geojson, centroid = await _resolve_geometry(query)
 
     geom_sql = _geom_expr(geojson, centroid)
     params: dict[str, Any] = {
-        "istat": PILOT_ISTAT,
-        "name": PILOT_PLACE_NAME,
+        "istat": istat,
+        "name": place_name,
         "type": "comune",
     }
     if geojson is not None:
@@ -96,7 +110,7 @@ async def seed(engine: AsyncEngine, *, fetch_geometry: bool = True) -> dict[str,
         ).scalar_one()
 
         # Ente: idempotente per nome (no unique su name → update-then-insert).
-        ent = {"name": PILOT_ENTITY_NAME, "type": "comune", "region": "Puglia"}
+        ent = {"name": entity_name, "type": "comune", "region": region}
         entity_id = (
             await conn.execute(
                 text(
@@ -139,6 +153,14 @@ def main() -> None:
         "--no-geometry", action="store_true",
         help="salta il fetch del confine OSM (geom resta NULL)",
     )
+    parser.add_argument("--istat", default=PILOT_ISTAT, help="codice ISTAT del comune pilota")
+    parser.add_argument("--place-name", default=PILOT_PLACE_NAME, help="nome del comune")
+    parser.add_argument("--entity-name", default=PILOT_ENTITY_NAME, help="nome dell'ente")
+    parser.add_argument("--query", default=PILOT_QUERY, help="query di geocoding OSM")
+    parser.add_argument(
+        "--region", default=None,
+        help="nome regione dell'ente (default: derivato da REGION, fallback Puglia)",
+    )
     args = parser.parse_args()
     if not args.database_url:
         parser.error("serve --database-url o la variabile DATABASE_URL")
@@ -149,12 +171,21 @@ def main() -> None:
         stream=sys.stderr,
     )
 
+    from ..config import get_settings, region_name
     from ..db.session import create_database
+
+    # Regione dell'ente: --region esplicito, altrimenti derivata da REGION
+    # (regioni.yaml); fallback storico "Puglia" quando nulla è configurato.
+    region = args.region or region_name(get_settings()) or "Puglia"
 
     async def _run() -> None:
         db = create_database(args.database_url)
         try:
-            result = await seed(db.engine, fetch_geometry=not args.no_geometry)
+            result = await seed(
+                db.engine, fetch_geometry=not args.no_geometry,
+                istat=args.istat, place_name=args.place_name,
+                entity_name=args.entity_name, query=args.query, region=region,
+            )
             print(f"OK: place_id={result['place_id']} entity_id={result['entity_id']} "
                   f"geom={result['geom']}")
         finally:

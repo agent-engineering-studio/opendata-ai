@@ -13,10 +13,14 @@ from opendata_backend.config import (
     ISTAT_INSTRUCTIONS,
     ODS_INSTRUCTIONS,
     Settings,
+    in_region_scope,
     province_ckan_map,
     province_scope,
     region_ckan_base_url,
     region_config,
+    region_landscape_provider,
+    region_name,
+    region_pug_provider,
     region_scoped_instructions,
     region_search_preamble,
     resolve_ideas_oc_cod_regione,
@@ -145,3 +149,33 @@ def test_scoped_instructions_prepend_and_preserve_contract() -> None:
 def test_scoped_instructions_identity_without_region() -> None:
     s = _settings(region_istat="")
     assert region_scoped_instructions(CKAN_INSTRUCTIONS, s, source="ckan") is CKAN_INSTRUCTIONS
+
+
+# ── F4: derivazione provider/nome + predicato ambito ──────────────────
+
+
+def test_region_name_and_providers() -> None:
+    s = _settings(region_istat="16")
+    assert region_name(s) == "Puglia"
+    assert region_landscape_provider(s) == "puglia"
+    assert region_pug_provider(s) == "puglia"
+
+
+def test_region_name_and_providers_none_without_region() -> None:
+    s = _settings(region_istat="")
+    assert region_name(s) is None
+    assert region_landscape_provider(s) is None
+    assert region_pug_provider(s) is None
+
+
+def test_in_region_scope_predicate() -> None:
+    s = _settings(region_istat="16")
+    assert in_region_scope("072021", s) is True   # Puglia (BA)
+    assert in_region_scope("110001", s) is True   # BAT
+    assert in_region_scope("015146", s) is False  # Milano
+    assert in_region_scope(None, s) is False
+
+
+def test_in_region_scope_empty_is_no_limit() -> None:
+    s = _settings(region_istat="", territorio_province="")
+    assert in_region_scope("015146", s) is True  # ambito vuoto = tutto ammesso

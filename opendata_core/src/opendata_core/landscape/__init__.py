@@ -21,39 +21,60 @@ __all__ = [
     "LandscapeConstraint",
     "PugliaPPTRClient",
     "landscape_adapter",
+    "landscape_adapter_for",
     "constraint_at",
 ]
 
 # Province ISTAT della Puglia (Foggia, Bari, Taranto, Brindisi, Lecce, BAT).
 _PUGLIA_PROVINCE = frozenset({"071", "072", "073", "074", "075", "110"})
 
-#: registro regione → classe adattatore (async context manager con constraint_at).
-_ADAPTERS: dict[str, type] = {"Puglia": PugliaPPTRClient}
+#: registro **provider slug** → classe adattatore (async ctx-mgr con constraint_at).
+#: Lo slug è quello iniettato dal chiamante (nel backend: `landscape_provider` di
+#: `regioni.yaml`, derivato da `REGION`). Il motore resta puro: nessuna lettura di
+#: config, la scelta del provider è iniettata. Aggiungere una regione = aggiungere
+#: qui l'adattatore, senza toccare la logica.
+_PROVIDERS: dict[str, type] = {"puglia": PugliaPPTRClient}
+
+#: mappa provincia ISTAT (3 cifre) → provider slug, per la risoluzione by-comune
+#: (usata quando il provider NON è iniettato esplicitamente).
+_PROVINCE_TO_PROVIDER: dict[str, str] = {p: "puglia" for p in _PUGLIA_PROVINCE}
 
 
-def _regione_da_istat(cod_comune: str | None) -> str | None:
-    """Codice ISTAT del comune → nome regione coperta, o None se non coperta."""
+def landscape_adapter_for(provider: str | None) -> type | None:
+    """Classe adattatore per lo slug provider iniettato, o None se sconosciuto."""
+    if not provider:
+        return None
+    return _PROVIDERS.get(provider.strip().lower())
+
+
+def _provider_da_istat(cod_comune: str | None) -> str | None:
+    """Codice ISTAT del comune → provider slug coperto, o None se non coperto."""
     prov = (cod_comune or "").strip()[:3]
-    if prov in _PUGLIA_PROVINCE:
-        return "Puglia"
-    return None
+    return _PROVINCE_TO_PROVIDER.get(prov)
 
 
-def landscape_adapter(cod_comune: str | None) -> type | None:
-    """Classe adattatore per la regione del comune, o None se non coperta.
+def landscape_adapter(cod_comune: str | None, *, provider: str | None = None) -> type | None:
+    """Classe adattatore per il comune, o None se non coperta.
 
-    Consente al chiamante (lente backend) di aprire UN client e riusarlo per tutti
-    i poligoni del comune; per le regioni non coperte non apre alcuna connessione."""
-    regione = _regione_da_istat(cod_comune)
-    return _ADAPTERS.get(regione) if regione else None
+    Se `provider` è iniettato (slug, es. da `REGION`) ha precedenza; altrimenti si
+    risolve dalla provincia del comune. Consente al chiamante (lente backend) di
+    aprire UN client e riusarlo per tutti i poligoni; per le regioni non coperte
+    non apre alcuna connessione."""
+    if provider:
+        return landscape_adapter_for(provider)
+    slug = _provider_da_istat(cod_comune)
+    return _PROVIDERS.get(slug) if slug else None
 
 
-async def constraint_at(*, lat: float, lon: float, cod_comune: str | None) -> LandscapeConstraint | None:
+async def constraint_at(
+    *, lat: float, lon: float, cod_comune: str | None, provider: str | None = None
+) -> LandscapeConstraint | None:
     """Vincolo paesaggistico nel punto per il comune indicato. Fail-safe.
 
-    Comodità per l'uso singolo: risolve l'adattatore regionale, apre il client e
-    interroga. None se la regione non è coperta o la fonte non è interrogabile."""
-    adapter_cls = landscape_adapter(cod_comune)
+    Comodità per l'uso singolo: risolve l'adattatore (per `provider` iniettato o
+    per comune), apre il client e interroga. None se non coperto o non
+    interrogabile."""
+    adapter_cls = landscape_adapter(cod_comune, provider=provider)
     if adapter_cls is None:
         return None
     try:

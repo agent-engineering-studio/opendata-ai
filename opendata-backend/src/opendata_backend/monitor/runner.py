@@ -26,10 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from opendata_core.monitor import check_maturity_regression, diff_runs, run_checks
 from opendata_core.quality import profile_csv, profile_geojson
 
-from ..config import Settings
+from sqlalchemy import select
+
+from ..config import Settings, region_name
 from ..db.repositories import maturity as maturity_repo
 from ..db.repositories import monitor as repo
-from ..db.territory_models import MonitorTarget
+from ..db.territory_models import Entity, MonitorTarget
 from ..routers.datasets import _validate_proxy_url
 from .notify import build_email_body, build_notification_payload, send_email, send_webhook
 
@@ -197,10 +199,45 @@ async def check_target(
     )
 
 
+async def _targets_in_region(
+    session: AsyncSession, targets: list[MonitorTarget], settings: Settings
+) -> list[MonitorTarget]:
+    """Vincola i target alla regione configurata (`REGION`) via `Entity.region`.
+
+    Un target è tenuto se l'ente collegato appartiene alla regione, oppure se la
+    regione dell'ente non è determinabile (nessun `entity_id`, ente/regione
+    ignoti → fail-open: non si smette di monitorare in silenzio). I target
+    scartati sono LOGGATI. `REGION` non impostato → nessun filtro (dev).
+    """
+    target_region = region_name(settings)
+    if not target_region:
+        return targets
+    entity_ids = {t.entity_id for t in targets if t.entity_id is not None}
+    regione_by_id: dict[int, str | None] = {}
+    if entity_ids:
+        rows = await session.execute(
+            select(Entity.id, Entity.region).where(Entity.id.in_(entity_ids))
+        )
+        regione_by_id = {rid: reg for rid, reg in rows.all()}
+
+    kept: list[MonitorTarget] = []
+    dropped: list[int] = []
+    for t in targets:
+        reg = regione_by_id.get(t.entity_id) if t.entity_id is not None else None
+        if reg is None or reg == target_region:
+            kept.append(t)  # fail-open sugli enti senza regione nota
+        else:
+            dropped.append(t.id)
+    if dropped:
+        log.warning("monitor: %d target fuori regione %s scartati (id=%s)",
+                    len(dropped), target_region, ", ".join(map(str, dropped)))
+    return kept
+
+
 async def run_monitor(session: AsyncSession, *, settings: Settings) -> dict[str, Any]:
     """Esegue il controllo su tutti i target attivi. Un target che fallisce non blocca gli altri."""
     ora = datetime.now(timezone.utc)
-    targets = await repo.list_active_targets(session)
+    targets = await _targets_in_region(session, await repo.list_active_targets(session), settings)
     risultati: list[dict[str, Any]] = []
     for target in targets:
         try:

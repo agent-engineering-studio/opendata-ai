@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..civic.checkin import open_checkin_thread
 from ..civic.snapshot import SnapshotError, create_snapshot
-from ..config import Settings
+from ..config import Settings, in_region_scope, region_name
 from ..config_files import _load_yaml
 from ..maturity.service import run_assessment
 
@@ -31,6 +31,32 @@ log = logging.getLogger("ingest.batch")
 
 def load_targets() -> list[dict[str, Any]]:
     return list(_load_yaml("batch_targets.yaml").get("targets") or [])
+
+
+def filter_targets_by_region(
+    targets: list[dict[str, Any]], settings: Settings
+) -> list[dict[str, Any]]:
+    """Tiene solo i target dentro l'ambito regionale (`REGION`/`TERRITORIO_PROVINCE`).
+
+    Un target è tenuto se il suo `istat` rientra nell'ambito, oppure se non ha
+    `istat` (target puramente CKAN, non attribuibile a una regione → conservato).
+    I target scartati sono LOGGATI (niente cap silenzioso). Ambito vuoto = nessun
+    filtro (dev).
+    """
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for t in targets:
+        istat = t.get("istat")
+        if not istat or in_region_scope(istat, settings):
+            kept.append(t)
+        else:
+            dropped.append(f"{t.get('entity')}({istat})")
+    if dropped:
+        log.warning(
+            "batch: %d target fuori regione %s scartati: %s",
+            len(dropped), region_name(settings) or "(ambito legacy)", ", ".join(dropped),
+        )
+    return kept
 
 
 async def run_batch(
@@ -90,11 +116,13 @@ def main() -> None:
     from ..db.session import create_database
 
     async def _run() -> None:
+        settings = get_settings()
+        targets = filter_targets_by_region(load_targets(), settings)
         db = create_database(args.database_url)
         try:
             async with db.sessionmaker() as session:
                 summary = await run_batch(
-                    session, targets=load_targets(), settings=get_settings(),
+                    session, targets=targets, settings=settings,
                     snapshot_id=args.snapshot_id, sources_version=args.sources_version,
                 )
             print(f"OK: batch {summary['snapshot_id']} su {summary['n_targets']} target")
