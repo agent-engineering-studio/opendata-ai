@@ -163,7 +163,7 @@ agent-backend: ## Launch the unified backend REPL against the running stack
 	  -e OSM_MCP_URL=http://osm-mcp:8080/mcp \
 	  opendata-backend:local opendata-agent
 
-.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-openpnrr mcp-stdio-ispra mcp-stdio-web mcp-stdio-maturity mcp-stdio-ods mcp-stdio-socrata mcp-stdio-bdap
+.PHONY: mcp-stdio-ckan mcp-stdio-istat mcp-stdio-osm mcp-stdio-opencoesione mcp-stdio-openpnrr mcp-stdio-centriditalia mcp-stdio-ispra mcp-stdio-web mcp-stdio-maturity mcp-stdio-ods mcp-stdio-socrata mcp-stdio-bdap
 mcp-stdio-ckan: ## Smoke-test the CKAN MCP server over stdio (one tools/list round-trip)
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio ckan-mcp-server:local
@@ -195,6 +195,10 @@ mcp-stdio-opencoesione: ## Smoke-test the OpenCoesione MCP server over stdio
 mcp-stdio-openpnrr: ## Smoke-test the OpenPNRR MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
 	  | docker run --rm -i -e TRANSPORT=stdio openpnrr-mcp-server:local
+
+mcp-stdio-centriditalia: ## Smoke-test the Centri d'Italia MCP server over stdio
+	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+	  | docker run --rm -i -e TRANSPORT=stdio centriditalia-mcp-server:local
 
 mcp-stdio-ispra: ## Smoke-test the ISPRA MCP server over stdio
 	@echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
