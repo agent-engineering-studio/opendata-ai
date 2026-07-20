@@ -384,6 +384,11 @@ un formato che si è rotto, una pagella di maturità in calo.
   - Fetch: missions/components/measures/deadlines, territories, funded
     projects + payments (programmed-vs-paid on the PNRR stream; standalone,
     not part of the dataset fan-out)
+- **Centri d'Italia** *(openpolis — migrant-reception open data)* — `centriditalia-mcp-server`
+  - Source: bulk CSV on S3 (licence **CC-BY 4.0**) → local SQLite mirror
+  - Fetch: CAS/CPA/hotspot centres + SAI projects/structures (capacity,
+    presences, daily cost per guest) by ISTAT territory — aggregated per
+    centre, standalone, not part of the dataset fan-out)
 
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
@@ -419,6 +424,7 @@ dedicato per ciascuno:
 | **osm-mcp** | Geocoding, POI, routing, zone + mappe Leaflet | [`osm-mcp/README.md`](osm-mcp/README.md) |
 | **opencoesione-mcp-server** | Progetti coesione: finanziato vs speso | [`opencoesione-mcp-server/README.md`](opencoesione-mcp-server/README.md) |
 | **openpnrr-mcp-server** | PNRR (openpolis): missioni/misure/scadenze, progetti finanziati vs pagati — licenza ODbL (standalone, non nel fan-out) | [`openpnrr-mcp-server/README.md`](openpnrr-mcp-server/README.md) |
+| **centriditalia-mcp-server** | Accoglienza migranti (openpolis): centri CAS/CPA/hotspot + SAI, capienza/presenze/costo per territorio — CSV bulk→mirror SQLite, licenza CC-BY (standalone, non nel fan-out) | [`centriditalia-mcp-server/README.md`](centriditalia-mcp-server/README.md) |
 | **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
 | **ods-mcp-server** | OpenDataSoft Explore API v2.1, `base_url` per-portale | [`ods-mcp-server/README.md`](ods-mcp-server/README.md) |
 | **socrata-mcp-server** | Socrata Discovery/Views/SODA API, `base_url` per-portale (standalone, non ancora nel fan-out) | [`socrata-mcp-server/README.md`](socrata-mcp-server/README.md) |

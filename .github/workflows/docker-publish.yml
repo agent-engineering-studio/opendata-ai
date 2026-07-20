@@ -61,6 +61,9 @@ jobs:
           - name: openpnrr-mcp-server
             context: .
             dockerfile: openpnrr-mcp-server/Dockerfile
+          - name: centriditalia-mcp-server
+            context: .
+            dockerfile: centriditalia-mcp-server/Dockerfile
           - name: ispra-mcp-server
             context: .
             dockerfile: ispra-mcp-server/Dockerfile

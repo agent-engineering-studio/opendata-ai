@@ -173,6 +173,31 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── Centri d'Italia MCP server (Streamable HTTP) — openpolis accoglienza ─────
+  # Dati bulk CSV → mirror SQLite locale (costruito al primo uso). Il volume
+  # persiste il mirror tra i restart (evita di riscaricare ~20 MB ogni volta).
+  centriditalia-mcp:
+    build:
+      context: .
+      dockerfile: centriditalia-mcp-server/Dockerfile
+    image: centriditalia-mcp-server:local
+    container_name: centriditalia-mcp
+    ports:
+      - "${CENTRIDITALIA_MCP_PORT:-18092}:8092"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8092"
+      MCP_PATH: /mcp
+      CENTRIDITALIA_BASE_URL: ${CENTRIDITALIA_BASE_URL:-https://migrantidb.s3.eu-central-1.amazonaws.com/opendata}
+      CENTRIDITALIA_DATASET_VERSION: ${CENTRIDITALIA_DATASET_VERSION:-v2026}
+      CENTRIDITALIA_DB_PATH: /data/centriditalia_mirror.sqlite
+      CENTRIDITALIA_REFRESH_TTL_SECONDS: ${CENTRIDITALIA_REFRESH_TTL_SECONDS:-604800}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - centriditalia_mirror:/data
+    restart: unless-stopped
+
   # ───── ISPRA IdroGEO MCP server (Streamable HTTP) ─────
   ispra-mcp:
     build:
@@ -518,3 +543,5 @@ volumes:
     name: opendata-ai-sdmx-cache
   overpass_db:
     name: opendata-ai-overpass-db
+  centriditalia_mirror:
+    name: opendata-ai-centriditalia-mirror
