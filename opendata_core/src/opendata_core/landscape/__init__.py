@@ -5,9 +5,10 @@ regionali, su geoportali diversi con schemi/CRS diversi — non esiste un serviz
 nazionale unico. Ogni regione = un adattatore che espone
 ``constraint_at(lat, lon) -> LandscapeConstraint | None``.
 
-Oggi è implementato l'adattatore **Puglia** (SIT Puglia); le altre regioni
-degradano a ``None`` (nodo "vincolo paesaggistico" → "da verificare", fail-safe).
-Estensione ad altre regioni: vedi issue di follow-up.
+Oggi sono implementati gli adattatori **Puglia** (PPTR, SIT Puglia — ArcGIS) e
+**Sardegna** (PPR, SITR — WFS GeoServer); le altre regioni degradano a ``None``
+(nodo "vincolo paesaggistico" → "da verificare", fail-safe). Aggiungere una
+regione = un adattatore (spike live + allowlist tutele), vedi #166.
 """
 
 from __future__ import annotations
@@ -16,10 +17,12 @@ from typing import Any
 
 from .models import LandscapeConstraint
 from .puglia import PugliaPPTRClient
+from .sardegna import SardegnaPPRClient
 
 __all__ = [
     "LandscapeConstraint",
     "PugliaPPTRClient",
+    "SardegnaPPRClient",
     "landscape_adapter",
     "landscape_adapter_for",
     "constraint_at",
@@ -27,17 +30,24 @@ __all__ = [
 
 # Province ISTAT della Puglia (Foggia, Bari, Taranto, Brindisi, Lecce, BAT).
 _PUGLIA_PROVINCE = frozenset({"071", "072", "073", "074", "075", "110"})
+# Province ISTAT della Sardegna (Sassari, Nuoro, Cagliari, Oristano, Sud Sardegna).
+# Include i prefissi storici (Olbia-Tempio, Ogliastra, Medio Campidano,
+# Carbonia-Iglesias, aboliti nel 2016) per i codici comune non ancora ricodificati.
+_SARDEGNA_PROVINCE = frozenset({"090", "091", "092", "095", "111", "104", "105", "106", "107"})
 
 #: registro **provider slug** → classe adattatore (async ctx-mgr con constraint_at).
 #: Lo slug è quello iniettato dal chiamante (nel backend: `landscape_provider` di
 #: `regioni.yaml`, derivato da `REGION`). Il motore resta puro: nessuna lettura di
 #: config, la scelta del provider è iniettata. Aggiungere una regione = aggiungere
 #: qui l'adattatore, senza toccare la logica.
-_PROVIDERS: dict[str, type] = {"puglia": PugliaPPTRClient}
+_PROVIDERS: dict[str, type] = {"puglia": PugliaPPTRClient, "sardegna": SardegnaPPRClient}
 
 #: mappa provincia ISTAT (3 cifre) → provider slug, per la risoluzione by-comune
 #: (usata quando il provider NON è iniettato esplicitamente).
-_PROVINCE_TO_PROVIDER: dict[str, str] = {p: "puglia" for p in _PUGLIA_PROVINCE}
+_PROVINCE_TO_PROVIDER: dict[str, str] = {
+    **{p: "puglia" for p in _PUGLIA_PROVINCE},
+    **{p: "sardegna" for p in _SARDEGNA_PROVINCE},
+}
 
 
 def landscape_adapter_for(provider: str | None) -> type | None:

@@ -85,3 +85,74 @@ async def test_pptr_constraint_at_failsafe(monkeypatch) -> None:
     async with PugliaPPTRClient() as c:
         monkeypatch.setattr(c._client, "get", _boom)
         assert await c.constraint_at(40.99, 17.22) is None
+
+
+# ── Sardegna adapter (#166): WFS PPR SITR ──────────────────────────────
+
+from opendata_core.landscape import SardegnaPPRClient  # noqa: E402
+
+
+class _FakeResp:
+    def __init__(self, features: int) -> None:
+        self._features = [{"id": f"x.{i}"} for i in range(features)]
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {"type": "FeatureCollection", "features": self._features}
+
+
+def _fake_get_by_layer(hits: dict[str, int]):
+    """Fake httpx get: ritorna N feature per layer secondo `hits` (default 0)."""
+    async def _get(url, params=None):  # noqa: ANN001, ANN202
+        layer = (params or {}).get("typeNames", "").split(":")[-1]
+        return _FakeResp(hits.get(layer, 0))
+    return _get
+
+
+def test_sardegna_registry_and_gate() -> None:
+    # comune sardo (Cagliari 092049) → adattatore Sardegna; slug iniettato idem.
+    assert landscape_adapter("092049") is SardegnaPPRClient   # Cagliari
+    assert landscape_adapter("091051") is SardegnaPPRClient   # Nuoro
+    assert landscape_adapter_for("sardegna") is SardegnaPPRClient
+    assert landscape_adapter("072021", provider="sardegna") is SardegnaPPRClient
+
+
+async def test_sardegna_coastal_hit(monkeypatch) -> None:
+    async with SardegnaPPRClient() as c:
+        monkeypatch.setattr(c._client, "get",
+                            _fake_get_by_layer({"aree_vincolate_ex_art136": 1}))
+        v = await c.constraint_at(39.205, 9.166)
+    assert v is not None and v.vincolato is True
+    assert "Immobili e aree di notevole interesse pubblico (art. 136)" in v.tutele
+    assert v.regione == "Sardegna" and v.licenza.startswith("Regione Autonoma")
+
+
+async def test_sardegna_inland_no_tutele(monkeypatch) -> None:
+    async with SardegnaPPRClient() as c:
+        monkeypatch.setattr(c._client, "get", _fake_get_by_layer({}))  # tutti 0
+        v = await c.constraint_at(40.321, 9.330)
+    assert v is not None and v.vincolato is False and v.tutele == []
+
+
+async def test_sardegna_all_fail_none(monkeypatch) -> None:
+    async def _boom(*_a, **_k):  # noqa: ANN002, ANN003, ANN202
+        raise httpx.ReadTimeout("slow")
+
+    async with SardegnaPPRClient() as c:
+        monkeypatch.setattr(c._client, "get", _boom)
+        assert await c.constraint_at(39.2, 9.1) is None  # fonte non interrogabile
+
+
+async def test_sardegna_partial_fail_no_tutele_degrades_to_none(monkeypatch) -> None:
+    # un layer risponde vuoto, gli altri falliscono, nessuna tutela → None (non falso negativo)
+    async def _one_ok_rest_fail(url, params=None):  # noqa: ANN001, ANN202
+        layer = (params or {}).get("typeNames", "").split(":")[-1]
+        if layer == "aree_vincolate_ex_art136":
+            return _FakeResp(0)
+        raise httpx.ReadTimeout("slow")
+
+    async with SardegnaPPRClient() as c:
+        monkeypatch.setattr(c._client, "get", _one_ok_rest_fail)
+        assert await c.constraint_at(39.2, 9.1) is None
