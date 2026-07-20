@@ -294,7 +294,11 @@ suggerisce come renderlo più utile:
   WGS84, pronto per la mappa. In uscita, oltre al CSV corretto, si può scaricare
   la versione **Parquet** (colonnare e compressa, con i tipi inferiti dal
   contenuto): il consiglio "usa un formato colonnare" della sezione scala,
-  applicato con un clic.
+  applicato con un clic. Le conversioni **XLSX→CSV** e **Shapefile→GeoJSON**
+  sono disponibili anche **server-side via REST/A2A** (`POST /quality/xlsx-to-csv`
+  e `/quality/shapefile-to-geojson`, input binario in base64), non solo nel
+  browser — richiedono l'extra `converters` (openpyxl/pyshp/pyproj), altrimenti
+  l'endpoint degrada con `501` (#157).
 
 **A cosa serve / per chi.** È lo strumento di chi *pubblica* — uffici dati,
 RTD, open data manager — per alzare la qualità prima della pubblicazione e

@@ -27,16 +27,22 @@ from opendata_core.quality import (
     json_to_geojson,
     profile_csv,
     profile_geojson,
+    shapefile_to_geojson,
     summarize_csv,
     validate_dcat,
     validate_schema_org,
+    xlsx_to_csv,
 )
 
 # Azioni esposte (mirror della superficie REST /quality/*).
 AZIONI = (
     "profile", "fix", "schema", "normalize", "summary", "scale", "enrich", "hvd",
     "geo-schema", "to-geojson", "to-parquet", "validate", "metadata-schema-org", "package",
+    "xlsx-to-csv", "shapefile-to-geojson",
 )
+
+# Azioni con input BINARIO (content_base64), non testo inline.
+_BINARY_AZIONI = ("xlsx-to-csv", "shapefile-to-geojson")
 
 
 def _is_geojson(text: str, fmt: str) -> bool:
@@ -61,6 +67,21 @@ def run_quality_skill(payload: dict[str, Any]) -> dict[str, Any]:
               titolo?, descrizione?, licenza?, ente?, tema?, frequenza?, url?}
     """
     azione = str(payload.get("azione") or "profile").lower()
+
+    # Convertitori binari (#157): input base64, non testo inline.
+    if azione in _BINARY_AZIONI:
+        b64 = payload.get("content_base64")
+        if not b64 or not isinstance(b64, str):
+            return _err("manca 'content_base64' (file binario in base64).", azioni=list(AZIONI))
+        try:
+            data = base64.b64decode(b64, validate=True)
+        except Exception:  # noqa: BLE001 — base64 invalido → errore pulito
+            return _err("content_base64 non valido.")
+        if azione == "xlsx-to-csv":
+            return {"ok": True, "azione": azione,
+                    "result": xlsx_to_csv(data, sheet=payload.get("sheet"))}
+        return {"ok": True, "azione": azione, "result": shapefile_to_geojson(data)}
+
     text = payload.get("content") or ""
     if not isinstance(text, str) or not text.strip():
         return _err("manca 'content' (testo CSV/GeoJSON inline).", azioni=list(AZIONI))

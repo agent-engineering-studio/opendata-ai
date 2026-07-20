@@ -57,6 +57,9 @@ claude = [
 # opendata-core[converters] nel builder.
 converters = [
     "pyarrow>=16.0",
+    "openpyxl>=3.1",       # XLSX → CSV (#157)
+    "pyshp>=2.3",          # Shapefile → GeoJSON (#157)
+    "pyproj>=3.6",         # riproiezione WGS84 (#157)
 ]
 dev = [
     "pytest>=8.2.0",
@@ -66,6 +69,9 @@ dev = [
     "fakeredis>=2.23.0",
     "aiosqlite>=0.20.0",
     "pyarrow>=16.0",
+    "openpyxl>=3.1",
+    "pyshp>=2.3",
+    "pyproj>=3.6",
 ]
 
 [project.scripts]

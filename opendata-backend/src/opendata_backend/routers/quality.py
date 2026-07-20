@@ -8,6 +8,8 @@ validazione anti-SSRF del proxy dataset.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
 import logging
 import zipfile
@@ -32,9 +34,11 @@ from opendata_core.quality import (
     json_to_geojson,
     profile_csv,
     profile_geojson,
+    shapefile_to_geojson,
     summarize_csv,
     validate_dcat,
     validate_schema_org,
+    xlsx_to_csv,
 )
 
 from ..auth import ClerkUser
@@ -139,6 +143,55 @@ async def _resolve_input(body: ProfileIn) -> str:
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Fornisci `content` (CSV/GeoJSON) oppure un `url` valido.")
     return text
+
+
+async def _fetch_bytes(url: str) -> bytes:
+    """Variante binaria di `_fetch_text`: stessa anti-SSRF + cap 16 MB, niente decode."""
+    _validate_proxy_url(url)
+    async with httpx.AsyncClient(
+        timeout=_FETCH_TIMEOUT,
+        follow_redirects=True,
+        headers={"User-Agent": "opendata-ai/1.0 (+quality)"},
+    ) as client:
+        try:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"Errore scaricando l'URL: {exc}") from exc
+    return resp.content[:_MAX_FETCH_BYTES]
+
+
+class BinaryIn(BaseModel):
+    """Input binario per i convertitori server-side (#157): base64 nel body o URL.
+
+    `content_base64` è coerente con l'output base64 di /quality/to-parquet ed è
+    l'opzione più semplice per REST/A2A (nessun multipart). In alternativa `url`,
+    scaricato server-side con la stessa anti-SSRF del proxy dataset.
+    """
+
+    content_base64: str | None = None
+    url: str | None = None
+
+
+async def _resolve_bytes(body: BinaryIn) -> bytes:
+    """Risolve i byte da `content_base64` o `url`. Solleva 400 (input) / 413 (troppo grande)."""
+    if body.content_base64:
+        try:
+            data = base64.b64decode(body.content_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"content_base64 non valido: {exc}") from exc
+    elif body.url:
+        data = await _fetch_bytes(body.url)
+    else:
+        raise HTTPException(status_code=400, detail="Fornisci `content_base64` oppure un `url` valido.")
+    if not data:
+        raise HTTPException(status_code=400, detail="Il file è vuoto.")
+    if len(data) > _MAX_FETCH_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File troppo grande (> {_MAX_FETCH_BYTES // (1024 * 1024)} MB).",
+        )
+    return data
 
 
 @router.post("/quality/profile")
@@ -405,6 +458,61 @@ async def quality_to_parquet(
         media_type="application/vnd.apache.parquet",
         headers={"Content-Disposition": 'attachment; filename="dati.parquet"'},
     )
+
+
+@router.post("/quality/xlsx-to-csv")
+async def quality_xlsx_to_csv(
+    body: BinaryIn,
+    sheet: str | None = None,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Convertitore binario (#157): XLSX → CSV, server-side, per REST/A2A.
+
+    La UI converte gli XLSX client-side (SheetJS); questo porta la stessa capability
+    lato server. Input binario via `content_base64` o `url`. Deterministico.
+    Richiede l'extra `converters` (openpyxl): se assente → 501. Gli .xls legacy
+    non sono supportati (→ 422 con messaggio chiaro).
+
+    Args:
+        sheet: nome del foglio da convertire (default: il primo/attivo).
+    """
+    data = await _resolve_bytes(body)
+    result = xlsx_to_csv(data, sheet=sheet)
+    if not result["ok"]:
+        status = 501 if "openpyxl" in (result["error"] or "") else 422
+        raise HTTPException(status_code=status, detail=result["error"])
+    log.info(
+        "/quality/xlsx-to-csv subject=%s source=%s foglio=%s righe=%d",
+        user.subject, "url" if body.url else "base64", result["sheet"], result["righe"],
+    )
+    return result
+
+
+@router.post("/quality/shapefile-to-geojson")
+async def quality_shapefile_to_geojson(
+    body: BinaryIn,
+    user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict:
+    """Convertitore binario (#157): Shapefile.zip → GeoJSON (WGS84), server-side.
+
+    La UI converte gli shapefile client-side (shpjs); questo porta la stessa
+    capability lato server per REST/A2A. Riproietta in WGS84 leggendo il `.prj`.
+    Input binario via `content_base64` o `url`. Richiede l'extra `converters`
+    (pyshp/pyproj): se assente → 501. Guardia zip-bomb → 413.
+    """
+    data = await _resolve_bytes(body)
+    result = shapefile_to_geojson(data)
+    if not result["ok"]:
+        if result.get("zipbomb"):
+            raise HTTPException(status_code=413, detail=result["error"])
+        status = 501 if ("pyshp" in (result["error"] or "") or "pyproj" in (result["error"] or "")) else 422
+        raise HTTPException(status_code=status, detail=result["error"])
+    log.info(
+        "/quality/shapefile-to-geojson subject=%s source=%s features=%d crs=%s",
+        user.subject, "url" if body.url else "base64",
+        result["feature_count"], result["source_crs"],
+    )
+    return result
 
 
 @router.post("/quality/metadata")

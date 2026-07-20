@@ -145,6 +145,30 @@ def test_missing_content_and_unknown_action() -> None:
     assert bad["ok"] is False and "azioni" in bad
 
 
+def test_binary_actions_xlsx_and_missing_base64() -> None:
+    import base64
+    import io
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    wb.active.append(["a", "b"])
+    wb.active.append([1, 2])
+    buf = io.BytesIO()
+    wb.save(buf)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+
+    ok = run_quality_skill({"azione": "xlsx-to-csv", "content_base64": b64})
+    assert ok["ok"] is True and ok["result"]["ok"] is True
+    assert ok["result"]["content"].splitlines()[0] == "a,b"
+
+    # senza content_base64 → errore pulito (non usa 'content' testo)
+    miss = run_quality_skill({"azione": "xlsx-to-csv"})
+    assert miss["ok"] is False and "content_base64" in miss["error"]
+    assert run_quality_skill({"azione": "shapefile-to-geojson",
+                              "content_base64": "!!!"})["ok"] is False
+
+
 def test_agent_card_publishes_quality_skill() -> None:
     card = build_agent_card("http://localhost:8000")
     ids = {s.id for s in card.skills}
