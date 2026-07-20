@@ -15,6 +15,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import re
+import unicodedata
+
+from . import puglia as _puglia
+from . import sardegna as _sardegna
 from .models import LandscapeConstraint
 from .puglia import PugliaPPTRClient
 from .sardegna import SardegnaPPRClient
@@ -25,6 +30,7 @@ __all__ = [
     "SardegnaPPRClient",
     "landscape_adapter",
     "landscape_adapter_for",
+    "landscape_service_status",
     "constraint_at",
 ]
 
@@ -74,6 +80,53 @@ def landscape_adapter(cod_comune: str | None, *, provider: str | None = None) ->
         return landscape_adapter_for(provider)
     slug = _provider_da_istat(cod_comune)
     return _PROVIDERS.get(slug) if slug else None
+
+
+#: Metadati di copertura per provider slug — per l'indicatore di maturità (#168):
+#: "il piano paesaggistico regionale è esposto come servizio OGC interrogabile?".
+#: formato + licenza dichiarati dall'adattatore corrispondente.
+_COVERAGE: dict[str, dict[str, str]] = {
+    "puglia": {"regione": "Puglia", "formato": "ArcGIS REST (identify)",
+               "licenza": _puglia.LICENZA},
+    "sardegna": {"regione": "Sardegna", "formato": "WFS (GeoServer, OGC)",
+                 "licenza": _sardegna.LICENZA},
+}
+
+
+def _norm(text: str) -> str:
+    """Normalizza per il match nome-regione → slug: minuscolo, senza accenti/non-alnum."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    ascii_ = nfkd.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]", "", ascii_.lower())
+
+
+def landscape_service_status(
+    *, regione: str | None = None, provider: str | None = None
+) -> dict[str, object]:
+    """Stato del piano paesaggistico regionale come **servizio interrogabile** (#168).
+
+    Indicatore di apertura del dato per le entità Regione: dice se il PPR/PPTR è
+    esposto come servizio OGC (WFS/ArcGIS REST) interrogabile per punto, con
+    formato + licenza — riusando il registro degli adattatori. **Onesto sulla
+    copertura**: regione senza adattatore → ``queryable=False`` con stato
+    ``"non rilevato"`` (mai un falso "assente"). Il consumatore (maturità)
+    accetta un nome regione (anche "Regione Puglia") o uno slug provider.
+    """
+    slug = provider.strip().lower() if provider else None
+    if slug is None and regione:
+        norm = _norm(regione)
+        slug = next((s for s in _COVERAGE if _norm(s) in norm), None)
+    meta = _COVERAGE.get(slug or "")
+    if not meta:
+        return {
+            "queryable": False, "stato": "non rilevato",
+            "regione": regione, "provider": None, "formato": None, "licenza": None,
+        }
+    return {
+        "queryable": True, "stato": "interrogabile",
+        "regione": meta["regione"], "provider": slug,
+        "formato": meta["formato"], "licenza": meta["licenza"],
+    }
 
 
 async def constraint_at(

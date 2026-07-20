@@ -185,6 +185,39 @@ async def test_peer_comparison(session: AsyncSession) -> None:
     assert sc_b["peer_comparison"]["better_than_pct"] == 0
 
 
+async def test_regione_pptr_indicator(session: AsyncSession) -> None:
+    """Indicatore PPTR (#168): presente e onesto per le Regioni; None per i comuni."""
+    from datetime import datetime, timezone
+
+    from opendata_backend.db.repositories import maturity as repo
+
+    def _sc(o, p, po, q, i, lvl):
+        return SimpleNamespace(overall=o, policy=p, portal=po, quality=q, impact=i, level=lvl)
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    pug = await repo.upsert_entity(session, name="Regione Puglia", ckan_org_id="rp",
+                                   entity_type="regione", region="Puglia")
+    laz = await repo.upsert_entity(session, name="Regione Lazio", ckan_org_id="rl",
+                                   entity_type="regione", region="Lazio")
+    com = await repo.upsert_entity(session, name="Comune X", ckan_org_id="cx",
+                                   entity_type="comune")
+    for e in (pug, laz, com):
+        await repo.save_assessment(session, entity_id=e.id,
+                                   scores=_sc(50, 50, 50, 50, 50, "Follower"),
+                                   details={"n_datasets": 8}, assessed_at=now)
+    await session.commit()
+
+    # Puglia: coperta → interrogabile, con formato/licenza.
+    ind = (await build_scorecard(session, pug.id))["regione_pptr"]
+    assert ind is not None and ind["queryable"] is True and ind["stato"] == "interrogabile"
+    assert ind["formato"] and ind["licenza"]
+    # Lazio: regione ma senza adattatore → onesto "non rilevato" (mai falso "assente").
+    ind_l = (await build_scorecard(session, laz.id))["regione_pptr"]
+    assert ind_l["queryable"] is False and ind_l["stato"] == "non rilevato"
+    # Comune: l'indicatore non si applica → None (la UI lo nasconde).
+    assert (await build_scorecard(session, com.id))["regione_pptr"] is None
+
+
 async def test_peer_comparison_none_when_alone(session: AsyncSession) -> None:
     """Un solo ente del tipo → nessun confronto possibile (None)."""
     from datetime import datetime, timezone
