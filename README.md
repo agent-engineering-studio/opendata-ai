@@ -393,6 +393,19 @@ Any CKAN portal works this way, including `dati.anticorruzione.it/opendata`
 are bulk monthly/annual dumps (no CKAN DataStore), so per-CIG/per-authority
 row lookups aren't possible without PDND-gated institutional access.
 
+**Catasto / quotazioni immobiliari OMI (#147)** — no dedicated connector: the
+aggregated cadastral / real-estate-market (OMI, *Osservatorio del Mercato
+Immobiliare*) data that is genuinely open is **already reachable via the generic
+`ckan-mcp-server`**. A search for *"quotazioni immobiliari OMI"* on `dati.gov.it`
+returns 130+ datasets from municipal/regional portals (Milano, Toscana,
+Piemonte, …) with clean CSV/JSON resources the CKAN agent already fetches. The
+*national* Agenzia delle Entrate OMI source is **not** an open REST API — its
+bulk "servizio di download" is gated behind a per-download licence acceptance
+(session-based), so a dedicated scraper would be fragile and outside the
+"solo open data pubblici · fail-safe" principle. Point the CKAN agent at the
+relevant portal (`base_url`) instead. The Italian cadastre proper (per-parcel
+visure) is a paid Agenzia delle Entrate service, out of scope for open data.
+
 ## MCP servers
 
 Ogni fonte è un server **MCP** componibile (stdio o streamable-HTTP su `/mcp`),
