@@ -443,6 +443,7 @@ services:
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0}
       CKAN_MCP_URL: ${CKAN_MCP_URL:-http://ckan-mcp:8080/mcp}
       ODS_MCP_URL: ${ODS_MCP_URL:-http://ods-mcp:8080/mcp}
+      SOCRATA_MCP_URL: ${SOCRATA_MCP_URL:-http://socrata-mcp:8080/mcp}
       ISTAT_MCP_URL: ${ISTAT_MCP_URL:-http://istat-mcp:8081/mcp}
       EUROSTAT_MCP_URL: ${EUROSTAT_MCP_URL:-}
       OECD_MCP_URL: ${OECD_MCP_URL:-}
@@ -462,6 +463,10 @@ services:
       # OpenDataSoft: opt-in; con ENABLE_ODS=true avvia anche il servizio ods-mcp.
       ENABLE_ODS: ${ENABLE_ODS:-false}
       ODS_DEFAULT_BASE_URL: ${ODS_DEFAULT_BASE_URL:-https://public.opendatasoft.com}
+      # Socrata: opt-in come ODS (usa il servizio socrata-mcp già definito sopra).
+      ENABLE_SOCRATA: ${ENABLE_SOCRATA:-false}
+      SOCRATA_AGENT_NAME: ${SOCRATA_AGENT_NAME:-socrata}
+      SOCRATA_DEFAULT_BASE_URL: ${SOCRATA_DEFAULT_BASE_URL:-https://opendata.socrata.com}
       ENABLE_EUROSTAT: ${ENABLE_EUROSTAT:-false}
       ENABLE_OECD: ${ENABLE_OECD:-false}
       ENABLE_OPENCOESIONE: ${ENABLE_OPENCOESIONE:-false}

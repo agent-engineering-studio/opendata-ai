@@ -70,8 +70,8 @@ _BINARY_MAGIC = (
 
 
 SourceTag = Literal[
-    "ckan", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra", "miur", "salute", "mef",
-    "kg", "web",
+    "ckan", "ods", "socrata", "istat", "eurostat", "oecd", "opencoesione", "osm", "ispra",
+    "miur", "salute", "mef", "kg", "web",
 ]
 
 
