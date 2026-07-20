@@ -161,7 +161,8 @@ via OpenStreetMap, il report confronta il *tag* OSM con lo **stato reale del
 suolo** ricostruito dalle fonti pubbliche oggi disponibili (vincolo idrogeologico
 IdroGEO PAI a scala comunale, **copertura del suolo** puntuale da Corine Land Cover
 ISPRA per capire se un'area è già *impermeabilizzata/edificata*, **vincoli
-paesaggistici** dal piano regionale — PPTR, oggi Puglia — **siti contaminati e
+paesaggistici** dal piano regionale (architettura pluggable per regione: oggi
+PPTR Puglia e PPR Sardegna) — **siti contaminati e
 bonifiche** SIN-SIR dal catasto MOSAICO di ISPRA, **destinazione urbanistica** dalla
 zonizzazione PUG/PRG quando il comune la pubblica come open data, progetti
 OpenCoesione nel comune) e propone una **classificazione** (dismesso, **brownfield**
