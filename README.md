@@ -38,6 +38,39 @@ quel dato. Esplora è l'accesso conversazionale alle fonti; Territorio e Maturit
 sono le due lenti del *capability layer* che danno valore e accountability al
 patrimonio informativo.
 
+#### Scoping mono-regione (`REGION`)
+
+**Cos'è.** Una sola variabile nel `.env` — `REGION` (codice ISTAT regione a 2
+cifre, es. `16` = Puglia) — rende `opendata-ai` il **cruscotto degli open data di
+una singola regione**: ricerca, studio del territorio, maturità e analisi si
+riferiscono tutti a quella regione.
+
+**Come funziona.** `REGION` è la **sorgente di verità**: da essa si derivano —
+senza valori cablati nel codice — le province ammesse, il portale CKAN regionale,
+il codice OpenCoesione e i filtri di ricerca (`config_data/regioni.yaml`). La
+ricerca CKAN parte dal portale regionale (non da `dati.gov.it`) e le query SDMX
+(ISTAT/Eurostat/OECD) sono pre-filtrate sulla dimensione territoriale; gli
+endpoint di territorio/maturità **rifiutano i comuni fuori regione**; i motori
+paesaggistico/PUG e i job batch/seed/monitor seguono la stessa regione. La UI
+mostra un badge **«Regione: …»** e l'autocomplete propone solo i comuni ammessi.
+
+**A cosa serve.** Un deployment per ente/regione, senza fork: chi lo installa
+vede solo il proprio territorio. Lasciando `REGION` vuoto (dev) non c'è alcun
+limite — comportamento nazionale/internazionale invariato (retro-compatibile col
+vecchio `TERRITORIO_PROVINCE`).
+
+```mermaid
+flowchart LR
+  ENV["REGION=16<br/>(.env)"] --> DER["Derivazione<br/>regioni.yaml"]
+  DER --> P["province ammesse"]
+  DER --> CK["portale CKAN regionale + fq"]
+  DER --> OC["oc_cod_regione"]
+  DER --> TR["codice territoriale SDMX<br/>(CL_ITTER107 / GEO)"]
+  DER --> PR["provider paesaggistico / PUG"]
+  P & CK & OC & TR & PR --> USE(["Ricerca · Territorio · Maturità<br/>batch/seed/monitor · UI"])
+  USE --> OUT["tutto filtrato sulla regione"]
+```
+
 ---
 
 ### 1. Esplora — esplorazione conversazionale dei dati

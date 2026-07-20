@@ -18,6 +18,29 @@ def _clear_core_cache():
     zones.cache_clear()
 
 
+async def test_regione_config_scoped(monkeypatch) -> None:
+    from opendata_backend.config import Settings
+
+    monkeypatch.setattr(territorio_router, "get_settings",
+                        lambda: Settings(region_istat="16"))  # type: ignore[call-arg]
+    out = await territorio_router.regione_config(user=None)  # type: ignore[arg-type]
+    assert out["scoped"] is True
+    assert out["cod_regione"] == "16"
+    assert out["nome"] == "Puglia"
+    assert out["province"] == ["071", "072", "073", "074", "075", "110"]
+
+
+async def test_regione_config_unscoped_dev(monkeypatch) -> None:
+    from opendata_backend.config import Settings
+
+    monkeypatch.setattr(territorio_router, "get_settings",
+                        lambda: Settings(region_istat="", territorio_province=""))  # type: ignore[call-arg]
+    out = await territorio_router.regione_config(user=None)  # type: ignore[arg-type]
+    assert out["scoped"] is False
+    assert out["nome"] is None
+    assert out["province"] == []
+
+
 async def test_cerca_comuni_returns_results(monkeypatch) -> None:
     async def fake_lookup(nome: str, limit: int = 8):
         return [{"nome": "Barletta", "ref_istat": "110002", "cod_provincia": "110",

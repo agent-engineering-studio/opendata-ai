@@ -24,6 +24,8 @@ from ..config import (
     check_territorio_scope,
     get_settings,
     province_scope,
+    region_config,
+    region_name,
     resolve_report_depth,
 )
 from ..shared.ratelimit import enforce_rate_limit
@@ -55,6 +57,27 @@ async def report_mode(
         "depth": depth,
         "concise": depth == "concise",
         "note": REPORT_DEPTH_CONCISE_NOTE.strip() if depth == "concise" else None,
+    }
+
+
+@router.get("/regione")
+async def regione_config(
+    user: ClerkUser = Depends(enforce_rate_limit),  # noqa: B008, ARG001
+) -> dict:
+    """Regione configurata (`REGION`) per il badge/selettore UI (issue #191, F5).
+
+    `scoped=false` in dev (nessun limite): la UI non mostra il badge. Con `REGION`
+    impostato ritorna nome + province; col solo legacy `TERRITORIO_PROVINCE` il
+    nome può essere assente (badge sulle province).
+    """
+    settings = get_settings()
+    reg = region_config(settings)
+    scope = province_scope(settings)
+    return {
+        "scoped": bool(reg) or bool(scope),
+        "cod_regione": settings.region_istat or None,
+        "nome": region_name(settings),
+        "province": sorted(scope),
     }
 
 
