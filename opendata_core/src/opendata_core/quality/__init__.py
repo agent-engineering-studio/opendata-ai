@@ -21,11 +21,14 @@ from .scale import advise_scale
 from .schema import infer_schema
 from .schemaorg import generate_schema_org
 from .schemaorg_validate import validate_schema_org
+from .shapefile import shapefile_to_geojson
 from .summarize import summarize_csv
+from .xlsx import xlsx_to_csv
 
 __all__ = [
     "profile_csv", "fix_csv", "profile_geojson", "generate_dcat", "validate_dcat",
     "infer_schema", "csv_to_geojson", "json_to_geojson", "summarize_csv", "advise_scale",
     "build_publish_package", "advise_enrichment", "build_normalization", "infer_geo_schema",
     "generate_schema_org", "validate_schema_org", "csv_to_parquet", "advise_hvd",
+    "xlsx_to_csv", "shapefile_to_geojson",
 ]

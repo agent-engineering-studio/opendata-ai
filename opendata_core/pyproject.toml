@@ -19,6 +19,9 @@ dependencies = [
 # dal core puro — senza questo extra `csv_to_parquet` degrada con ok=False.
 converters = [
     "pyarrow>=16.0",
+    "openpyxl>=3.1",       # XLSX → CSV (#157), puro Python
+    "pyshp>=2.3",          # Shapefile → GeoJSON (#157), puro Python (NO fiona/GDAL)
+    "pyproj>=3.6",         # riproiezione shapefile → WGS84 (#157)
 ]
 dev = [
     "pytest>=8.2.0",
@@ -26,6 +29,9 @@ dev = [
     "pytest-httpx>=0.30.0",
     "ruff>=0.6.0",
     "pyarrow>=16.0",
+    "openpyxl>=3.1",
+    "pyshp>=2.3",
+    "pyproj>=3.6",
 ]
 
 [build-system]
