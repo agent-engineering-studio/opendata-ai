@@ -153,6 +153,26 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped
 
+  # ───── OpenPNRR MCP server (Streamable HTTP) — openpolis NRRP open data ─────
+  openpnrr-mcp:
+    build:
+      context: .
+      dockerfile: openpnrr-mcp-server/Dockerfile
+    image: openpnrr-mcp-server:local
+    container_name: openpnrr-mcp
+    ports:
+      - "${OPENPNRR_MCP_PORT:-18091}:8091"
+    environment:
+      TRANSPORT: streamable-http
+      HOST: 0.0.0.0
+      PORT: "8091"
+      MCP_PATH: /mcp
+      OPENPNRR_BASE_URL: ${OPENPNRR_BASE_URL:-https://openpnrr.it/api/v1}
+      OPENPNRR_HTTP_TIMEOUT: "60"
+      OPENPNRR_CACHE_TTL_SECONDS: ${OPENPNRR_CACHE_TTL_SECONDS:-3600}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
   # ───── ISPRA IdroGEO MCP server (Streamable HTTP) ─────
   ispra-mcp:
     build:

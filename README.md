@@ -379,6 +379,11 @@ un formato che si è rotto, una pagella di maturità in calo.
 - **OpenStreetMap** *(render-only)* — `osm-mcp`
   - Endpoint: `nominatim` / `overpass` / `osrm`
   - Fetch: renders GeoJSON layers into Leaflet HTML
+- **OpenPNRR** *(openpolis — NRRP/PNRR open data)* — `openpnrr-mcp-server`
+  - Endpoint: `openpnrr.it/api/v1` (no auth, licence **ODbL 1.0**)
+  - Fetch: missions/components/measures/deadlines, territories, funded
+    projects + payments (programmed-vs-paid on the PNRR stream; standalone,
+    not part of the dataset fan-out)
 
 Default portals for CKAN: the agent picks from an embedded list (`dati.gov.it`,
 `data.gov.uk`, `data.gov`, `open.canada.ca`, `data.gov.au`, …). Override per
@@ -400,6 +405,7 @@ dedicato per ciascuno:
 | **istat-mcp-server** | SDMX 2.1 — ISTAT · Eurostat · OECD | [`istat-mcp-server/README.md`](istat-mcp-server/README.md) |
 | **osm-mcp** | Geocoding, POI, routing, zone + mappe Leaflet | [`osm-mcp/README.md`](osm-mcp/README.md) |
 | **opencoesione-mcp-server** | Progetti coesione: finanziato vs speso | [`opencoesione-mcp-server/README.md`](opencoesione-mcp-server/README.md) |
+| **openpnrr-mcp-server** | PNRR (openpolis): missioni/misure/scadenze, progetti finanziati vs pagati — licenza ODbL (standalone, non nel fan-out) | [`openpnrr-mcp-server/README.md`](openpnrr-mcp-server/README.md) |
 | **ispra-mcp-server** | Rischio idrogeologico per comune (IdroGEO) | [`ispra-mcp-server/README.md`](ispra-mcp-server/README.md) |
 | **ods-mcp-server** | OpenDataSoft Explore API v2.1, `base_url` per-portale | [`ods-mcp-server/README.md`](ods-mcp-server/README.md) |
 | **socrata-mcp-server** | Socrata Discovery/Views/SODA API, `base_url` per-portale (standalone, non ancora nel fan-out) | [`socrata-mcp-server/README.md`](socrata-mcp-server/README.md) |
