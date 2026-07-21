@@ -118,8 +118,12 @@ Forma `RegionOverview` (bozza):
   comune → riusa le pagine esistenti (`/maturita`, `/territorio`, `/copilota`).
 - **Comune**: pagine già esistenti, contestualizzate al comune scelto.
 - **Pubblico**: versione ridotta/embeddabile del cruscotto (trasparenza).
-- Badge «Regione: …» già presente (#191). R14: README + copy + diagramma alla
-  realizzazione.
+- **Titolo esplicativo globale** «Cruscotto Open Data · Regione …» in testata su
+  ogni pagina (componente `RegioneTitle`, env `NEXT_PUBLIC_REGION_NAME`, coerente
+  con `REGION` del backend): dev'essere sempre chiaro *quale* regione si sta
+  monitorando. Il badge runtime «Regione: …» di `/territorio` (#191) resta per il
+  dettaglio province.
+- R14: README + copy + diagramma alla realizzazione.
 
 ## 6. Fasi / backlog (sotto-issue)
 
