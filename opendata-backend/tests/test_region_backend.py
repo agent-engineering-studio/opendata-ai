@@ -154,3 +154,37 @@ def test_idee_regionali_ranked(sm) -> None:
     # ogni idea con HVD riporta la copertura misurata sui 3 comuni pugliesi
     con_hvd = [i for i in idee if i["hvd"]]
     assert con_hvd and all(i["comuni_totali"] == 3 for i in con_hvd)
+
+
+def test_snapshot_then_trend(sm) -> None:
+    c = _client(sm)  # auth_enabled=False → dev user è admin → POST /snapshot ok
+    s1 = c.post("/regione/snapshot").json()
+    assert s1["comuni_totali"] == 3 and s1["cod_regione"] == "16"
+    c.post("/regione/snapshot")
+    body = c.get("/regione/trend").json()
+    assert body["totale"] == 2  # append-only: due catture
+    assert body["punti"][0]["comuni_valutati"] == 2
+    assert all("mediana_overall" in p for p in body["punti"])
+
+
+def test_narrativa_offline_fallback(sm) -> None:
+    # provider=claude + nessuna chiave → LLM non configurato → fallback deterministico
+    async def _user() -> ClerkUser:
+        return ClerkUser(subject="u", email=None, claims={})
+
+    async def _db():
+        async with sm() as session:
+            yield session
+
+    from fastapi import FastAPI
+    from starlette.testclient import TestClient
+    app = FastAPI()
+    app.include_router(region.router)
+    app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+        auth_enabled=False, region_istat="16", llm_provider="claude", anthropic_api_key=None,
+    )
+    app.dependency_overrides[auth_dep.require_user] = _user
+    app.dependency_overrides[get_db_session] = _db
+    body = TestClient(app).get("/regione/narrativa").json()
+    assert body["generato_con"] == "offline"
+    assert "comuni" in body["testo"] and "3 comuni" in body["testo"]
