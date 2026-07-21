@@ -1,15 +1,21 @@
-"""Clerk JWT verification.
+"""OIDC JWT verification (IdP-agnostic).
 
-Backends written for Clerk verify session tokens by:
+Standard OpenID Connect token verification — works with ANY compliant issuer
+(self-hosted Keycloak/Authentik, or Clerk). The backend never depends on a
+specific vendor SDK; it only needs the issuer URL (`settings.oidc_issuer`):
 
-1. Fetching the issuer's JWKS at `${issuer}/.well-known/jwks.json` and caching
-   it in-process (Clerk rotates keys roughly daily; a few-minute TTL is fine).
-2. Decoding the bearer token's header to pick the `kid` to use.
-3. Verifying the signature with PyJWT against the matching JWK, and checking
-   the standard claims (`iss`, `exp`, `nbf`).
+1. Fetch the issuer's JWKS at `${issuer}/.well-known/jwks.json` and cache it
+   in-process (issuers rotate keys periodically; a few-minute TTL is fine).
+2. Decode the bearer token's header to pick the `kid` to use.
+3. Verify the signature with PyJWT against the matching JWK, and check the
+   standard claims (`iss`, `exp`, `sub`, and `aud` when `oidc_audience` is set).
 
-Clerk does not issue an `aud` claim by default, so we do NOT validate
-audience — set up a JWT template in the Clerk dashboard if you need it.
+Audience is validated only when `settings.oidc_audience` is configured
+(Keycloak clients issue an `aud`; Clerk does not by default) — otherwise it is
+skipped, preserving back-compat with the previous Clerk-only setup.
+
+The identity type is named `ClerkUser` and the entry point `verify_clerk_token`
+for historical reasons; `verify_oidc_token` is exported as the preferred alias.
 """
 
 from __future__ import annotations
@@ -81,11 +87,13 @@ def _reset_jwks_cache() -> None:
 
 
 async def verify_clerk_token(token: str, *, settings: Settings) -> ClerkUser:
-    if not settings.clerk_jwt_issuer:
-        raise ClerkAuthError("CLERK_JWT_ISSUER is not configured on the backend")
+    if not settings.oidc_issuer:
+        raise ClerkAuthError(
+            "OIDC_ISSUER (or the legacy CLERK_JWT_ISSUER) is not configured on the backend"
+        )
 
     try:
-        client = _jwks_client(settings.clerk_jwt_issuer, settings.clerk_jwks_cache_seconds)
+        client = _jwks_client(settings.oidc_issuer, settings.oidc_jwks_cache_seconds)
         signing_key = client.get_signing_key_from_jwt(token).key
     except httpx.HTTPError as exc:
         raise ClerkAuthError(f"could not fetch JWKS: {exc}") from exc
@@ -94,18 +102,26 @@ async def verify_clerk_token(token: str, *, settings: Settings) -> ClerkUser:
     except jwt.exceptions.DecodeError as exc:
         raise ClerkAuthError(f"malformed token: {exc}") from exc
 
+    # Validate `aud` only when an expected audience is configured; otherwise
+    # skip it (Clerk omits `aud` by default).
+    require = ["exp", "iss", "sub"]
+    if settings.oidc_audience:
+        require.append("aud")
     try:
         claims = jwt.decode(
             token,
             signing_key,
             algorithms=["RS256"],
-            issuer=settings.clerk_jwt_issuer,
-            options={"require": ["exp", "iss", "sub"]},
+            issuer=settings.oidc_issuer,
+            audience=settings.oidc_audience,
+            options={"require": require, "verify_aud": bool(settings.oidc_audience)},
         )
     except jwt.ExpiredSignatureError as exc:
         raise ClerkAuthError("token expired") from exc
     except jwt.InvalidIssuerError as exc:
         raise ClerkAuthError("token issuer mismatch") from exc
+    except jwt.InvalidAudienceError as exc:
+        raise ClerkAuthError("token audience mismatch") from exc
     except jwt.InvalidTokenError as exc:
         raise ClerkAuthError(f"invalid token: {exc}") from exc
 
@@ -117,3 +133,9 @@ async def verify_clerk_token(token: str, *, settings: Settings) -> ClerkUser:
     if not isinstance(email, str):
         email = None
     return ClerkUser(subject=subject, email=email, claims=claims)
+
+
+# Preferred, IdP-agnostic name for the verification entry point. `verify_clerk_token`
+# is kept as the implementation symbol (imported by the auth dependency and
+# monkeypatched in tests) to avoid churn; both refer to the same coroutine.
+verify_oidc_token = verify_clerk_token
