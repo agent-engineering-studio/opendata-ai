@@ -10,6 +10,7 @@ import {
   UserButton,
 } from "@clerk/clerk-react";
 import { Logo } from "@/components/Logo";
+import { RegioneTitle } from "@/components/RegioneTitle";
 
 const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -201,6 +202,9 @@ export function SiteHeader() {
         {renderNav(
           "d-flex d-lg-none flex-wrap align-items-center gap-3 pb-3",
         )}
+
+        {/* Titolo esplicativo: quale regione stiamo monitorando (globale). */}
+        <RegioneTitle />
       </div>
     </header>
   );
