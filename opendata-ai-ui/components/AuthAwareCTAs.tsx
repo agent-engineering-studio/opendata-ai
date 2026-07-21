@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { SignUpButton, SignedIn, SignedOut } from "@clerk/clerk-react";
-
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+import { SignUpButton, SignedIn, SignedOut, authConfigured } from "@/lib/auth";
 
 type Variant = "hero" | "final";
 
@@ -17,7 +15,7 @@ type Variant = "hero" | "final";
  *   "Crea un account gratuito" (SignUp modale); SignedIn "Apri l'analisi".
  *
  * La secondaria (anchor "Guarda come funziona" / link "Sostieni il progetto")
- * è statica e vive in `app/page.tsx`. Senza Clerk configurato, fallback ai
+ * è statica e vive in `app/page.tsx`. Senza OIDC configurato, fallback ai
  * link pubblici così il bundle statico compila comunque.
  */
 
@@ -61,7 +59,7 @@ export function AuthAwareCTAs({ variant }: { variant: Variant }) {
   const signedInLabel =
     variant === "hero" ? "Analizza un territorio" : "Apri l'analisi";
 
-  if (!hasClerk) {
+  if (!authConfigured) {
     return (
       <Link href="/login" style={style}>
         {signedOutLabel}

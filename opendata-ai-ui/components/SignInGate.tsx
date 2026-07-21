@@ -1,21 +1,19 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/clerk-react";
-
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+import { SignedIn, SignedOut, SignInButton, SignUpButton, authConfigured } from "@/lib/auth";
 
 /**
  * Renders `signedIn` to authenticated users and an inline sign-in CTA to
- * everyone else. Mirrors the existing pattern in `SiteHeader`: when Clerk
- * isn't configured at build time (local prerender, /_not-found), fall
- * straight through to `signedIn` so the bundle still compiles.
+ * everyone else. Mirrors the pattern in `SiteHeader`: when OIDC isn't
+ * configured at build time (local prerender, /_not-found), fall straight
+ * through to `signedIn` so the bundle still compiles and dev is unblocked.
  *
  * The CTA replaces the chat input on `/` and the map controls on `/mappa`
  * — without it, logged-out users see a normal-looking textbox, submit, and
  * collect "Errore HTTP 401" with no hint that they need to authenticate.
  */
 export function SignInGate({ signedIn }: { signedIn: React.ReactNode }) {
-  if (!hasClerk) return <>{signedIn}</>;
+  if (!authConfigured) return <>{signedIn}</>;
   return (
     <>
       <SignedIn>{signedIn}</SignedIn>

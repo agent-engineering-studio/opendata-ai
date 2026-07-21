@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -7,12 +8,13 @@ import {
   SignUpButton,
   SignedIn,
   SignedOut,
-  UserButton,
-} from "@clerk/clerk-react";
+  authConfigured,
+  useAuth,
+} from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { RegioneTitle } from "@/components/RegioneTitle";
 
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const hasAuth = authConfigured;
 
 // Nav marketing: anchor verso le sezioni della landing. Prefisso "/" così
 // funzionano anche da pagine interne (vanno alla home e scrollano).
@@ -74,14 +76,80 @@ function NavLink({
   );
 }
 
+// Signed-in avatar + dropdown (replaces Clerk's <UserButton>). Controlled menu,
+// no Bootstrap JS dependency: account shortcuts + sign out.
+function UserMenu() {
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const initial = (user?.name || user?.email || "?").trim().charAt(0).toUpperCase();
+
+  const go = (href: string) => {
+    setOpen(false);
+    router.push(href);
+  };
+
+  return (
+    <div className="position-relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Menu utente"
+        className="btn rounded-circle d-flex align-items-center justify-content-center"
+        style={{
+          width: 40,
+          height: 40,
+          background: "var(--color-primary)",
+          color: "#fff",
+          fontWeight: 700,
+        }}
+      >
+        {initial}
+      </button>
+      {open && (
+        <>
+          <div
+            className="position-fixed top-0 start-0 w-100 h-100"
+            style={{ zIndex: 1040 }}
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            role="menu"
+            className="position-absolute end-0 mt-2 bg-white border rounded shadow-sm py-1"
+            style={{ zIndex: 1050, minWidth: 220 }}
+          >
+            {user?.email && (
+              <div className="px-3 py-2 text-muted small border-bottom text-truncate">
+                {user.email}
+              </div>
+            )}
+            <button type="button" role="menuitem" className="dropdown-item d-flex align-items-center gap-2" onClick={() => go("/account/llm-key")}>
+              <KeyIcon /> La tua chiave LLM
+            </button>
+            <button type="button" role="menuitem" className="dropdown-item d-flex align-items-center gap-2" onClick={() => go("/account/api-keys")}>
+              <KeyIcon /> API keys (in arrivo)
+            </button>
+            <div className="dropdown-divider" />
+            <button type="button" role="menuitem" className="dropdown-item text-danger" onClick={() => signOut()}>
+              Esci
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SiteHeader() {
   const pathname = usePathname();
-  const router = useRouter();
 
   // Marketing anchors per visitatori; nav prodotto per utenti loggati.
   const renderNav = (extraClass: string) => (
     <>
-      {hasClerk ? (
+      {hasAuth ? (
         <>
           <SignedOut>
             <nav
@@ -143,7 +211,7 @@ export function SiteHeader() {
 
           {/* Auth / CTA (right) */}
           <div className="d-flex align-items-center gap-2 flex-shrink-0">
-            {hasClerk ? (
+            {hasAuth ? (
               <>
                 <SignedOut>
                   <SignInButton mode="modal">
@@ -170,20 +238,7 @@ export function SiteHeader() {
                   </SignUpButton>
                 </SignedOut>
                 <SignedIn>
-                  <UserButton afterSignOutUrl="/">
-                    <UserButton.MenuItems>
-                      <UserButton.Action
-                        label="La tua chiave LLM"
-                        labelIcon={<KeyIcon />}
-                        onClick={() => router.push("/account/llm-key")}
-                      />
-                      <UserButton.Action
-                        label="API keys (in arrivo)"
-                        labelIcon={<KeyIcon />}
-                        onClick={() => router.push("/account/api-keys")}
-                      />
-                    </UserButton.MenuItems>
-                  </UserButton>
+                  <UserMenu />
                 </SignedIn>
               </>
             ) : (

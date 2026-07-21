@@ -1,19 +1,22 @@
 "use client";
 
-import { SignUp } from "@clerk/clerk-react";
+import { useEffect } from "react";
+import { authConfigured, useAuth } from "@/lib/auth";
 
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
+// Registration is hosted by the OIDC issuer (Keycloak — SPID or the simple
+// name/surname/email + email-code form). This page kicks off the redirect.
 export default function Page() {
+  const { signUp } = useAuth();
+  useEffect(() => {
+    if (authConfigured) signUp();
+  }, [signUp]);
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
-      {hasClerk ? (
-        <SignUp routing="hash" signInUrl="/sign-in" />
-      ) : (
-        <p className="text-sm text-slate-500">
-          Autenticazione non configurata in questa build.
-        </p>
-      )}
+      <p className="text-sm text-slate-500">
+        {authConfigured
+          ? "Reindirizzamento alla registrazione…"
+          : "Autenticazione non configurata in questa build (modalità sviluppo)."}
+      </p>
     </div>
   );
 }

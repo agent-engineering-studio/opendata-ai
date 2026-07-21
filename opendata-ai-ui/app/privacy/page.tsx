@@ -83,10 +83,11 @@ export default function Page() {
         <p>Il servizio tratta le seguenti categorie di dati:</p>
         <ul>
           <li>
-            <strong>Dati di account (forniti tramite Clerk)</strong>:
+            <strong>Dati di account (forniti tramite il provider di identità)</strong>:
             indirizzo email, nome visualizzato, identificatore utente univoco
-            (<code>sub</code> JWT), data di registrazione, eventuale immagine
-            profilo. Forniti dall&apos;utente in fase di sign-up.
+            (<code>sub</code> JWT), data di registrazione. Forniti dall&apos;utente
+            in fase di registrazione (SPID o form con email) presso l&apos;Identity
+            Provider OIDC configurato dall&apos;ente (tipicamente un Keycloak self-hosted).
           </li>
           <li>
             <strong>Dati di interazione</strong>: query in linguaggio
@@ -111,9 +112,10 @@ export default function Page() {
             debug.
           </li>
           <li>
-            <strong>Cookie tecnici di sessione</strong>: gestiti da Clerk per
-            mantenere la sessione autenticata. Nessun cookie di profilazione
-            o di terze parti per fini di marketing.
+            <strong>Token tecnici di sessione</strong>: gestiti dal provider di
+            identità OIDC per mantenere la sessione autenticata (conservati nel
+            browser). Nessun cookie di profilazione o di terze parti per fini di
+            marketing.
           </li>
         </ul>
         <p className="small text-muted">
@@ -189,24 +191,15 @@ export default function Page() {
             <tbody>
               <tr>
                 <td>
-                  <strong>Clerk Inc.</strong>
+                  <strong>Identity Provider OIDC</strong>
                 </td>
                 <td>
-                  Autenticazione, gestione utenti, sessioni (cookie tecnici),
-                  emissione JWT
+                  Autenticazione, gestione utenti, sessioni, emissione JWT.
+                  Nel deployment self-hosted (Keycloak sull&apos;infrastruttura
+                  dell&apos;ente) non vi è trasferimento a terzi.
                 </td>
-                <td>Stati Uniti</td>
-                <td>
-                  SCC (
-                  <a
-                    href="https://clerk.com/legal/dpa"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    DPA Clerk
-                  </a>
-                  )
-                </td>
+                <td>Infrastruttura dell&apos;ente (UE)</td>
+                <td>Nessun trasferimento extra-UE</td>
               </tr>
               <tr>
                 <td>
@@ -362,18 +355,10 @@ export default function Page() {
       <section className="mt-4">
         <h2>8. Cookie</h2>
         <p>
-          Il sito utilizza esclusivamente <strong>cookie tecnici</strong>{" "}
-          impostati da Clerk per mantenere la sessione utente autenticata.
-          Nessun cookie analitico o di marketing è impostato dal Titolare.
-          Per il dettaglio dei cookie Clerk consulta la{" "}
-          <a
-            href="https://clerk.com/legal/cookies"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            cookie policy di Clerk
-          </a>
-          .
+          Il sito utilizza esclusivamente <strong>token tecnici di sessione</strong>{" "}
+          gestiti dal provider di identità OIDC per mantenere la sessione utente
+          autenticata (conservati nel browser). Nessun cookie analitico o di
+          marketing è impostato dal Titolare.
         </p>
       </section>
 
@@ -381,7 +366,7 @@ export default function Page() {
         <h2>9. Sicurezza dei dati</h2>
         <ul>
           <li>Tutto il traffico è cifrato in transito via TLS 1.2+ (Let&apos;s Encrypt via Traefik).</li>
-          <li>I JWT Clerk sono verificati lato backend via JWKS firmato.</li>
+          <li>I JWT sono verificati lato backend via JWKS firmato dall&apos;issuer OIDC.</li>
           <li>Il database PostgreSQL è accessibile solo dal backend, su rete interna.</li>
           <li>Le API key sono memorizzate come hash crittografico, mai in chiaro.</li>
           <li>Rate limit a finestra fissa (60 richieste/min/utente) per mitigare abusi.</li>
