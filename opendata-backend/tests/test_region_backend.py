@@ -120,6 +120,29 @@ def test_empty_when_region_has_no_comuni(sm) -> None:
     assert body["dove_intervenire"] == []
 
 
+def test_pubblico_is_anonymous_and_aggregated(sm) -> None:
+    # Nessun override di require_user: l'endpoint pubblico non lo richiede.
+    async def _db():
+        async with sm() as session:
+            yield session
+
+    from fastapi import FastAPI
+    from starlette.testclient import TestClient
+    app = FastAPI()
+    app.include_router(region.router)
+    app.dependency_overrides[get_settings] = lambda: Settings(  # type: ignore[call-arg]
+        auth_enabled=True, region_istat="16",
+    )
+    app.dependency_overrides[get_db_session] = _db
+    body = TestClient(app).get("/regione/pubblico").json()
+
+    assert body["comuni_totali"] == 3
+    assert body["cod_regione"] == "16"
+    # payload aggregato: stato qualitativo per comune, nessun campo personale.
+    assert {"nome", "provincia", "stato"} == set(body["comuni"][0].keys())
+    assert "idee_top" in body and len(body["idee_top"]) <= 5
+
+
 def test_idee_regionali_ranked(sm) -> None:
     body = _client(sm).get("/regione/idee").json()
     assert body["cod_regione"] == "16"
