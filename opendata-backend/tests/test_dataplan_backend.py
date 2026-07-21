@@ -74,6 +74,11 @@ def test_piano_ranks_quick_wins(sm) -> None:
     assert body["ranking"][0]["quadrante"] == "quick_win"
     assert body["piano"]["quick_win"]
     assert "Piano di pubblicazione" in body["piano_markdown"]
+    # KPI plannabili del pilota (#187): baseline + target
+    kpi = body["kpi"]
+    assert kpi["dataset_nel_piano"] >= 12
+    assert kpi["gia_aperti_nazionali"] + kpi["da_produrre"] == kpi["quick_win"]
+    assert kpi["target_dataset_conformi"] == 10
 
 
 def test_diagnosi_baseline_and_national(sm) -> None:

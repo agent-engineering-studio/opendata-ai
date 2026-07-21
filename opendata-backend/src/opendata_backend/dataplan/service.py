@@ -21,6 +21,7 @@ from opendata_core.dataplan import (
     build_politica,
     checklist_for,
     load_catalog,
+    plan_kpi,
     prioritize,
     render_piano_markdown,
     render_politica_markdown,
@@ -116,6 +117,8 @@ async def piano(session: AsyncSession, *, istat_code: str) -> dict[str, Any]:
         "ranking": [r.model_dump() for r in ranked],
         "piano": pl.model_dump(),
         "piano_markdown": render_piano_markdown(pl),
+        # KPI plannabili del pilota (#187): baseline t0 + target.
+        "kpi": plan_kpi(ranked).model_dump(),
     }
 
 
