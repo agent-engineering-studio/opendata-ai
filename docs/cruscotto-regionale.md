@@ -139,6 +139,43 @@ Dipendenza dai residui Copilota: **#180/#181/#182/#183** (lato produzione
 comunale) restano utili e complementari; **#186** (scrittura CKAN) resta **fuori
 scope** del cruscotto di monitoraggio.
 
+## 6-bis. Auth & sicurezza per il self-hosting (proposta, da confermare)
+
+Il progetto è **open source**: ogni Regione lo ospita sulla **propria**
+infrastruttura. Clerk (SaaS US) spesso **non è conforme** alle policy di un ente
+pubblico → l'auth deve essere **self-hostable e standard**.
+
+**Buona notizia — il backend è già OIDC standard**, non Clerk-proprietario:
+`auth/clerk.py::verify_clerk_token` verifica i JWT via JWKS
+`${issuer}/.well-known/jwks.json` (RS256, `iss`/`exp`/`sub`). Di Clerk-specifico
+restano solo i *nomi* (`ClerkUser`, `clerk_jwt_issuer`, colonna `clerk_user_id`),
+l'assenza del check `aud`, le chiavi Backend-API/webhook, e sul **frontend**
+`@clerk/nextjs`. Puntando l'issuer a un **Keycloak** self-hosted il backend ne
+verifica già i token: il vero coupling Clerk è il frontend.
+
+### Direzione proposta
+
+1. **Auth → OIDC neutrale.** Rinominare `CLERK_*` → `OIDC_*` (con **alias**
+   retro-compatibili), rendere il check `aud` **opzionale**, documentare
+   **Keycloak/Authentik** come IdP di riferimento self-hosted. Clerk resta *uno*
+   degli issuer possibili, non più obbligatorio. Sul frontend sostituire
+   `@clerk/nextjs` con un client OIDC generico (Auth.js / `oidc-client-ts` PKCE).
+   `AUTH_ENABLED=false` resta per dev/self-host minimale.
+2. **Vista pubblica cittadino** (persona #3): **sola lettura, nessun dato
+   personale → nessun login**, quindi niente SPID/CIE ora. Se un domani serve,
+   SPID/CIE entra come un altro issuer OIDC via bridge, senza toccare il resto.
+3. **Rate limit → baseline per-IP/globale.** Il limite per-utente esiste già
+   (`shared/ratelimit.py`, 60/min + override per tier) ma è no-op senza Redis e
+   non copre il traffico non autenticato. Aggiungere un **middleware per-IP e
+   globale** con **fallback in-process** (token bucket) quando Redis manca, sopra
+   il limite per-utente. Così protegge anche gli endpoint pubblici e regge senza
+   Redis.
+
+> Impatto su R7/CLAUDE.md: Clerk oggi è *pinnato* come dipendenza. Con questa
+> direzione Clerk diventa uno degli issuer OIDC supportati; R7 va aggiornata alla
+> realizzazione (dev-bypass invariato, verifica JWT via JWKS di *qualsiasi*
+> issuer).
+
 ## 7. Coerenza con il pivot e le regole
 
 - **Pivot**: open data unica fonte ufficiale; il cruscotto **monitora e orienta**,
