@@ -83,6 +83,11 @@ def test_diagnosi_baseline_and_national(sm) -> None:
     assert body["comune"] == "Gioia del Colle"
     assert body["pubblicato"] is None and body["hint"]      # nessun assessment → hint onesto
     assert any(x["fonte"] for x in body["gia_aperto_nazionale"])
+    # accompagnamento attivo (#184): nessun dato → stato "zero_dati" + percorso onboarding
+    acc = body["accompagnamento"]
+    assert acc["stato"] == "zero_dati"
+    assert [s["chiave"] for s in acc["percorso"]][0] == "diagnosi"
+    assert acc["prossima_azione"]
 
 
 def test_politica_offline_and_persisted(sm) -> None:

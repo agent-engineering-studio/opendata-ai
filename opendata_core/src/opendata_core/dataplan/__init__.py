@@ -20,6 +20,7 @@ from .policy import (
     render_politica_markdown,
 )
 from .prioritize import RankedCandidate, prioritize
+from .state import AccompanimentState, PercorsoStep, accompaniment_state
 from .privacy import (
     PrivacyChecklist,
     PrivacyRule,
@@ -52,4 +53,7 @@ __all__ = [
     "Politica",
     "SezionePolitica",
     "LICENZA_CONSIGLIATA",
+    "accompaniment_state",
+    "AccompanimentState",
+    "PercorsoStep",
 ]

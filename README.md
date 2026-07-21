@@ -29,14 +29,16 @@ notifica via webhook o email quando qualcosa cambia o si rompe. Diagramma e
 flussi: **`docs/architettura.md`**; modello dati: **`docs/data-model.md`**.
 Pilota: Comune di Gioia del Colle.
 
-## Le quattro modalità: Esplora · Territorio · Maturità · Qualità
+## Le modalità: Esplora · Territorio · Maturità · Qualità · Copilota
 
-La navbar dell'applicazione corrisponde a tre modalità d'uso, costruite l'una
+La navbar dell'applicazione corrisponde a modalità d'uso costruite l'una
 sull'altra: si **esplora** il dato grezzo, lo si trasforma in uno **studio del
-territorio** azionabile, e si misura quanto bene un ente **pubblica e mantiene**
-quel dato. Esplora è l'accesso conversazionale alle fonti; Territorio e Maturità
-sono le due lenti del *capability layer* che danno valore e accountability al
-patrimonio informativo.
+territorio** azionabile, si misura quanto bene un ente **pubblica e mantiene**
+quel dato (Maturità/Qualità) e — col **Copilota** — si accompagna un ente dal
+"zero dati" a una politica open data viva. Esplora è l'accesso conversazionale
+alle fonti; Territorio e Maturità sono le due lenti del *capability layer* che
+danno valore e accountability al patrimonio informativo; il Copilota chiude
+l'anello a monte, sulla *produzione* del dato.
 
 #### Scoping mono-regione (`REGION`)
 
@@ -343,6 +345,32 @@ Con il CSV di sopra, compila anche titolo/descrizione/licenza/ente nella
 scheda descrittiva e genera **sia** "Scheda DCAT-AP_IT" **che** "Scheda
 schema.org (Dataset)": stessi dati del file, due vocabolari, ciascuno
 validabile con il proprio punteggio FAIR.
+
+---
+
+### 5. Copilota Open Data — dal "zero dati" alla politica open data viva
+
+**Cos'è.** Un **Data Officer AI** che accompagna un ente che parte da zero (o
+quasi): dato il **codice ISTAT** del comune, riconosce lo **stato**
+(*zero dati → pochi dati → in crescita → maturo*) e propone un **percorso su
+misura**, non una guida passiva.
+
+**Come funziona.** Cinque passi, tutti sui motori esistenti e con fonti sempre
+citabili (`/dataplan/{istat}/*`): **diagnosi** (quanto sei aperto oggi + gli
+adempimenti nazionali *già* aperti — BDAP, ANAC, OpenCoesione/OpenPNRR — che
+basta linkare), **inventario** del potenziale, **piano** prioritizzato su matrice
+**valore×sforzo** (i quick win in testa), bozza di **Politica Open Data**
+(atto di indirizzo, licenza IODL 2.0 / CC-BY 4.0, con metadati DCAT-AP_IT
+precompilati) e **export brief** per l'ufficio, con **checklist privacy/GDPR**
+per famiglia di dato (de-identificazione + soglie, gate DPO sui dati personali).
+La prosa amministrativa usa l'LLM quando configurato, altrimenti un **fallback
+offline deterministico** (R11). Rispetta il pivot: il dato pubblicato vive sul
+portale ufficiale, il Copilota **non** conserva copie.
+
+**A cosa serve / per chi.** È il "non ho tempo né competenze" del RTD:
+sostituisce ore di analisi con un piano azionabile e conforme. Design completo:
+[`docs/copilota-open-data.md`](docs/copilota-open-data.md) e
+[`docs/dataplan-tech-design.md`](docs/dataplan-tech-design.md).
 
 ## Monitoraggio automatico — i controlli girano da soli
 

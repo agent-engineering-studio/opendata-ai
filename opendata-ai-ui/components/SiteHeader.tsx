@@ -33,6 +33,7 @@ const APP_NAV = [
   { href: "/idee", label: "Idea Lab" },
   { href: "/maturita", label: "Maturità" },
   { href: "/qualita", label: "Qualità" },
+  { href: "/copilota", label: "Copilota" },
 ] as const;
 
 function KeyIcon() {
