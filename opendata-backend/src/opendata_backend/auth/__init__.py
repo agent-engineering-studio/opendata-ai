@@ -7,6 +7,12 @@ on its handlers.
 
 from .clerk import ClerkAuthError, ClerkUser, verify_clerk_token, verify_oidc_token
 from .dependencies import authenticate_credentials, require_user
+from .roles import (
+    VALID_ROLES,
+    require_admin,
+    require_role,
+    resolve_role,
+)
 
 __all__ = [
     "ClerkAuthError",
@@ -15,4 +21,8 @@ __all__ = [
     "require_user",
     "verify_clerk_token",
     "verify_oidc_token",
+    "VALID_ROLES",
+    "require_admin",
+    "require_role",
+    "resolve_role",
 ]

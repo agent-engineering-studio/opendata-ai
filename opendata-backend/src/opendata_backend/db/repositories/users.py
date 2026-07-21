@@ -45,6 +45,24 @@ async def get_by_clerk_id(session: AsyncSession, *, clerk_user_id: str) -> User 
     return res.scalar_one_or_none()
 
 
+async def set_role(
+    session: AsyncSession,
+    *,
+    clerk_user_id: str,
+    role: str,
+) -> User | None:
+    """Set the RBAC `role` for a user (admin dashboard, #235). Returns None when
+    the user is unknown, so the caller can 404. Does not create the row."""
+    user = await get_by_clerk_id(session, clerk_user_id=clerk_user_id)
+    if user is None:
+        return None
+    if user.role != role:
+        user.role = role
+        user.updated_at = datetime.now(tz=timezone.utc)
+        await session.flush()
+    return user
+
+
 async def set_byok(
     session: AsyncSession,
     *,
