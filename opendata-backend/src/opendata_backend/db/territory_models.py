@@ -499,3 +499,24 @@ class DataplanPlan(Base):
     generato_il: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class RegionSnapshot(Base):
+    """Snapshot append-only delle metriche regionali (#233, F6 di #227).
+
+    Una riga per cattura: metriche aggregate (mediana ODM, distribuzione per
+    stato, comuni valutati) in `payload_jsonb`, per il trend nel tempo. Mai
+    sovrascritto. DDL dialect-aware (JSONB su Postgres, JSON su SQLite)."""
+
+    __tablename__ = "region_snapshots"
+    __table_args__ = (
+        Index("ix_region_snapshots_cod", "cod_regione"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    cod_regione: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+    generato_il: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

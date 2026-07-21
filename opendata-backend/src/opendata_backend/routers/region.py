@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import ClerkUser
+from ..auth.roles import require_admin
 from ..config import Settings, get_settings
 from ..db.session import get_db_session
 from ..region import service as region_service
@@ -61,3 +62,33 @@ async def pubblico(
     solo aggregati regionali NON sensibili (nessun dato personale). Protetto dal
     rate limit per-IP del middleware (#237). Nessun `Depends(require_user)`."""
     return await region_service.public_overview(session, settings)
+
+
+@router.get("/trend")
+async def trend(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict[str, Any]:
+    """Serie storica delle metriche regionali (F6) dagli snapshot append-only."""
+    return await region_service.trend(session, settings)
+
+
+@router.get("/narrativa")
+async def narrativa(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict[str, Any]:
+    """Narrativa 'stato open data della regione' (LLM R11 + fallback offline)."""
+    return await region_service.narrative(session, settings)
+
+
+@router.post("/snapshot")
+async def snapshot(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _admin: ClerkUser = Depends(require_admin),
+) -> dict[str, Any]:
+    """Cattura le metriche regionali correnti (append-only) — solo admin."""
+    return await region_service.save_snapshot(session, settings)

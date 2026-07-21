@@ -25,7 +25,8 @@ from opendata_core.region import (
 
 from ..config import Settings, region_name
 from ..db.models import ComuneAnagrafica
-from ..db.territory_models import DatasetQuality, Entity, MaturityAssessment
+from ..db.territory_models import DatasetQuality, Entity, MaturityAssessment, RegionSnapshot
+from ..llm import complete, llm_configured
 
 _DIM_COLUMNS = (
     ("policy", "score_policy"),
@@ -223,3 +224,94 @@ async def ideas(session: AsyncSession, settings: Settings) -> dict[str, Any]:
         "totale": len(idee),
         "idee": [i.model_dump() for i in idee],
     }
+
+
+def _snapshot_payload(ov: Any) -> dict[str, Any]:
+    return {
+        "comuni_totali": ov.comuni_totali,
+        "comuni_valutati": ov.comuni_valutati,
+        "mediana_overall": ov.mediana_overall,
+        "distribuzione_stato": ov.distribuzione_stato,
+        "hvd_copertura": ov.hvd_copertura,
+    }
+
+
+async def _current_overview(session: AsyncSession, settings: Settings) -> Any:
+    summaries, _ = await _load_summaries(session, settings)
+    return aggregate_region(
+        summaries,
+        regione=region_name(settings) or "",
+        cod_regione=settings.region_istat or "",
+        comuni_totali=len(summaries),
+    )
+
+
+async def save_snapshot(session: AsyncSession, settings: Settings) -> dict[str, Any]:
+    """Cattura le metriche regionali correnti (append-only, R4) per il trend."""
+    ov = await _current_overview(session, settings)
+    payload = _snapshot_payload(ov)
+    snap = RegionSnapshot(cod_regione=settings.region_istat or "", payload_jsonb=payload)
+    session.add(snap)
+    await session.commit()
+    await session.refresh(snap)
+    return {
+        "cod_regione": snap.cod_regione,
+        "generato_il": snap.generato_il.isoformat() if snap.generato_il else None,
+        **payload,
+    }
+
+
+async def trend(session: AsyncSession, settings: Settings) -> dict[str, Any]:
+    """Serie storica delle metriche regionali (dal più vecchio al più recente)."""
+    cod = settings.region_istat or ""
+    rows = (
+        await session.execute(
+            select(RegionSnapshot)
+            .where(RegionSnapshot.cod_regione == cod)
+            .order_by(RegionSnapshot.generato_il, RegionSnapshot.id)
+        )
+    ).scalars().all()
+    punti = [
+        {
+            "data": r.generato_il.isoformat() if r.generato_il else None,
+            **(r.payload_jsonb or {}),
+        }
+        for r in rows
+    ]
+    return {"cod_regione": cod, "totale": len(punti), "punti": punti}
+
+
+def _offline_narrative(ov: Any) -> str:
+    d = ov.distribuzione_stato
+    m = f"{ov.mediana_overall:.0f}/100" if ov.mediana_overall is not None else "non ancora calcolata"
+    reg = f"{ov.regione} " if ov.regione else ""
+    return (
+        f"Nella regione {reg}risultano {ov.comuni_totali} comuni, di cui "
+        f"{ov.comuni_valutati} valutati; la maturità mediana è {m}. "
+        f"Comuni maturi: {d.get('maturo', 0)}; in crescita: {d.get('in_crescita', 0)}; "
+        f"con pochi dati: {d.get('pochi_dati', 0)}; senza dati: {d.get('zero_dati', 0)}. "
+        "Priorità: accompagnare i comuni senza dati e rafforzare le dimensioni più deboli."
+    ).strip()
+
+
+async def narrative(session: AsyncSession, settings: Settings) -> dict[str, Any]:
+    """Narrativa 'stato open data della regione' via LLM (R11), con fallback
+    deterministico offline. Mai inventa numeri: i dati sono nel prompt."""
+    ov = await _current_overview(session, settings)
+    fallback = _offline_narrative(ov)
+    if not llm_configured(settings):
+        return {"testo": fallback, "generato_con": "offline"}
+    prompt = (
+        "Scrivi 3-4 frasi in italiano amministrativo chiaro sullo stato degli open data "
+        f"della regione {ov.regione or 'in esame'}. Dati (non inventarne altri): "
+        f"{ov.comuni_valutati}/{ov.comuni_totali} comuni valutati; maturità mediana "
+        f"{ov.mediana_overall}; distribuzione per stato {ov.distribuzione_stato}. "
+        "Concludi indicando in generale dove intervenire."
+    )
+    try:
+        txt = await complete(settings, prompt=prompt, max_tokens=300)
+    except Exception:  # noqa: BLE001 — LLM best-effort
+        txt = None
+    if txt and txt.strip():
+        return {"testo": txt.strip(), "generato_con": "llm"}
+    return {"testo": fallback, "generato_con": "offline"}

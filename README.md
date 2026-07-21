@@ -86,9 +86,12 @@ regionale: **distribuzione per stato** (zero dati → maturo, riusa la macchina 
 stati del Copilota), maturità mediana, copertura HVD, e **«dove intervenire»**
 (comuni senza dati / deboli + dimensioni ODM deboli). Le **idee regionali**
 incrociano i candidati del Copilota con la copertura reale: un dataset mancante in
-più comuni e ad alto valore diventa priorità regionale. Il backend
-(`/regione/overview|comuni|idee`) interroga il warehouse; la UI `/regione` lo
-rende. Tutto **scoped su `REGION`**.
+più comuni e ad alto valore diventa priorità regionale. Uno **snapshot append-only** delle metriche
+alimenta il **trend** nel tempo e una **narrativa** in linguaggio naturale
+(LLM col provider risolto, fallback offline) riassume lo stato. Il backend
+(`/regione/overview|comuni|idee|trend|narrativa|pubblico`) interroga il
+warehouse; la UI `/regione` (operatori) e `/regione/pubblico` (cittadini,
+read-only) lo rendono. Tutto **scoped su `REGION`**.
 
 **A cosa serve.** Passare dal «com'è messo il comune X» al «com'è messa la
 regione, e dove conviene spingere»: la Regione vede la classifica dei suoi comuni,

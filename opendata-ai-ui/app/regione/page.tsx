@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { DashboardGate } from "@/components/DashboardGate";
 import { useAuth } from "@/lib/auth";
@@ -74,11 +75,15 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
+type TrendPoint = { data: string | null; mediana_overall: number | null };
+
 function Dashboard() {
   const { getToken } = useAuth();
   const [ov, setOv] = useState<Overview | null>(null);
   const [comuni, setComuni] = useState<ComuneRow[] | null>(null);
   const [idee, setIdee] = useState<Idea[] | null>(null);
+  const [narrativa, setNarrativa] = useState<string | null>(null);
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -94,6 +99,15 @@ function Dashboard() {
       setOv(await o.json());
       setComuni((await c.json()).comuni as ComuneRow[]);
       setIdee((await i.json()).idee as Idea[]);
+      // Narrativa + trend: extra, non bloccanti.
+      apiFetch("/regione/narrativa", { token })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setNarrativa(d.testo))
+        .catch(() => {});
+      apiFetch("/regione/trend", { token })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setTrend((d.punti ?? []) as TrendPoint[]))
+        .catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -124,6 +138,12 @@ function Dashboard() {
         Stato di maturità degli open data dei comuni della regione, dove
         intervenire e priorità di pubblicazione a livello regionale.
       </p>
+
+      {narrativa && (
+        <div className="alert alert-light border" role="note">
+          {narrativa}
+        </div>
+      )}
 
       <div className="row g-3 mb-4">
         <Kpi label="Comuni" value={String(ov.comuni_totali)} />
@@ -159,6 +179,28 @@ function Dashboard() {
           </span>
         ))}
       </div>
+
+      {/* Trend della maturità mediana (F6) */}
+      {trend.length >= 2 && (
+        <div className="mb-4">
+          <h2 className="h6">Andamento della maturità mediana</h2>
+          <div style={{ width: "100%", height: 200 }}>
+            <ResponsiveContainer>
+              <LineChart
+                data={trend.map((p, idx) => ({
+                  t: p.data ? p.data.slice(0, 10) : String(idx + 1),
+                  mediana: p.mediana_overall,
+                }))}
+              >
+                <XAxis dataKey="t" fontSize={11} />
+                <YAxis domain={[0, 100]} fontSize={11} width={30} />
+                <Tooltip />
+                <Line type="monotone" dataKey="mediana" stroke="#0066CC" strokeWidth={2} dot />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* Dove intervenire */}
       {ov.dove_intervenire.length > 0 && (
