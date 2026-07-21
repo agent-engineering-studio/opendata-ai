@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from opendata_core.dataplan import (
+    accompaniment_state,
     build_piano,
     build_politica,
     checklist_for,
@@ -77,12 +78,18 @@ async def diagnosi(session: AsyncSession, settings: Settings, *, istat_code: str
         log.info("dataplan.diagnosi: baseline maturità non disponibile per %s", istat_code)
     if pubblicato is None:
         hint = "Baseline non ancora calcolata: esegui /maturity/assess per l'ente."
+    # Accompagnamento attivo (#184): stato zero→maturo + percorso ente-specifico.
+    stato = accompaniment_state(
+        n_dataset=int((pubblicato or {}).get("n_dataset") or 0),
+        overall=(pubblicato or {}).get("overall"),
+    )
     return {
         "istat": istat_code,
         "comune": ente,
         "pubblicato": pubblicato,
         "hint": hint,
         "gia_aperto_nazionale": _gia_aperto_nazionale(),
+        "accompagnamento": stato.model_dump(),
     }
 
 
