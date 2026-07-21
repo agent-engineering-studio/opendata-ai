@@ -15,7 +15,7 @@ function Inner() {
         Le API keys ti permettono di chiamare il backend OpenData AI da script,
         CI/CD e agenti A2A senza dover gestire il JWT utente. In futuro
         sbloccheranno anche rate limit superiori (oggi: 60 richieste/min su
-        finestra fissa per ogni utente Clerk).
+        finestra fissa per ogni utente autenticato).
       </p>
 
       <div className="text-center mt-4">
@@ -31,7 +31,7 @@ function Inner() {
         <p className="text-muted small mt-3 mb-0">
           La generazione e gestione di API keys dal pannello utente è in
           sviluppo. Per ora puoi usare l&apos;endpoint{" "}
-          <code>POST /api-keys/generate</code> via JWT Clerk — vedi{" "}
+          <code>POST /api-keys/generate</code> via JWT OIDC — vedi{" "}
           <Link href="/docs/api-keys">/docs/api-keys</Link> per uso, quota e
           buone pratiche.
         </p>

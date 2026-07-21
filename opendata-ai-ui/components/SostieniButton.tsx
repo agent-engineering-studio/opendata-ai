@@ -1,8 +1,6 @@
 "use client";
 
-import { useAuth as useClerkAuth } from "@clerk/clerk-react";
-
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+import { authConfigured, useAuth } from "@/lib/auth";
 
 type Props = {
   /** Stripe Payment Link; empty string falls back to `fallback`. */
@@ -39,7 +37,7 @@ function Anchor({ href, prezzo, primary }: { href: string; prezzo: string; prima
 }
 
 function BoundButton({ link, fallback, prezzo, primary }: Props) {
-  const { userId } = useClerkAuth();
+  const { userId } = useAuth();
   const href = link ? withClientReference(link, userId) : fallback;
   return <Anchor href={href} prezzo={prezzo} primary={primary} />;
 }
@@ -52,7 +50,7 @@ function BoundButton({ link, fallback, prezzo, primary }: Props) {
  * read, so it renders the plain link.
  */
 export function SostieniButton(props: Props) {
-  if (!hasClerk) {
+  if (!authConfigured) {
     return (
       <Anchor href={props.link || props.fallback} prezzo={props.prezzo} primary={props.primary} />
     );

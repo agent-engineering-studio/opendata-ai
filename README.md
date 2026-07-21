@@ -14,7 +14,7 @@ map, and optionally classifies the dataset against a caller-supplied
 taxonomy with Claude Haiku.
 
 > Static frontend on GitHub Pages, FastAPI backend on a self-hosted Aruba
-> VPS, Clerk-authenticated everywhere except `/health`.
+> VPS, OIDC-authenticated (self-hosted Keycloak or Clerk) everywhere except `/health`.
 
 ## Capability layer (valorizzazione + maturità)
 
@@ -492,8 +492,8 @@ suo README.
 
 | Component | Stack |
 |---|---|
-| Frontend | Next.js 15 (`output: 'export'`) → GitHub Pages, Leaflet map (KML/GeoJSON/GPX/SHP/WMS/ZIP/KMZ), Clerk `<ClerkProvider>` + `clerkMiddleware` |
-| Auth | **Clerk** on every endpoint except `/health`; svix-signed webhook on `/webhooks/clerk` |
+| Frontend | Next.js 15 (`output: 'export'`) → GitHub Pages, Leaflet map (KML/GeoJSON/GPX/SHP/WMS/ZIP/KMZ), OIDC login (Authorization-Code + PKCE, dependency-free) via `AuthProvider` |
+| Auth | **OIDC** (any compliant issuer — self-hosted **Keycloak** recommended, or Clerk) on every endpoint except `/health`; roles in `opendata.users.role` managed by an admin. Dev bypass with `AUTH_ENABLED=false` |
 | Backend | FastAPI on Aruba VPS, dockerised, exposed at `https://api.opendata.<domain>` via Caddy + Let's Encrypt |
 | MCP servers | `ckan-mcp-server`, `istat-mcp-server`, `osm-mcp` — same image speaks **stdio** (Claude Desktop) or **streamable-HTTP** (backend) |
 | Database | **Neon** serverless Postgres, schema `opendata.*` (users / favorites / history / api_keys / classifications). Migrations owned by [agent-stack](vendor/agent-stack); local stub in `opendata-backend/migrations/` |
@@ -512,8 +512,8 @@ suo README.
 | `socrata-mcp-server/` | FastMCP wrapper for Socrata's Discovery/Views/SODA APIs (`base_url` per-portal, standalone) |
 | `bdap-mcp-server/` | FastMCP wrapper for BDAP/SIOPE municipal budgets (revenue/expense per titolo, OData-queried, standalone) |
 | `osm-mcp/` | FastMCP wrapper that renders GeoJSON into self-contained Leaflet+OSM HTML |
-| `opendata-backend/` | FastAPI app — routers (`datasets/me/api_keys/webhooks`), Clerk auth, Postgres ORM, Redis cache + rate limit, Claude classify |
-| `opendata-ai-ui/` | Next.js 15 static-export frontend (Clerk + Leaflet) |
+| `opendata-backend/` | FastAPI app — routers (`datasets/me/api_keys/admin/webhooks`), OIDC auth + RBAC, Postgres ORM, Redis cache + per-IP/user rate limit, Claude classify |
+| `opendata-ai-ui/` | Next.js 15 static-export frontend (OIDC/PKCE auth + Leaflet) |
 | `infra/aruba/` | Production compose + Caddyfile + bootstrap guide for the Aruba VPS |
 | `infra/ollama/` | Optional baked Ollama image for local debug (qwen2.5:32k) |
 | `vendor/agent-stack/` | Submodule with the canonical `opendata.*` Postgres migrations |
@@ -525,7 +525,8 @@ suo README.
 All endpoints (except `/health`) require authentication. Two credentials are
 accepted interchangeably:
 
-- **Clerk session JWT** — `Authorization: Bearer <jwt>`, used by the web UI.
+- **OIDC session JWT** — `Authorization: Bearer <jwt>`, issued by the configured
+  OIDC provider (Keycloak/Clerk) and verified via the issuer's JWKS; used by the web UI.
 - **API key** — `Authorization: Bearer od_…` or `X-API-Key: od_…`, for
   headless clients, scripts and agent integrations (see
   [Authentication & API keys](#authentication--api-keys)).

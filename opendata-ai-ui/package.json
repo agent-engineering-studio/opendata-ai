@@ -12,7 +12,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.61.8",
     "@fontsource/roboto-mono": "^5.2.9",
     "@fontsource/space-grotesk": "^5.2.10",
     "@fontsource/titillium-web": "^5.2.8",
