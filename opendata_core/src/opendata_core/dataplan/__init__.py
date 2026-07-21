@@ -8,6 +8,17 @@ impacchettata o iniettata; l'orchestrazione e le chiamate LLM vivono nel backend
 
 from .catalog import catalog_by_area, clear_cache, load_catalog
 from .models import CandidateDataset, GiaAperto
+from .policy import (
+    LICENZA_CONSIGLIATA,
+    Piano,
+    PianoVoce,
+    Politica,
+    SezionePolitica,
+    build_piano,
+    build_politica,
+    render_piano_markdown,
+    render_politica_markdown,
+)
 from .prioritize import RankedCandidate, prioritize
 
 __all__ = [
@@ -18,4 +29,13 @@ __all__ = [
     "clear_cache",
     "prioritize",
     "RankedCandidate",
+    "build_piano",
+    "build_politica",
+    "render_piano_markdown",
+    "render_politica_markdown",
+    "Piano",
+    "PianoVoce",
+    "Politica",
+    "SezionePolitica",
+    "LICENZA_CONSIGLIATA",
 ]
