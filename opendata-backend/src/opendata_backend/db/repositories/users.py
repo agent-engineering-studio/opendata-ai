@@ -38,6 +38,10 @@ async def get_or_create(
     return user
 
 
+async def get_by_id(session: AsyncSession, *, user_id: int) -> User | None:
+    return await session.get(User, user_id)
+
+
 async def get_by_clerk_id(session: AsyncSession, *, clerk_user_id: str) -> User | None:
     res = await session.execute(
         select(User).where(User.clerk_user_id == clerk_user_id, User.deleted_at.is_(None))
@@ -55,6 +59,43 @@ async def set_role(
     the user is unknown, so the caller can 404. Does not create the row."""
     user = await get_by_clerk_id(session, clerk_user_id=clerk_user_id)
     if user is None:
+        return None
+    if user.role != role:
+        user.role = role
+        user.updated_at = datetime.now(tz=timezone.utc)
+        await session.flush()
+    return user
+
+
+async def list_users(
+    session: AsyncSession,
+    *,
+    role: str | None = None,
+    include_deleted: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[User]:
+    """Users for the admin dashboard (#235), newest first. Optional role filter;
+    soft-deleted users are hidden unless `include_deleted`."""
+    stmt = select(User)
+    if not include_deleted:
+        stmt = stmt.where(User.deleted_at.is_(None))
+    if role:
+        stmt = stmt.where(User.role == role)
+    stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def set_role_by_id(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    role: str,
+) -> User | None:
+    """Set the RBAC role for a user by internal id (admin dashboard). Returns
+    None when the user is unknown or soft-deleted, so the caller can 404."""
+    user = await session.get(User, user_id)
+    if user is None or user.deleted_at is not None:
         return None
     if user.role != role:
         user.role = role
