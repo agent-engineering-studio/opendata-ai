@@ -31,6 +31,7 @@ const LANDING_NAV = [
 
 // Nav prodotto: mostrata agli utenti autenticati al posto degli anchor.
 const APP_NAV = [
+  { href: "/regione", label: "Regione" },
   { href: "/esplora", label: "Esplora" },
   { href: "/territorio", label: "Territorio" },
   { href: "/idee", label: "Idea Lab" },
