@@ -1,0 +1,162 @@
+# Catalogo "applicativi/adempimenti comunali → dataset open candidati" (#172, D1 di #170).
+#
+# Sorgente riusabile dal motore puro `dataplan/` (nessun LLM, nessun I/O di rete):
+# consolida le tabelle §5 della guida e la mappa dell'issue #170. Ogni voce dice al
+# Copilota Open Data COSA un comune può/deve aprire e con quali vincoli.
+#
+# Campi (vedi models.CandidateDataset):
+#   id, nome, area, fonte_interna, descrizione
+#   hvd            categoria HVD (Reg. UE 2023/138) o assente se non-HVD
+#                  slug ammessi: geospatial | mobility | meteorological | statistics |
+#                                companies_ownership | earth_observation_environment
+#   gia_aperto     {fonte, connettore?} se il dato è già aperto a livello nazionale
+#                  → il comune LINKA, non riproduce (quick-win di trasparenza)
+#   privacy        nullo | aggregato | personale  (regola di de-identificazione, D4)
+#   sforzo         basso | medio | alto
+#   sblocca        analisi/lenti/use-case della piattaforma abilitati dal dato (riuso reale)
+candidati:
+  # ── Adempimenti nazionali GIÀ APERTI → solo linkare (massimo quick-win) ──
+  - id: bilancio-siope
+    nome: "Bilancio e spesa (entrate/uscite per capitolo)"
+    area: Contabilità
+    fonte_interna: "gestionale contabilità / ragioneria"
+    descrizione: "Entrate e uscite del comune per capitolo, già trasmesse a BDAP/SIOPE."
+    hvd: statistics
+    gia_aperto: { fonte: "BDAP/SIOPE", connettore: "bdap-mcp-server" }
+    privacy: nullo
+    sforzo: basso
+    sblocca: []
+
+  - id: appalti-anac
+    nome: "Appalti e contratti pubblici"
+    area: Appalti
+    fonte_interna: "gestionale gare/contratti (L.190/2012)"
+    descrizione: "Bandi, affidamenti e fornitori, già pubblicati verso ANAC."
+    gia_aperto: { fonte: "ANAC (dati.anticorruzione.it)", connettore: "ckan-mcp-server" }
+    privacy: nullo
+    sforzo: basso
+    sblocca: []
+
+  - id: progetti-pnrr-coesione
+    nome: "Progetti finanziati (PNRR e coesione)"
+    area: "Fondi e progetti"
+    fonte_interna: "ufficio programmazione / fondi"
+    descrizione: "Progetti, avanzamento e importi, già su OpenCoesione e OpenPNRR."
+    hvd: statistics
+    gia_aperto: { fonte: "OpenCoesione / OpenPNRR", connettore: "openpnrr-mcp-server" }
+    privacy: nullo
+    sforzo: basso
+    sblocca: ["report Territorio §investimenti"]
+
+  # ── Dati locali ad alto valore / basso sforzo (il comune li apre) ──
+  - id: rifiuti-differenziata
+    nome: "Raccolta differenziata (% per anno/zona)"
+    area: Ambiente
+    fonte_interna: "gestionale rifiuti / igiene urbana"
+    descrizione: "Percentuale di differenziata e calendario/isole ecologiche."
+    hvd: earth_observation_environment
+    privacy: nullo
+    sforzo: basso
+    sblocca: ["lente ambiente", "report Territorio §ambiente"]
+
+  - id: illuminazione-patrimonio
+    nome: "Patrimonio e illuminazione pubblica"
+    area: Patrimonio
+    fonte_interna: "gestionale patrimonio / global service"
+    descrizione: "Punti luce, edifici pubblici, aree verdi — pronti per la mappa."
+    hvd: geospatial
+    privacy: nullo
+    sforzo: basso
+    sblocca: ["mappe di riuso"]
+
+  - id: cultura-turismo-poi
+    nome: "Cultura e turismo (eventi, POI, orari)"
+    area: "Cultura e turismo"
+    fonte_interna: "ufficio cultura / URP"
+    descrizione: "Eventi, punti di interesse, orari di musei e biblioteche."
+    privacy: nullo
+    sforzo: basso
+    sblocca: ["use-case PugliaTrip", "marketing territoriale"]
+
+  # ── Alto valore, sforzo/privacy medio ──
+  - id: pug-zonizzazione
+    nome: "Zonizzazione urbanistica (PUG/PRG)"
+    area: SIT
+    fonte_interna: "SIT / ufficio urbanistica"
+    descrizione: "Zone, toponomastica, numeri civici (HVD geospaziale, WFS/GeoJSON)."
+    hvd: geospatial
+    privacy: nullo
+    sforzo: medio
+    sblocca: ["riconciliazione OSM↔suolo (#129)", "report Territorio §suolo"]
+
+  - id: mobilita-tpl-ztl
+    nome: "Mobilità: TPL (GTFS), ZTL, sosta"
+    area: Mobilità
+    fonte_interna: "gestionale mobilità / TPL"
+    descrizione: "Orari del trasporto pubblico (GTFS), varchi ZTL, stalli di sosta."
+    hvd: mobility
+    privacy: nullo
+    sforzo: medio
+    sblocca: ["lente trasporti", "connettore GTFS"]
+
+  - id: popolazione-anpr
+    nome: "Popolazione per età/quartiere"
+    area: Anagrafe
+    fonte_interna: "ANPR / anagrafe"
+    descrizione: "Dinamica demografica in forma aggregata (mai nominativi/indirizzi)."
+    hvd: statistics
+    gia_aperto: { fonte: "ISTAT (benchmark)", connettore: "istat-mcp-server" }
+    privacy: aggregato
+    sforzo: medio
+    sblocca: ["report Territorio §popolazione"]
+
+  - id: tributi-tari
+    nome: "Tributi locali (aggregati TARI, tariffe)"
+    area: Tributi
+    fonte_interna: "gestionale tributi (IMU/TARI)"
+    descrizione: "Riscossioni/aggregati TARI per zona e tariffe — mai per contribuente."
+    hvd: statistics
+    privacy: aggregato
+    sforzo: medio
+    sblocca: []
+
+  - id: ambiente-qualita-aria
+    nome: "Ambiente locale (qualità aria, aree a rischio)"
+    area: Ambiente
+    fonte_interna: "ufficio ambiente / centraline"
+    descrizione: "Qualità dell'aria, meteo locale, aree a rischio idrogeologico."
+    hvd: earth_observation_environment
+    gia_aperto: { fonte: "ISPRA / meteo", connettore: "ispra-mcp-server" }
+    privacy: nullo
+    sforzo: medio
+    sblocca: ["lente ambiente"]
+
+  # ── Alto valore ma alto sforzo / privacy da trattare ──
+  - id: esercizi-commerciali-suap
+    nome: "Esercizi commerciali e pratiche SUAP"
+    area: "SUAP/SUE"
+    fonte_interna: "SUAP / commercio"
+    descrizione: "Esercizi, dehors, pratiche — de-identificati e aggregati per zona."
+    hvd: geospatial
+    privacy: personale
+    sforzo: alto
+    sblocca: ["lente commercio"]
+
+  - id: edilizia-pratiche-sue
+    nome: "Edilizia: pratiche del SUE"
+    area: "SUAP/SUE"
+    fonte_interna: "SUE / edilizia privata"
+    descrizione: "Pratiche edilizie in forma aggregata/territoriale (rimosso il richiedente)."
+    hvd: geospatial
+    privacy: personale
+    sforzo: alto
+    sblocca: []
+
+  - id: atti-albo-pretorio
+    nome: "Atti amministrativi (delibere/determine come dati)"
+    area: Atti
+    fonte_interna: "protocollo / albo pretorio"
+    descrizione: "Metadati degli atti come dataset; contenuto solo se già pubblico (albo)."
+    privacy: personale
+    sforzo: alto
+    sblocca: []
