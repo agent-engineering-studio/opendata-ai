@@ -118,3 +118,16 @@ def test_empty_when_region_has_no_comuni(sm) -> None:
     assert body["comuni_totali"] == 0
     assert body["mediana_overall"] is None
     assert body["dove_intervenire"] == []
+
+
+def test_idee_regionali_ranked(sm) -> None:
+    body = _client(sm).get("/regione/idee").json()
+    assert body["cod_regione"] == "16"
+    assert body["totale"] >= 12  # tutti i candidati del catalogo Copilota
+    idee = body["idee"]
+    # ordinate per priorità decrescente
+    prios = [i["priorita"] for i in idee]
+    assert prios == sorted(prios, reverse=True)
+    # ogni idea con HVD riporta la copertura misurata sui 3 comuni pugliesi
+    con_hvd = [i for i in idee if i["hvd"]]
+    assert con_hvd and all(i["comuni_totali"] == 3 for i in con_hvd)

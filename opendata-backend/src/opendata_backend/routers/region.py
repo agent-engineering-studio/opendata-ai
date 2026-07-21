@@ -39,3 +39,12 @@ async def comuni(
     _user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict[str, Any]:
     return await region_service.comuni(session, settings, provincia=provincia)
+
+
+@router.get("/idee")
+async def idee(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _user: ClerkUser = Depends(enforce_rate_limit),
+) -> dict[str, Any]:
+    return await region_service.ideas(session, settings)

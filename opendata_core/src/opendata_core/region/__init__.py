@@ -7,6 +7,7 @@ narrativa vivono nel backend.
 """
 
 from .aggregate import aggregate_region
+from .ideas import IdeaCandidate, RegionIdea, regional_ideas
 from .models import ComuneSummary, InterventionHint, RegionOverview
 
 __all__ = [
@@ -14,4 +15,7 @@ __all__ = [
     "ComuneSummary",
     "InterventionHint",
     "RegionOverview",
+    "regional_ideas",
+    "IdeaCandidate",
+    "RegionIdea",
 ]
