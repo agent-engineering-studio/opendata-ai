@@ -20,6 +20,14 @@ from .policy import (
     render_politica_markdown,
 )
 from .prioritize import RankedCandidate, prioritize
+from .privacy import (
+    PrivacyChecklist,
+    PrivacyRule,
+    all_families,
+    checklist_for,
+    family_for,
+    rules_for,
+)
 
 __all__ = [
     "CandidateDataset",
@@ -29,6 +37,12 @@ __all__ = [
     "clear_cache",
     "prioritize",
     "RankedCandidate",
+    "checklist_for",
+    "family_for",
+    "rules_for",
+    "all_families",
+    "PrivacyChecklist",
+    "PrivacyRule",
     "build_piano",
     "build_politica",
     "render_piano_markdown",
