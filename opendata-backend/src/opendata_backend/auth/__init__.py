@@ -5,7 +5,7 @@ that needs authentication declares `user: ClerkUser = Depends(require_user)`
 on its handlers.
 """
 
-from .clerk import ClerkAuthError, ClerkUser, verify_clerk_token
+from .clerk import ClerkAuthError, ClerkUser, verify_clerk_token, verify_oidc_token
 from .dependencies import authenticate_credentials, require_user
 
 __all__ = [
@@ -14,4 +14,5 @@ __all__ = [
     "authenticate_credentials",
     "require_user",
     "verify_clerk_token",
+    "verify_oidc_token",
 ]

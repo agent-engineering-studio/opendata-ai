@@ -24,6 +24,7 @@ import redis.asyncio as redis
 
 from .cache.state import set_redis
 from .config import get_settings, resolve_provider
+from .shared import ip_ratelimit
 from .db.session import create_database, set_session_factory
 from .factory import OrchestratorSession
 from .routers import (
@@ -159,6 +160,23 @@ async def log_requests(request: Request, call_next):  # type: ignore[type-arg]
         request.method, request.url.path, response.status_code, elapsed,
     )
     return response
+
+
+@app.middleware("http")
+async def ip_rate_limit(request: Request, call_next):  # type: ignore[type-arg]
+    """Per-IP / global DoS protection applied before auth (#235). Skips CORS
+    preflight and the public health check; every other request counts against
+    the per-IP (and optional global) minute budget. Returns 429 with Retry-After
+    when exceeded. See shared.ip_ratelimit for the Redis / in-process backend."""
+    if request.method != "OPTIONS" and request.url.path != "/health":
+        retry_after = await ip_ratelimit.check_request(request, get_settings())
+        if retry_after is not None:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "rate limit exceeded; slow down"},
+                headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
 
 
 @app.exception_handler(Exception)

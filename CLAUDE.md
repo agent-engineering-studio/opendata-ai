@@ -250,15 +250,25 @@ a **How to apply** (when it kicks in).
   `opendata-ai-ui/lib/api.ts::apiFetch()` with a Clerk Bearer token.
   Never add files under `opendata-ai-ui/app/api/`.
 
-### R7 — Clerk auth: dev bypass vs. prod JWKS
+### R7 — Auth is OIDC-neutral: dev bypass vs. prod JWKS
 
-- **Why:** `AUTH_ENABLED=false` (dev) makes `require_user` return a
-  synthetic `dev-user`. In prod the backend verifies JWTs via the
-  issuer's JWKS — no app ID needed on the backend.
-- **How to apply:** never add anonymous endpoints. New routes either go
-  through `Depends(require_user)` or live under `/health`. If you need
-  the Clerk app ID, it is pinned to `app_3EMALiLi0UTULl89JPMKtaLENoy`
-  per `.clerk/config.md`.
+- **Why:** the backend verifies JWTs with *standard OIDC* — it fetches the
+  issuer's JWKS at `${OIDC_ISSUER}/.well-known/jwks.json` and checks RS256 +
+  `iss`/`exp`/`sub` (+ `aud` when `OIDC_AUDIENCE` is set). So it works with a
+  self-hosted **Keycloak/Authentik** (recommended for a public administration
+  hosting everything in-house) *or* Clerk — Clerk is just one possible issuer,
+  not a dependency. The project is open source and self-hosted by each Regione;
+  Clerk (SaaS) is often not PA-compliant, hence the neutrality (see
+  `docs/cruscotto-regionale.md` §6-bis). `AUTH_ENABLED=false` (dev) makes
+  `require_user` return a synthetic `dev-user`.
+- **How to apply:** set `OIDC_ISSUER` (legacy alias `CLERK_JWT_ISSUER` still
+  accepted) and optionally `OIDC_AUDIENCE`. Never add anonymous endpoints — new
+  routes go through `Depends(require_user)` or live under `/health`. The public
+  read-only cruscotto view is served by a dedicated aggregated endpoint, not by
+  making routes anonymous. Clerk-specific extras (`CLERK_SECRET_KEY`,
+  `CLERK_WEBHOOK_SECRET`, app `app_3EMALiLi0UTULl89JPMKtaLENoy` in `.clerk/config.md`)
+  apply *only* when the IdP is Clerk. RBAC/roles + registration (SPID + local
+  email-OTP) + admin dashboard are a separate design step (#235).
 
 ### R8 — CORS belongs on the backend
 

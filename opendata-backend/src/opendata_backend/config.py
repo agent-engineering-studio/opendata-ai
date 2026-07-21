@@ -1473,31 +1473,41 @@ class Settings(BaseSettings):
     a2a_specialist_bearer: str | None = Field(default=None)
     a2a_specialist_name: str = Field(default="external")
 
-    # ── Clerk auth ───────────────────────────────────────────────────
-    # When auth_enabled=False (local dev), `require_user` bypasses verification
-    # and returns a synthetic dev user so the UI can hit the backend without
-    # carrying a real JWT. Production envs MUST set auth_enabled=True.
+    # ── Authentication (OIDC — IdP-agnostic) ─────────────────────────
+    # When auth_enabled=False (local dev / minimal self-host), `require_user`
+    # bypasses verification and returns a synthetic dev user so the UI can hit
+    # the backend without carrying a real JWT. Production MUST set it True.
     auth_enabled: bool = Field(default=True)
 
-    # Frontend-facing key — surfaced to the UI bundle, not used by the backend
-    # to verify tokens. Kept here so the env layout is symmetrical with the
-    # frontend's expectations.
+    # OIDC issuer whose JWTs the backend accepts. The backend fetches the JWKS
+    # at `${oidc_issuer}/.well-known/jwks.json` and verifies RS256 signatures +
+    # the `iss` claim — this is *standard OIDC*, so ANY compliant IdP works:
+    # a self-hosted Keycloak/Authentik (recommended for a public administration
+    # that must host everything in-house), or Clerk
+    # (`https://<app>.clerk.accounts.dev`). The legacy env name
+    # `CLERK_JWT_ISSUER` is still accepted as an alias.
+    oidc_issuer: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("oidc_issuer", "clerk_jwt_issuer"),
+    )
+    # Optional expected `aud` claim. When set, tokens MUST carry a matching
+    # audience (Keycloak clients issue one; Clerk does not by default). Unset =
+    # audience is not validated (back-compat with the previous Clerk-only setup).
+    oidc_audience: str | None = Field(default=None)
+    # JWKS cache TTL — how long a downloaded JWKS is trusted before refetch.
+    # Legacy env name `CLERK_JWKS_CACHE_SECONDS` still accepted.
+    oidc_jwks_cache_seconds: int = Field(
+        default=600,
+        validation_alias=AliasChoices("oidc_jwks_cache_seconds", "clerk_jwks_cache_seconds"),
+    )
+
+    # Clerk-specific extras — used ONLY when the chosen IdP is Clerk. None of
+    # these are needed to verify JWTs (that is pure OIDC/JWKS above): the
+    # publishable key is for the frontend bundle, the secret key calls Clerk's
+    # Backend API, the webhook secret verifies POST /webhooks/clerk.
     clerk_publishable_key: str | None = Field(default=None)
-    # Backend secret — needed to call Clerk's Backend API (e.g. fetching user
-    # profile data outside of webhook flows). Not required to verify JWTs
-    # (those are verified via JWKS).
     clerk_secret_key: str | None = Field(default=None)
-    # Issuer baked into every Clerk JWT — looks like
-    #   https://<your-app>.clerk.accounts.dev   (dev instance)
-    #   https://clerk.<your-domain>            (production instance)
-    # Used to fetch JWKS at `${clerk_jwt_issuer}/.well-known/jwks.json` and as
-    # the expected `iss` claim.
-    clerk_jwt_issuer: str | None = Field(default=None)
-    # Webhook signing secret — issued by Clerk per endpoint, looks like
-    # `whsec_…`. Verified with svix-style HMAC-SHA256 on /webhooks/clerk.
     clerk_webhook_secret: str | None = Field(default=None)
-    # JWKS cache TTL — how long we trust a downloaded JWKS before refetching.
-    clerk_jwks_cache_seconds: int = Field(default=600)
 
     # ── Stripe billing (contributi) ──────────────────────────────────
     # Webhook signing secret (`whsec_…`) issued per endpoint in the Stripe
@@ -1523,8 +1533,9 @@ class Settings(BaseSettings):
     # Optional — when unset, caches turn into no-ops and the rate-limit
     # dependency is bypassed.
     redis_url: str | None = Field(default=None)
-    # Requests per minute per Clerk user (fixed window). Set to 0 to disable.
-    # This is the baseline limit applied to every user (the "free" tier).
+    # Requests per minute per authenticated user (fixed window). Set to 0 to
+    # disable. This is the baseline limit applied to every user (the "free"
+    # tier), enforced via the `enforce_rate_limit` dependency AFTER auth.
     rate_limit_per_minute: int = Field(default=60)
     # Per-subscription-tier overrides as a comma-separated `tier=limit` list,
     # e.g. "pro=600,enterprise=6000". A tier not listed here (including "free")
@@ -1532,6 +1543,13 @@ class Settings(BaseSettings):
     # defined later — this is just the injection point so tiering needs no code
     # change once the subscription model lands. Empty = uniform limit for all.
     rate_limit_tiers: str = Field(default="")
+    # Per-IP and global request limits applied as HTTP middleware BEFORE auth,
+    # so they protect UNauthenticated traffic too (e.g. the public read-only
+    # views of a self-hosted deployment). Redis-backed when REDIS_URL is set,
+    # otherwise a bounded in-process fixed-window counter — a Regione hosting
+    # the backend without Redis still gets basic DoS protection. 0 disables.
+    rate_limit_ip_per_minute: int = Field(default=120)
+    rate_limit_global_per_minute: int = Field(default=0)
 
     # ── Maturità (Fase 1) ────────────────────────────────────────────
     # Tetto sui dataset valutati per ente in POST /maturity/assess (sincrono).
