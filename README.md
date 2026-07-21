@@ -531,6 +531,11 @@ accepted interchangeably:
   headless clients, scripts and agent integrations (see
   [Authentication & API keys](#authentication--api-keys)).
 
+Roles (`admin`/`regione`/`comune`/`cittadino`) live in `opendata.users.role` and
+are assigned by an admin from the `/admin` dashboard. To self-host the IdP
+(login, SPID and email-OTP registration) see the runbook
+[`docs/keycloak-setup.md`](docs/keycloak-setup.md).
+
 The same rule guards the A2A JSON-RPC endpoint (`/a2a/`); only the AgentCard
 discovery (`/.well-known/agent-card.json`) is public. Six skills are published
 (selected via `message.metadata.skill`): `search_open_data`, `find_geo_resources`,
