@@ -14,8 +14,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from opendata_core.dataplan import load_catalog, prioritize
 from opendata_core.dataplan.state import accompaniment_state
-from opendata_core.region import ComuneSummary, aggregate_region
+from opendata_core.region import (
+    ComuneSummary,
+    IdeaCandidate,
+    aggregate_region,
+    regional_ideas,
+)
 
 from ..config import Settings, region_name
 from ..db.models import ComuneAnagrafica
@@ -156,4 +162,25 @@ async def comuni(
         "provincia": provincia,
         "totale": len(rows),
         "comuni": rows,
+    }
+
+
+async def ideas(session: AsyncSession, settings: Settings) -> dict[str, Any]:
+    """Proposte a livello regionale: i dataset candidati Copilota ordinati per
+    priorità = valore pesato dal gap di copertura tra i comuni della regione."""
+    summaries, _ = await _load_summaries(session, settings)
+    ranked = prioritize(load_catalog())
+    candidates = [
+        IdeaCandidate(
+            id=r.candidate.id, nome=r.candidate.nome, area=r.candidate.area,
+            hvd=r.candidate.hvd, valore=r.valore,
+        )
+        for r in ranked
+    ]
+    idee = regional_ideas(candidates, summaries, comuni_totali=len(summaries))
+    return {
+        "regione": region_name(settings) or "",
+        "cod_regione": settings.region_istat or "",
+        "totale": len(idee),
+        "idee": [i.model_dump() for i in idee],
     }
