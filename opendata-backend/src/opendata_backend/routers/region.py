@@ -48,3 +48,16 @@ async def idee(
     _user: ClerkUser = Depends(enforce_rate_limit),
 ) -> dict[str, Any]:
     return await region_service.ideas(session, settings)
+
+
+@router.get("/pubblico")
+async def pubblico(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """Vista PUBBLICA di trasparenza (F5) — **senza autenticazione**.
+
+    Eccezione deliberata a R7 (unico endpoint pubblico oltre `/health`): espone
+    solo aggregati regionali NON sensibili (nessun dato personale). Protetto dal
+    rate limit per-IP del middleware (#237). Nessun `Depends(require_user)`."""
+    return await region_service.public_overview(session, settings)

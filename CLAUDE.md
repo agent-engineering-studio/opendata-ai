@@ -262,10 +262,13 @@ a **How to apply** (when it kicks in).
   `docs/cruscotto-regionale.md` §6-bis). `AUTH_ENABLED=false` (dev) makes
   `require_user` return a synthetic `dev-user`.
 - **How to apply:** set `OIDC_ISSUER` (legacy alias `CLERK_JWT_ISSUER` still
-  accepted) and optionally `OIDC_AUDIENCE`. Never add anonymous endpoints — new
-  routes go through `Depends(require_user)` or live under `/health`. The public
-  read-only cruscotto view is served by a dedicated aggregated endpoint, not by
-  making routes anonymous. Clerk-specific extras (`CLERK_SECRET_KEY`,
+  accepted) and optionally `OIDC_AUDIENCE`. New routes go through
+  `Depends(require_user)` or live under `/health`. **Sole public exception:**
+  `GET /regione/pubblico` (transparency view, F5 of #227) is anonymous by design
+  — it returns only **aggregated, non-PII** regional data and is protected by the
+  per-IP rate-limit middleware. Do not add other anonymous endpoints; if you
+  extend the public view, keep the payload aggregated and free of personal data.
+  Clerk-specific extras (`CLERK_SECRET_KEY`,
   `CLERK_WEBHOOK_SECRET`, app `app_3EMALiLi0UTULl89JPMKtaLENoy` in `.clerk/config.md`)
   apply *only* when the IdP is Clerk. RBAC/roles + registration (SPID + local
   email-OTP) + admin dashboard are a separate design step (#235).

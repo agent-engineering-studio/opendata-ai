@@ -165,6 +165,45 @@ async def comuni(
     }
 
 
+async def public_overview(session: AsyncSession, settings: Settings) -> dict[str, Any]:
+    """Sottoinsieme PUBBLICO (read-only, no PII) per la trasparenza: aggregati
+    regionali + stato qualitativo dei comuni + top priorità. Nessun dato
+    personale — solo comuni, dataset e maturità (tutti pubblici)."""
+    summaries, prov = await _load_summaries(session, settings)
+    ov = aggregate_region(
+        summaries,
+        regione=region_name(settings) or "",
+        cod_regione=settings.region_istat or "",
+        comuni_totali=len(summaries),
+    )
+    comuni = [
+        {
+            "nome": s.nome,
+            "provincia": prov.get(s.istat),
+            "stato": accompaniment_state(n_dataset=s.n_dataset, overall=s.overall).stato,
+        }
+        for s in sorted(summaries, key=lambda s: s.nome)
+    ]
+    ranked = prioritize(load_catalog())
+    candidates = [
+        IdeaCandidate(id=r.candidate.id, nome=r.candidate.nome, area=r.candidate.area,
+                      hvd=r.candidate.hvd, valore=r.valore)
+        for r in ranked
+    ]
+    idee = regional_ideas(candidates, summaries, comuni_totali=len(summaries))[:5]
+    return {
+        "regione": ov.regione,
+        "cod_regione": ov.cod_regione,
+        "comuni_totali": ov.comuni_totali,
+        "comuni_valutati": ov.comuni_valutati,
+        "distribuzione_stato": ov.distribuzione_stato,
+        "mediana_overall": ov.mediana_overall,
+        "hvd_copertura": ov.hvd_copertura,
+        "comuni": comuni,
+        "idee_top": [{"nome": i.nome, "priorita": i.priorita, "motivo": i.motivo} for i in idee],
+    }
+
+
 async def ideas(session: AsyncSession, settings: Settings) -> dict[str, Any]:
     """Proposte a livello regionale: i dataset candidati Copilota ordinati per
     priorità = valore pesato dal gap di copertura tra i comuni della regione."""
