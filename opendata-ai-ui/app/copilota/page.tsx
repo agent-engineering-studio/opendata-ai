@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DashboardGate } from "@/components/DashboardGate";
@@ -61,9 +61,7 @@ function CopilotaInner() {
     return res.json();
   }
 
-  async function diagnostica(e: React.FormEvent) {
-    e.preventDefault();
-    const code = istat.trim();
+  async function runDiagnosi(code: string) {
     if (!/^\d{6}$/.test(code)) { setErr("Inserisci un codice ISTAT di 6 cifre (es. 072021)."); return; }
     setErr(null); setPiano(null); setPolitica(null); setBusy("diagnosi");
     try {
@@ -71,6 +69,21 @@ function CopilotaInner() {
     } catch (e2) { setErr(String((e2 as Error).message)); setDiag(null); }
     finally { setBusy(null); }
   }
+
+  async function diagnostica(e: React.FormEvent) {
+    e.preventDefault();
+    await runDiagnosi(istat.trim());
+  }
+
+  // Drill-down dal cruscotto regionale: /copilota#<istat> precompila e avvia.
+  useEffect(() => {
+    const h = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    if (/^\d{6}$/.test(h)) {
+      setIstat(h);
+      void runDiagnosi(h);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function mostraPiano() {
     if (!diag) return;

@@ -73,6 +73,28 @@ flowchart LR
   USE --> OUT["tutto filtrato sulla regione"]
 ```
 
+#### Cruscotto regionale (`/regione`)
+
+**Cos'è.** La vista d'insieme per l'**ente regionale**: in una sola pagina lo
+stato di maturità open data di *tutti* i comuni della regione, dove intervenire e
+le priorità di pubblicazione a livello regionale. Le pagine per singolo comune
+(Territorio, Maturità, Copilota) restano il drill-down.
+
+**Come funziona.** Un **motore puro** (`opendata_core/region/`) aggrega le
+sintesi-comune (ultimo assessment di maturità + copertura HVD) in una vista
+regionale: **distribuzione per stato** (zero dati → maturo, riusa la macchina a
+stati del Copilota), maturità mediana, copertura HVD, e **«dove intervenire»**
+(comuni senza dati / deboli + dimensioni ODM deboli). Le **idee regionali**
+incrociano i candidati del Copilota con la copertura reale: un dataset mancante in
+più comuni e ad alto valore diventa priorità regionale. Il backend
+(`/regione/overview|comuni|idee`) interroga il warehouse; la UI `/regione` lo
+rende. Tutto **scoped su `REGION`**.
+
+**A cosa serve.** Passare dal «com'è messo il comune X» al «com'è messa la
+regione, e dove conviene spingere»: la Regione vede la classifica dei suoi comuni,
+i buchi ricorrenti e i dataset che, aperti da più comuni, sbloccherebbero più
+valore. Design completo: **[`docs/cruscotto-regionale.md`](docs/cruscotto-regionale.md)**.
+
 ---
 
 ### 1. Esplora — esplorazione conversazionale dei dati
