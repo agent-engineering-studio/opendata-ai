@@ -8,6 +8,7 @@ impacchettata o iniettata; l'orchestrazione e le chiamate LLM vivono nel backend
 
 from .catalog import catalog_by_area, clear_cache, load_catalog
 from .models import CandidateDataset, GiaAperto
+from .prioritize import RankedCandidate, prioritize
 
 __all__ = [
     "CandidateDataset",
@@ -15,4 +16,6 @@ __all__ = [
     "load_catalog",
     "catalog_by_area",
     "clear_cache",
+    "prioritize",
+    "RankedCandidate",
 ]
