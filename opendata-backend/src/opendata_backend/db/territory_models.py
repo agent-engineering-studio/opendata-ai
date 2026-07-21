@@ -473,4 +473,29 @@ __all__ = [
     "MobilityNode",
     "WeatherSignal",
     "Investment",
+    "DataplanPlan",
 ]
+
+
+class DataplanPlan(Base):
+    """Snapshot append-only del Copilota Open Data (#170/#222): piano + politica.
+
+    Storicizza gli artefatti generati per un comune (come gli snapshot civici):
+    mai sovrascritto, uno per generazione. `payload_jsonb` contiene il piano e/o
+    la politica serializzati. DDL dialect-aware (JSONB su Postgres, JSON su SQLite).
+    """
+
+    __tablename__ = "dataplan_plans"
+    __table_args__ = (
+        Index("ix_dataplan_plans_istat", "istat_code"),
+        {"schema": "opendata"},
+    )
+
+    id: Mapped[int] = mapped_column(_PK, primary_key=True, autoincrement=True)
+    istat_code: Mapped[str] = mapped_column(Text, nullable=False)
+    ente: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tipo: Mapped[str] = mapped_column(Text, nullable=False)  # "politica" | "piano" | "bundle"
+    payload_jsonb: Mapped[dict[str, Any] | None] = mapped_column(_JSONB, nullable=True)
+    generato_il: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
