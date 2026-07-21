@@ -19,6 +19,7 @@ from .policy import (
     render_piano_markdown,
     render_politica_markdown,
 )
+from .kpi import PlanKpi, plan_kpi
 from .prioritize import RankedCandidate, prioritize
 from .state import AccompanimentState, PercorsoStep, accompaniment_state
 from .privacy import (
@@ -56,4 +57,6 @@ __all__ = [
     "accompaniment_state",
     "AccompanimentState",
     "PercorsoStep",
+    "plan_kpi",
+    "PlanKpi",
 ]
