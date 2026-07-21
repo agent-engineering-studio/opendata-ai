@@ -80,7 +80,7 @@ function NavLink({
 // no Bootstrap JS dependency: account shortcuts + sign out.
 function UserMenu() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, role, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const initial = (user?.name || user?.email || "?").trim().charAt(0).toUpperCase();
 
@@ -132,6 +132,14 @@ function UserMenu() {
             <button type="button" role="menuitem" className="dropdown-item d-flex align-items-center gap-2" onClick={() => go("/account/api-keys")}>
               <KeyIcon /> API keys (in arrivo)
             </button>
+            {role === "admin" && (
+              <>
+                <div className="dropdown-divider" />
+                <button type="button" role="menuitem" className="dropdown-item d-flex align-items-center gap-2" onClick={() => go("/admin")}>
+                  <span aria-hidden="true">🛡️</span> Amministrazione
+                </button>
+              </>
+            )}
             <div className="dropdown-divider" />
             <button type="button" role="menuitem" className="dropdown-item text-danger" onClick={() => signOut()}>
               Esci

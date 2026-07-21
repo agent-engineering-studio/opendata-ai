@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import ClerkUser
+from ..auth import ClerkUser, require_user
+from ..auth.roles import resolve_role
+from ..config import Settings, get_settings
 from ..db.repositories import favorites as favorites_repo
 from ..db.repositories import history as history_repo
 from ..db.repositories import users as users_repo
@@ -14,6 +16,25 @@ from ..db.session import get_db_session
 from ..shared.ratelimit import enforce_rate_limit
 
 router = APIRouter(tags=["me"])
+
+
+class MeOut(BaseModel):
+    subject: str
+    email: str | None
+    role: str
+
+
+@router.get("/me", response_model=MeOut)
+async def whoami(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    user: ClerkUser = Depends(require_user),
+) -> MeOut:
+    """Current user's identity + RBAC role — lets the UI gate the admin surface
+    (nav link + /admin page) without guessing. Resolves/syncs the role the same
+    way `require_role` does (dev-bypass → admin)."""
+    role = await resolve_role(session, user, settings)
+    return MeOut(subject=user.subject, email=user.email, role=role)
 
 
 class FavoriteIn(BaseModel):
