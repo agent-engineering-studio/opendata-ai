@@ -104,3 +104,24 @@ async def test_role_persisted_on_first_login(sm) -> None:
     async with sm() as s:
         row = (await s.execute(select(User).where(User.clerk_user_id == "kc_3"))).scalar_one()
         assert row.role == "cittadino"
+
+
+def test_me_endpoint_returns_role(sm) -> None:
+    from opendata_backend.routers import me as me_router
+
+    async def _user() -> ClerkUser:
+        return ClerkUser(subject="kc_me", email="me@r.it", claims={})
+
+    async def _db():
+        async with sm() as session:
+            yield session
+
+    app = FastAPI()
+    app.include_router(me_router.router)
+    app.dependency_overrides[get_settings] = lambda: Settings(auth_enabled=True)  # type: ignore[call-arg]
+    app.dependency_overrides[auth_dep.require_user] = _user
+    app.dependency_overrides[get_db_session] = _db
+
+    r = TestClient(app).get("/me")
+    assert r.status_code == 200
+    assert r.json() == {"subject": "kc_me", "email": "me@r.it", "role": "cittadino"}

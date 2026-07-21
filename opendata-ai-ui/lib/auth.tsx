@@ -14,6 +14,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+import { apiFetch } from "./api";
 import * as oidc from "./oidc";
 
 export const authConfigured = oidc.oidcConfigured;
@@ -26,6 +27,8 @@ export interface AuthState {
   isSignedIn: boolean;
   userId: string | null;
   user: User;
+  /** RBAC role from the backend (`opendata.users.role`), null until resolved. */
+  role: string | null;
   /** Just-in-time access token (auto-refreshes). Null in dev / when signed out. */
   getToken: () => Promise<string | null>;
   signIn: () => void;
@@ -38,6 +41,7 @@ const NO_AUTH: AuthState = {
   isSignedIn: false,
   userId: null,
   user: null,
+  role: null,
   getToken: async () => null,
   signIn: () => {},
   signUp: () => {},
@@ -47,27 +51,47 @@ const NO_AUTH: AuthState = {
 const Ctx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [{ isLoaded, user }, setState] = useState<{ isLoaded: boolean; user: User }>({
+  const [{ isLoaded, user, role }, setState] = useState<{
+    isLoaded: boolean;
+    user: User;
+    role: string | null;
+  }>({
     // In dev (no OIDC) we are immediately "loaded" with no session.
     isLoaded: !authConfigured,
     user: null,
+    role: null,
   });
 
   useEffect(() => {
-    if (!authConfigured) return;
     let alive = true;
     (async () => {
-      try {
-        if (oidc.hasCallbackParams()) {
-          const ret = await oidc.handleRedirectCallback();
-          window.history.replaceState({}, "", ret);
+      let profile: User = null;
+      if (authConfigured) {
+        try {
+          if (oidc.hasCallbackParams()) {
+            const ret = await oidc.handleRedirectCallback();
+            window.history.replaceState({}, "", ret);
+          }
+          const token = await oidc.getAccessToken();
+          profile = token ? oidc.getProfile() : null;
+        } catch {
+          profile = null;
         }
-        const token = await oidc.getAccessToken();
-        const profile = token ? oidc.getProfile() : null;
-        if (alive) setState({ isLoaded: true, user: profile });
-      } catch {
-        if (alive) setState({ isLoaded: true, user: null });
       }
+      // Best-effort role from the backend. In dev (AUTH_ENABLED=false) the
+      // backend returns the dev user as "admin"; when signed out, /me 401s and
+      // role stays null. Never blocks rendering.
+      let resolvedRole: string | null = null;
+      try {
+        const token = authConfigured ? await oidc.getAccessToken() : null;
+        if (token || !authConfigured) {
+          const res = await apiFetch("/me", { token });
+          if (res.ok) resolvedRole = ((await res.json())?.role as string) ?? null;
+        }
+      } catch {
+        /* ignore — role gating is a nicety, the backend still enforces */
+      }
+      if (alive) setState({ isLoaded: true, user: profile, role: resolvedRole });
     })();
     return () => {
       alive = false;
@@ -84,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSignedIn: !!user,
     userId: user?.sub ?? null,
     user,
+    role,
     getToken,
     signIn: () => void oidc.login("login"),
     signUp: () => void oidc.login("register"),
