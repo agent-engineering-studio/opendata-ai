@@ -56,6 +56,12 @@ class User(Base):
     subscription_tier: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="free"
     )
+    # RBAC role driving AUTHORIZATION (#235). Authentication is delegated to the
+    # OIDC IdP (Keycloak — SPID / email-OTP registration); the *role* lives here
+    # and is managed by an admin from the admin dashboard. "cittadino" is the
+    # default for a new registrant; "admin" can manage other users' roles;
+    # "regione"/"comune" gate the corresponding cruscotto views. See auth.roles.
+    role: Mapped[str] = mapped_column(Text, nullable=False, server_default="cittadino")
     # Stripe customer id (`cus_…`) — bound on checkout.session.completed so that
     # later customer.subscription.* events (keyed only by the customer) map back
     # to this user. Null until a contribution checkout completes.

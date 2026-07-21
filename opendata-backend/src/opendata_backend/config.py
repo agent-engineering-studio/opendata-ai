@@ -1501,6 +1501,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("oidc_jwks_cache_seconds", "clerk_jwks_cache_seconds"),
     )
 
+    # Bootstrap admin (#235): the email that is promoted to the `admin` role on
+    # first authenticated request. Lets a freshly-deployed instance get its first
+    # admin (who then assigns roles from the admin dashboard) without a manual DB
+    # edit. Compared case-insensitively against the OIDC `email` claim. Unset =
+    # no automatic promotion.
+    bootstrap_admin_email: str | None = Field(default=None)
+
     # Clerk-specific extras — used ONLY when the chosen IdP is Clerk. None of
     # these are needed to verify JWTs (that is pure OIDC/JWKS above): the
     # publishable key is for the frontend bundle, the secret key calls Clerk's

@@ -64,6 +64,17 @@ class ClerkUser:
         method = self.claims.get("auth_method")
         return method if isinstance(method, str) and method else "clerk"
 
+    @property
+    def role(self) -> str:
+        """RBAC role, populated by `roles.resolve_role` into `claims["role"]`.
+
+        Authorization source of truth is `opendata.users.role`, not the token —
+        this only surfaces the value once a `require_role` dependency has run.
+        Defaults to "cittadino" (least privilege) when unresolved.
+        """
+        r = self.claims.get("role")
+        return r if isinstance(r, str) and r else "cittadino"
+
 
 # JWKS clients are keyed by issuer so swapping environments at test time
 # doesn't poison the cache.
